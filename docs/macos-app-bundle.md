@@ -33,6 +33,7 @@ minimum even when `Info.plist` says 13.0. Set explicit compile/link flags while
 building CGo packages, so the build cache also distinguishes that target:
 
 ```sh
+export CGO_ENABLED=1
 export MACOSX_DEPLOYMENT_TARGET=13.0
 export CGO_CFLAGS='-mmacosx-version-min=13.0'
 export CGO_CXXFLAGS='-mmacosx-version-min=13.0'
@@ -41,6 +42,9 @@ export CGO_LDFLAGS='-mmacosx-version-min=13.0'
 
 These load-command checks prevent contradictory metadata. They do not prove
 availability of every dependency/API or replace acceptance on supported Macs.
+The production agent requires CGo for its native System-keychain backend; a
+pure-Go build does not provide that backend. The build-only acceptance script
+explicitly enables CGo, even if its invoking environment disabled it.
 
 ```sh
 mkdir -m 700 /absolute/build/output
