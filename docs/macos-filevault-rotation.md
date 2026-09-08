@@ -2,8 +2,8 @@
 
 `internal/enrollmentstore` implements protected replay evidence for FileVault
 rotation protocol v1. This component does not execute a FileVault command, start
-a rotation poll loop or advertise rotation capability. The OS driver, process
-serialization, worker routing and console escrow integration remain required
+a rotation poll loop or advertise rotation capability. The OS driver, runtime
+wiring, worker routing and console escrow integration remain required
 before enabling the operation. Existing read-only validation is unchanged.
 
 ## Durable records
@@ -39,10 +39,11 @@ and encrypted signed receipt, and refuse accidental JSON serialization.
 1. Keep the `Store` open until journal users have stopped. Load the protected
    identity, obtain the active recipient epoch and authenticate/decrypt a task
    before supplying its nonce to the journal.
-2. Serialize the entire mutation and recovery lifecycle across processes with an
-   exclusive OS lease. Immutable admission prevents duplicate execution, but an
-   intent-only reader must not report a still-running owner's attempt as crashed.
-   The OS lease must be implemented and held before enabling runtime recovery.
+2. Call `macsecurity.AcquireFileVaultLease` for the same private enrollment
+   directory and hold its exclusive OS lease throughout mutation and recovery.
+   Immutable admission prevents duplicate execution, but an intent-only reader
+   must not report a still-running owner's attempt as crashed. A busy lease
+   means that another process owns this work; it must not trigger recovery.
 3. Call `Begin`. Only `admitted=true` permits a bounded OS attempt. That return
    requires exclusive intent creation and a successful reload of matching durable
    evidence while the task is still live. A lost commit response, expired task,
@@ -67,6 +68,23 @@ MDM escrow must already be active: a process can die after the OS changes a key
 and before local receipt persistence. The journal cannot make those two systems
 one atomic transaction and does not claim to recover an unpersisted plaintext key.
 
+## Process lease
+
+The root Mac implementation opens a fixed empty `.filevault-rotation.lock` file
+relative to the already provisioned private enrollment directory. It pins the
+directory descriptor, rejects final symlinks, nonregular files, extra hard links,
+wrong owners, group/other access and unexpected contents, and verifies the named
+objects still match their opened descriptors. The installer must keep ancestor
+directories protected from untrusted renames. It does not create directories or
+repair existing access controls.
+
+A nonblocking exclusive `flock` excludes independent processes. Keep the lease
+until the journal operation, OS mutation and encrypted receipt persistence finish.
+Closing it or terminating its process releases the kernel lock. The empty file
+is deliberately never unlinked, so another owner cannot lock a replacement inode
+while an existing descriptor remains locked. The lease contains no secret or
+execution evidence; the protected journal retains that evidence after a crash.
+
 ## Tests
 
 Common tests cover concurrent admission, restart, lost intent and receipt commit
@@ -76,3 +94,6 @@ and closed-store rejection. A tagged macOS test runs the same durable lifecycle
 against a disposable noninteractive keychain; native Windows CI checks the same
 record lifecycle through its DPAPI backend. All test keys are synthetic. No test
 executes `fdesetup`, reads workstation encryption state or changes a real key.
+Mac lease tests use private temporary directories, concurrent handles and a
+separate helper process that is killed to verify automatic kernel release. They
+also reject unsafe path/file types without altering existing state.
