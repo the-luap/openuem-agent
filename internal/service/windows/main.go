@@ -3,10 +3,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"runtime"
 
+	"github.com/open-uem/openuem-agent/internal/enrollcommand"
 	"github.com/open-uem/openuem-agent/internal/logger"
 	"github.com/open-uem/openuem-agent/internal/packagesignature"
 	"golang.org/x/sys/windows/svc"
@@ -14,6 +16,9 @@ import (
 
 func main() {
 	if handled, code := packagesignature.HandleHelper(os.Args[1:]); handled {
+		os.Exit(code)
+	}
+	if handled, code := enrollcommand.Handle(context.Background(), os.Args[1:], os.Stdout, os.Stderr); handled {
 		os.Exit(code)
 	}
 

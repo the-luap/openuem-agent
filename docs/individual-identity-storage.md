@@ -4,8 +4,9 @@ The `internal/enrollmentstore` package starts the protected endpoint-storage wor
 for individual Windows/Mac enrollment. Both native backends are implemented;
 the durable enrollment state machine connects them to the bounded HTTPS client.
 The [opt-in service runtime](individual-agent-runtime.md) now loads that identity
-before legacy certificate configuration. Independent bootstrap authorization,
-the native bootstrap command, renewal and signed installer integration remain
+before legacy certificate configuration. The [native enrollment command](native-enrollment-command.md)
+now connects explicit bootstrap authorization and verified installer/executable
+bindings. Renewal, finished end-user installers and service activation remain
 required integration steps.
 
 ## Durable enrollment and recovery
@@ -108,7 +109,8 @@ plaintext fallback. `Store` adds the enrollment/recovery state machine on top of
 these two immutable storage primitives.
 
 Legacy configuration remains the default when the individual service mode is not
-configured. There is no finished end-user installer or bootstrap command yet.
+configured. The explicit native `enroll` command prepares protected credentials;
+the finished end-user installer and automatic activation are still outstanding.
 
 ## macOS storage boundary
 

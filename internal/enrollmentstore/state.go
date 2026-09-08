@@ -180,6 +180,13 @@ func (s *Store) Enroll(ctx context.Context, bootstrap Bootstrap, roots *x509.Cer
 type claimFunc func(context.Context, enrollment.Request) (*enrollment.Response, error)
 
 func (s *Store) enroll(ctx context.Context, bootstrap Bootstrap, claim claimFunc) (*Identity, error) {
+	return s.enrollAdmitted(ctx, bootstrap, claim, nil)
+}
+
+func (s *Store) enrollAdmitted(ctx context.Context, bootstrap Bootstrap, claim claimFunc, admission func(context.Context) error) (*Identity, error) {
+	if s == nil || ctx == nil {
+		return nil, ErrUnavailable
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.backend == nil || !bootstrap.valid() || claim == nil {
@@ -221,6 +228,12 @@ func (s *Store) enroll(ctx context.Context, bootstrap Bootstrap, claim claimFunc
 	}
 	identity, err := s.loadIdentity(p)
 	if !errors.Is(err, ErrPending) {
+		if err == nil && admission != nil {
+			if err = admission(ctx); err != nil {
+				identity.Close()
+				return nil, err
+			}
+		}
 		return identity, err
 	}
 	if err = ctx.Err(); err != nil {
@@ -229,6 +242,11 @@ func (s *Store) enroll(ctx context.Context, bootstrap Bootstrap, claim claimFunc
 	request, err := p.keys.Request(bootstrap.Invitation, bootstrap.Platform, bootstrap.Architecture, bootstrap.DeviceName)
 	if err != nil {
 		return nil, ErrUnavailable
+	}
+	if admission != nil {
+		if err := admission(ctx); err != nil {
+			return nil, err
+		}
 	}
 	response, err := claim(ctx, *request)
 	if err != nil {
@@ -245,6 +263,11 @@ func (s *Store) enroll(ctx context.Context, bootstrap Bootstrap, claim claimFunc
 		return nil, ErrUnavailable
 	}
 	defer clear(data)
+	if admission != nil {
+		if err := admission(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}

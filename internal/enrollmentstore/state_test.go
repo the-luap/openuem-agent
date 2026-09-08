@@ -256,6 +256,11 @@ func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 
 func signedConfigurationFixture(t *testing.T, b Bootstrap, validity ...time.Duration) *signedbootstrap.Verified {
 	t.Helper()
+	return signedConfigurationWithAgentFixture(t, b, false, validity...)
+}
+
+func signedConfigurationWithAgentFixture(t *testing.T, b Bootstrap, bindAgent bool, validity ...time.Duration) *signedbootstrap.Verified {
+	t.Helper()
 	releasePublic, releaseKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +282,13 @@ func signedConfigurationFixture(t *testing.T, b Bootstrap, validity ...time.Dura
 	if b.Platform == "macos" {
 		format = "pkg"
 	}
-	releaseEnvelope, err := artifacts.Sign(artifacts.Manifest{Schema: 1, Sequence: b.ReleaseSequence, Version: "0.12.0", PublishedAt: now.Add(-time.Hour), ExpiresAt: now.Add(24 * time.Hour), Artifacts: []artifacts.Artifact{{Platform: b.Platform, Architecture: b.Architecture, Format: format, Filename: "openuem-agent-0.12.0-" + b.Platform + "-" + b.Architecture + "." + format, Size: int64(len(content)), SHA256: hex.EncodeToString(digest[:])}}}, releaseKey, now)
+	artifact := artifacts.Artifact{Platform: b.Platform, Architecture: b.Architecture, Format: format, Filename: "openuem-agent-0.12.0-" + b.Platform + "-" + b.Architecture + "." + format, Size: int64(len(content)), SHA256: hex.EncodeToString(digest[:])}
+	if bindAgent {
+		agent := []byte("distinct installed-agent fixture")
+		agentDigest := sha256.Sum256(agent)
+		artifact.AgentSize, artifact.AgentSHA256 = int64(len(agent)), hex.EncodeToString(agentDigest[:])
+	}
+	releaseEnvelope, err := artifacts.Sign(artifacts.Manifest{Schema: 1, Sequence: b.ReleaseSequence, Version: "0.12.0", PublishedAt: now.Add(-time.Hour), ExpiresAt: now.Add(24 * time.Hour), Artifacts: []artifacts.Artifact{artifact}}, releaseKey, now)
 	if err != nil {
 		t.Fatal(err)
 	}

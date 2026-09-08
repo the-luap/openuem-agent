@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/open-uem/nats/enrollment"
+	"github.com/open-uem/nats/enrollment/artifacts"
 	"github.com/open-uem/nats/enrollment/bootstrap"
 )
 
@@ -15,7 +16,31 @@ import (
 // The durable checkpoint is rechecked here; a concurrent different bootstrap
 // still loses exclusive pending publication and cannot send a replacement claim.
 func (s *Store) EnrollVerified(ctx context.Context, verified *bootstrap.Verified, deviceName string, roots *x509.CertPool) (*Identity, error) {
-	if verified == nil {
+	return s.enrollVerified(ctx, verified, deviceName, roots, nil)
+}
+
+// EnrollInstalled requires a signed installed-agent binding and a native
+// admission check for the retained executable and installer. Admission runs
+// before pending state, immediately before a claim, and before publishing or
+// returning an identity. It must not call Store methods: the latter checks run
+// while the store holds its lifetime lock. A failed post-claim check preserves
+// the pending keys so the same bootstrap can recover an issued response.
+func (s *Store) EnrollInstalled(ctx context.Context, verified *bootstrap.Verified, deviceName string, roots *x509.CertPool, admission func(context.Context) error) (*Identity, error) {
+	if verified == nil || admission == nil {
+		return nil, ErrUnavailable
+	}
+	if err := verified.ValidAt(time.Now(), artifacts.Checkpoint{}); err != nil {
+		return nil, err
+	}
+	artifact := verified.Artifact()
+	if artifact.AgentSize <= 0 || artifact.AgentSHA256 == "" {
+		return nil, artifacts.ErrAgentBinding
+	}
+	return s.enrollVerified(ctx, verified, deviceName, roots, admission)
+}
+
+func (s *Store) enrollVerified(ctx context.Context, verified *bootstrap.Verified, deviceName string, roots *x509.CertPool, admission func(context.Context) error) (*Identity, error) {
+	if s == nil || ctx == nil || verified == nil {
 		return nil, ErrUnavailable
 	}
 	config := verified.Config()
@@ -27,7 +52,24 @@ func (s *Store) EnrollVerified(ctx context.Context, verified *bootstrap.Verified
 	if err != nil {
 		return nil, err
 	}
-	if err := verified.ValidAt(time.Now(), checkpoint); err != nil {
+	check := func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := verified.ValidAt(time.Now(), checkpoint); err != nil {
+			return err
+		}
+		if admission != nil {
+			if err := admission(ctx); err != nil {
+				return err
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return verified.ValidAt(time.Now(), checkpoint)
+	}
+	if err := check(ctx); err != nil {
 		return nil, err
 	}
 	b.ReleaseSequence = verified.Checkpoint().Sequence
@@ -36,19 +78,5 @@ func (s *Store) EnrollVerified(ctx context.Context, verified *bootstrap.Verified
 		return nil, ErrUnavailable
 	}
 	defer client.CloseIdleConnections()
-	return s.enroll(ctx, b, func(ctx context.Context, request enrollment.Request) (*enrollment.Response, error) {
-		// Key generation and HTTPS can cross the signed expiry boundary. Recheck
-		// both before the claim and before allowing its result to be published.
-		if err := verified.ValidAt(time.Now(), checkpoint); err != nil {
-			return nil, err
-		}
-		response, err := client.Claim(ctx, request)
-		if err != nil {
-			return nil, err
-		}
-		if err := verified.ValidAt(time.Now(), checkpoint); err != nil {
-			return nil, err
-		}
-		return response, nil
-	})
+	return s.enrollAdmitted(ctx, b, client.Claim, check)
 }

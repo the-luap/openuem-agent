@@ -5,8 +5,10 @@ configuration, exact-origin native download and native installer-signature check
 It accepts only the running Windows/macOS target and architecture, an authorized
 HTTPS client, a previously protected staging root and the latest durable release
 checkpoint. It does not issue an identity, install software or start the service.
-The native command, consent/origin authorization, trusted release-key provisioning
-and installer/service activation still need to connect these components.
+The [native enrollment command](native-enrollment-command.md) now connects these
+components with explicit origin/scope/management authorization and independently
+provisioned release keys. End-user installers, the production key-provisioning
+pipeline and service activation still require integration.
 
 `OpenRunningAgent` opens the current executable before bootstrap network work and
 retains its read-only descriptor until the caller closes it. `Executable.Verify`
@@ -19,7 +21,8 @@ Windows permits trusted owner/writers (current account, System, Administrators)
 while allowing public read access, and denies write/delete sharing while open.
 The installer must own the path and protect its ancestors. This verifies release
 bytes and file identity; it is not remote process or operating-system attestation.
-The native enrollment command still needs to require this check before issuance.
+The native enrollment command requires this check before issuance and again at
+the protected store's admission/publication boundaries.
 
 Each operation creates a new private `package-<UUID>` child directory. It creates
 the signed artifact filename with exclusive private permissions before writing
