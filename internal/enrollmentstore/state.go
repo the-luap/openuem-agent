@@ -304,7 +304,11 @@ func (s *Store) loadPending() (*pending, error) {
 			recipient, recipientErr := s.backend.Load(recipientRecord)
 			clear(recipient)
 			if errors.Is(recipientErr, ErrMissing) {
-				return nil, ErrMissing
+				anchor, anchorErr := s.backend.Load(rotationAnchorRecord)
+				clear(anchor)
+				if errors.Is(anchorErr, ErrMissing) {
+					return nil, ErrMissing
+				}
 			}
 		}
 		return nil, ErrUnavailable

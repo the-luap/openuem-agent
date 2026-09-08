@@ -78,6 +78,15 @@ Failure to access this optional key disables recovery validation while ordinary
 authenticated inventory remains available. Native backend tests cover the third
 record in an isolated Mac keychain and Windows DPAPI fixtures.
 
+## FileVault rotation journal
+
+The [rotation journal](macos-filevault-rotation.md) adds a separately bound,
+immutable anchor and at most two records per rotation attempt. It stores context,
+a nonce, a task digest and a signed encrypted receipt, never plaintext recovery
+keys. Exclusive durable intent creation permits a single admission; retries and
+restarts recover evidence without admitting another mutation. The journal is a
+storage component; the mutation driver and runtime integration remain pending.
+
 ## Windows storage boundary
 
 `OpenNative` receives an absolute directory beneath an installer-controlled parent.

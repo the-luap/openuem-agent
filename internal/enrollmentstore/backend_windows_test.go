@@ -38,6 +38,11 @@ func TestWindowsDPAPIDurableRecoveryRecipient(t *testing.T) {
 	runDurableRecipient(t, b)
 }
 
+func TestWindowsDPAPIDurableRotationJournal(t *testing.T) {
+	b, _ := windowsFixture(t)
+	runDurableRotationJournal(t, b)
+}
+
 func TestWindowsStateIsEncryptedPrivateImmutableAndRecoverable(t *testing.T) {
 	b, directory := windowsFixture(t)
 	plaintext := []byte("isolated private identity fixture, never a production key")

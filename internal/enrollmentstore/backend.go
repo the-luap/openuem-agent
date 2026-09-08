@@ -2,14 +2,22 @@
 // It is separate from legacy shared-certificate configuration.
 package enrollmentstore
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/open-uem/nats/enrollment"
+)
 
 const (
-	maxRecordSize    = 128 << 10
-	maxProtectedSize = maxRecordSize + (64 << 10)
-	pendingRecord    = "pending"
-	identityRecord   = "identity"
-	recipientRecord  = "recipient-v1"
+	maxRecordSize        = 128 << 10
+	maxProtectedSize     = maxRecordSize + (64 << 10)
+	pendingRecord        = "pending"
+	identityRecord       = "identity"
+	recipientRecord      = "recipient-v1"
+	rotationAnchorRecord = "rotation-anchor-v1"
 )
 
 var (
@@ -30,5 +38,14 @@ type NativeBackend interface {
 }
 
 func validRecord(record string) bool {
-	return record == pendingRecord || record == identityRecord || record == recipientRecord
+	if record == pendingRecord || record == identityRecord || record == recipientRecord || record == rotationAnchorRecord {
+		return true
+	}
+	for _, prefix := range []string{"rotation-start-v1-", "rotation-result-v1-"} {
+		if suffix, ok := strings.CutPrefix(record, prefix); ok {
+			n, err := strconv.Atoi(suffix)
+			return err == nil && n >= 1 && n <= enrollment.MaxRotationAttempts && suffix == fmt.Sprintf("%03d", n)
+		}
+	}
+	return false
 }

@@ -36,6 +36,11 @@ func TestMacKeychainDurableRecoveryRecipient(t *testing.T) {
 	runDurableRecipient(t, f.backend)
 }
 
+func TestMacKeychainDurableRotationJournal(t *testing.T) {
+	f := newKeychainFixture(t)
+	runDurableRotationJournal(t, f.backend)
+}
+
 func newKeychainFixture(t *testing.T) *keychainFixture {
 	t.Helper()
 	directory := t.TempDir()
