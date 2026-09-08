@@ -40,8 +40,11 @@ type individualRuntime struct {
 	connection      *nats.Conn
 	hardwareVersion atomic.Int32
 	recoveryVersion atomic.Int32
+	rotationVersion atomic.Int32
 	recoveryStarted bool
 	recovery        *recoveryClient
+	rotation        *rotationClient
+	recoveryStore   *enrollmentstore.Store
 }
 
 func individualDirectory(mode, directory string) (string, error) {
@@ -70,7 +73,12 @@ func (a *Agent) configureIndividual(mode, directory string) error {
 	if err != nil {
 		return errIndividualAgent
 	}
-	defer store.Close()
+	keepStore := false
+	defer func() {
+		if !keepStore {
+			store.Close()
+		}
+	}()
 	identity, err := store.Load()
 	if err != nil {
 		return errIndividualAgent
@@ -116,6 +124,16 @@ func (a *Agent) configureIndividual(mode, directory string) error {
 		}
 		if err != nil {
 			log.Print("[ERROR]: protected FileVault validation recipient is unavailable")
+		} else {
+			journal, journalErr := store.OpenRotationJournal(identity)
+			if journalErr == nil {
+				a.individual.rotation, journalErr = newRotationClient(a.individual.recovery, journal, directory)
+			}
+			if journalErr != nil {
+				log.Print("[ERROR]: protected FileVault rotation journal is unavailable")
+			} else {
+				a.individual.recoveryStore, keepStore = store, true
+			}
 		}
 	}
 	a.applyIndividualConfig()

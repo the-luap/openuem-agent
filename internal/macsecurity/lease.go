@@ -17,6 +17,7 @@ var (
 // lock file or protected journal. Process exit also releases the kernel lock.
 type RotationLease struct {
 	file     *os.File
+	mu       sync.RWMutex
 	once     sync.Once
 	closeErr error
 }
@@ -26,6 +27,8 @@ func (l *RotationLease) Close() error {
 		return nil
 	}
 	l.once.Do(func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
 		if l.file != nil {
 			l.closeErr = l.file.Close()
 		}

@@ -84,8 +84,10 @@ The [rotation journal](macos-filevault-rotation.md) adds a separately bound,
 immutable anchor and at most two records per rotation attempt. It stores context,
 a nonce, a task digest and a signed encrypted receipt, never plaintext recovery
 keys. Exclusive durable intent creation permits a single admission; retries and
-restarts recover evidence without admitting another mutation. The journal is a
-storage component; the mutation driver and runtime integration remain pending.
+restarts recover evidence without admitting another mutation. The individual Mac
+runtime holds storage open through its capability-gated rotation loop and joins
+that loop before releasing keys. Its bounded OS driver holds the private process
+lease; worker and console authorization remain required integration boundaries.
 
 ## Windows storage boundary
 

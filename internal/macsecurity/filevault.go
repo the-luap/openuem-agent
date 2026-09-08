@@ -41,9 +41,7 @@ func validateFileVaultRecoveryKey(ctx context.Context, key []byte, command comma
 	}
 	// The strict ASCII key format cannot contain XML metacharacters. Construct
 	// owned bytes directly rather than retaining an immutable secret string.
-	input := []byte(`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Password</key><string>`)
-	input = append(input, key...)
-	input = append(input, []byte(`</string></dict></plist>`)...)
+	input := fileVaultPasswordInput(key)
 	defer clear(input)
 	cmd := command(ctx, "/usr/bin/fdesetup", "validaterecovery", "-inputplist")
 	if cmd == nil {

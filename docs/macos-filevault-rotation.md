@@ -1,10 +1,12 @@
-# FileVault rotation journal
+# Private FileVault rotation
 
-`internal/enrollmentstore` implements protected replay evidence for FileVault
-rotation protocol v1. This component does not execute a FileVault command, start
-a rotation poll loop or advertise rotation capability. The OS driver, runtime
-wiring, worker routing and console escrow integration remain required
-before enabling the operation. Existing read-only validation is unchanged.
+The individual Mac agent implements encrypted rotation protocol v1, a protected
+attempt journal, a private process lease and a bounded local OS driver. Execution
+requires both `recovery_task_version: 1` and `rotation_task_version: 1` from a
+compatible worker, an accessible journal and an encrypted authorized task.
+Absent, unsupported or legacy capabilities never enable rotation. Worker routing,
+console escrow authorization and physical Mac acceptance are separate integration
+requirements. Existing read-only validation retains its own protocol.
 
 ## Durable records
 
@@ -61,9 +63,9 @@ still requiring the active signing certificate and exact scope, context and nonc
 `Begin` rejects expired execution. An orphan result, malformed framed record,
 noncanonical JSON, changed signature or foreign installation binding fails closed.
 
-The eventual driver must validate the old PRK before mutation, pass keys only via
-owned standard-input buffers, preserve any returned candidate even if validation
-cannot complete, and persist its encrypted result before network delivery. Native
+The runtime validates the old PRK before mutation, passes keys only via owned
+standard-input buffers, preserves returned candidates when validation cannot
+complete, and persists the encrypted result before network delivery. Native
 MDM escrow must already be active: a process can die after the OS changes a key
 and before local receipt persistence. The journal cannot make those two systems
 one atomic transaction and does not claim to recover an unpersisted plaintext key.
@@ -85,6 +87,58 @@ is deliberately never unlinked, so another owner cannot lock a replacement inode
 while an existing descriptor remains locked. The lease contains no secret or
 execution evidence; the protected journal retains that evidence after a crash.
 
+## OS driver and runtime
+
+The driver uses only the root Mac agent and the current process lease. It first
+performs the existing bounded read-only validation, then starts this fixed command:
+
+```text
+/usr/bin/fdesetup changerecovery -personal -inputplist -outputplist
+```
+
+The old PRK is the `Password` value in owned plist bytes on stdin. No shell, secret
+arguments, inherited environment, temporary output file or stderr capture is used.
+Read-only checks use 15-second contexts, the mutation uses a 30-second context,
+and the complete driver uses a one-minute context. All work respects the task
+deadline, with a further 500-millisecond pipe-drain bound after cancellation.
+The runtime also reserves two minutes before certificate expiry for signing and
+durable publication. Lease closure waits for an active driver to finish.
+
+The bounded XML reader selects only the root dictionary's `RecoveryKey`, retains
+at most 8 KiB of output, and rejects duplicates, truncation, extra roots, unsupported
+types, excessive nesting and oversized dictionaries/arrays. It does not load
+external entities or turn the PRK into an immutable Go string. Unexpected output
+produces uncertainty. It never infers success merely from a zero process exit.
+
+| Outcome | Meaning |
+| --- | --- |
+| `rotated` | A different returned PRK passed volume validation. |
+| `unverified` | A candidate new PRK is retained, but the process or its subsequent validation did not complete successfully. |
+| `uncertain` | The mutation started without a trustworthy new key, or a previous admitted attempt has no persisted result. |
+| `invalid` | The old key failed its read-only check before mutation. |
+| `unavailable` | Preflight, process start, lease access or certificate reserve prevented mutation. |
+| `unsupported` | The OS driver was called outside the root Mac context. |
+
+A returned candidate survives nonzero exit, timeout and shutdown cancellation.
+The runtime signs and encrypts it while holding the lease, publishes it to the
+journal, releases/clears plaintext and then sends the receipt. Storage retries keep
+the exact encrypted bytes; lost network acknowledgements retry the saved receipt.
+A restarted runtime reads its journal before decryption or execution. A busy lease
+cannot be treated as a crashed owner. An intent-only record becomes signed
+uncertainty, never another rotation. A receipt request without local evidence
+cannot invent an execution nonce or trigger a mutation.
+
+One owned goroutine serializes registration, read-only validation and rotation,
+sharing the protected recipient epoch without races. The enrollment store stays
+open through that goroutine's shutdown. Cancellation still permits encrypted
+receipt persistence before keys and storage close. Replacing the recipient epoch
+stops transmission under the old epoch but preserves its encrypted journal record.
+
+Apple documents the PRK authentication and output-plist options in the installed
+`fdesetup(8)` manual; its [FileVault deployment guide](https://support.apple.com/guide/deployment/dep0a2cb7686/web)
+also describes the MDM and command-line management boundaries. Actual volume and
+native escrow interoperability still require physical-device acceptance.
+
 ## Tests
 
 Common tests cover concurrent admission, restart, lost intent and receipt commit
@@ -97,3 +151,10 @@ executes `fdesetup`, reads workstation encryption state or changes a real key.
 Mac lease tests use private temporary directories, concurrent handles and a
 separate helper process that is killed to verify automatic kernel release. They
 also reject unsafe path/file types without altering existing state.
+Driver tests launch only the Go fixture executable and exercise stdin/environment
+isolation, all outcomes, timeouts, process-start failure, malformed output,
+candidate preservation and secret clearing. Output-parser fuzzing checks bounded
+decoding. Runtime tests use a real isolated TLS WebSocket broker, generated HPKE/RSA
+keys, an injected journal and driver, and verify durable publication before network
+transmission, restart, cancelled shutdown, storage failures, capability gates,
+certificate reserve, conflicting scope and recipient replacement.

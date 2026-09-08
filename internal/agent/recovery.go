@@ -176,7 +176,7 @@ func (r *recoveryClient) cycle(ctx context.Context, exchange recoveryExchange, v
 	return nil
 }
 
-func (a *Agent) setRecoveryCapability(version int) {
+func (a *Agent) setRecoveryCapabilities(version, rotationVersion int) {
 	r := a.individual
 	if r == nil {
 		return
@@ -186,6 +186,11 @@ func (a *Agent) setRecoveryCapability(version int) {
 		accepted = int32(version)
 	}
 	r.recoveryVersion.Store(accepted)
+	rotationAccepted := int32(0)
+	if accepted == enrollment.RecoveryVersion && rotationVersion == enrollment.RotationVersion && r.rotation != nil {
+		rotationAccepted = int32(rotationVersion)
+	}
+	r.rotationVersion.Store(rotationAccepted)
 	if accepted == 0 {
 		return
 	}
@@ -200,32 +205,52 @@ func (a *Agent) setRecoveryCapability(version int) {
 	go func() {
 		defer r.work.Done()
 		defer r.recovery.clearPending()
+		defer func() {
+			if r.rotation != nil {
+				if r.rotation.persistPending() != nil {
+					log.Print("[ERROR]: encrypted FileVault rotation receipt could not be persisted")
+				}
+				r.rotation.clearPending()
+			}
+		}()
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		exchange := func(ctx context.Context, data []byte) ([]byte, error) {
-			r.mu.Lock()
-			connection := r.connection
-			r.mu.Unlock()
-			if connection == nil || connection.IsClosed() {
-				return nil, enrollment.ErrRecovery
+		exchangeFor := func(operation string) recoveryExchange {
+			return func(ctx context.Context, data []byte) ([]byte, error) {
+				r.mu.Lock()
+				connection := r.connection
+				r.mu.Unlock()
+				if connection == nil || connection.IsClosed() {
+					return nil, enrollment.ErrRecovery
+				}
+				subject, err := enrollment.RequestSubject(r.identity.Response.DeviceID, operation)
+				if err != nil {
+					return nil, enrollment.ErrRecovery
+				}
+				message, err := connection.RequestWithContext(ctx, subject, data)
+				if err != nil || message == nil {
+					return nil, enrollment.ErrRecovery
+				}
+				return message.Data, nil
 			}
-			subject, err := enrollment.RequestSubject(r.identity.Response.DeviceID, "recovery")
-			if err != nil {
-				return nil, enrollment.ErrRecovery
-			}
-			message, err := connection.RequestWithContext(ctx, subject, data)
-			if err != nil || message == nil {
-				return nil, enrollment.ErrRecovery
-			}
-			return message.Data, nil
 		}
+		validationExchange, rotationExchange := exchangeFor("recovery"), exchangeFor("rotation")
 		for {
 			if r.recoveryVersion.Load() == enrollment.RecoveryVersion {
-				if r.recovery.cycle(r.ctx, exchange, macsecurity.ValidateFileVaultRecoveryKey) != nil && r.ctx.Err() == nil {
+				if r.recovery.cycle(r.ctx, validationExchange, macsecurity.ValidateFileVaultRecoveryKey) != nil && r.ctx.Err() == nil {
 					log.Print("[ERROR]: private FileVault validation request failed")
 				}
 			} else {
 				r.recovery.clearPending()
+			}
+			if r.rotation != nil {
+				if r.rotationVersion.Load() == enrollment.RotationVersion {
+					if r.rotation.cycle(r.ctx, validationExchange, rotationExchange) != nil && r.ctx.Err() == nil {
+						log.Print("[ERROR]: private FileVault rotation request failed")
+					}
+				} else if r.rotation.persistPending() != nil && r.ctx.Err() == nil {
+					log.Print("[ERROR]: encrypted FileVault rotation receipt could not be persisted")
+				}
 			}
 			select {
 			case <-r.ctx.Done():
