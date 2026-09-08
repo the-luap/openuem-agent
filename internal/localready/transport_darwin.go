@@ -266,9 +266,14 @@ func probe(ctx context.Context, directory string, identity Identity, publicKey s
 	}
 	ctx, cancel := context.WithTimeout(ctx, exchangeTimeout)
 	defer cancel()
+	deadline, _ := ctx.Deadline()
 	defer func() {
-		if resultErr != nil && ctx.Err() != nil {
+		if ctx.Err() != nil {
 			resultErr = ctx.Err()
+		} else if !time.Now().Before(deadline) {
+			// The socket deadline can fire before the context timer is scheduled.
+			// Preserve the same bounded-probe result in either scheduling order.
+			resultErr = context.DeadlineExceeded
 		}
 	}()
 	root, rootInfo, err := openPrivate(directory, true, uid)
@@ -298,7 +303,6 @@ func probe(ctx context.Context, directory string, identity Identity, publicKey s
 	defer connection.Close()
 	stop := context.AfterFunc(ctx, func() { connection.Close() })
 	defer stop()
-	deadline, _ := ctx.Deadline()
 	if connection.SetDeadline(deadline) != nil {
 		return ErrUnavailable
 	}
