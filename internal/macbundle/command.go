@@ -17,6 +17,9 @@ directory. Use a trusted build workspace with trusted ancestor directories.
 The input must be a single-architecture 64-bit Mach-O executable matching the
 requested target. Existing output is rejected without replacement. The source
 executable is retained and verified while copying; it is never modified.
+The Mach-O platform must be macOS with a deployment target no newer than 13.0.
+Build CGo code with explicit macOS 13.0 compile/link deployment flags; do not
+rely on the current SDK's default minimum version.
 
 The bundle contains public code and sealed-at-signing app/service metadata only.
 It carries no invitation, organization configuration, private key or device identity.

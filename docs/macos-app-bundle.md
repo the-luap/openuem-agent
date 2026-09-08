@@ -26,6 +26,22 @@ Mach-O executable with an entry-point load command. Universal, 32-bit, object,
 library and non-Mach-O inputs are rejected. Build each supported architecture
 separately so it matches the release artifact's target.
 
+The binary must declare exactly one native macOS deployment target, no newer than
+the bundle's minimum macOS 13.0. iOS, Catalyst, other platform targets and ambiguous
+or absent deployment commands fail. A newer SDK may otherwise default to a newer
+minimum even when `Info.plist` says 13.0. Set explicit compile/link flags while
+building CGo packages, so the build cache also distinguishes that target:
+
+```sh
+export MACOSX_DEPLOYMENT_TARGET=13.0
+export CGO_CFLAGS='-mmacosx-version-min=13.0'
+export CGO_CXXFLAGS='-mmacosx-version-min=13.0'
+export CGO_LDFLAGS='-mmacosx-version-min=13.0'
+```
+
+These load-command checks prevent contradictory metadata. They do not prove
+availability of every dependency/API or replace acceptance on supported Macs.
+
 ```sh
 mkdir -m 700 /absolute/build/output
 go run ./cmd/openuem-macos-bundle \
@@ -106,7 +122,7 @@ same executable when the daemon starts.
 
 ## Verification
 
-Portable tests reject incompatible Mach-O containers/targets and ambiguous CLI or
+Portable tests reject incompatible Mach-O containers/platforms/minimum versions and ambiguous CLI or
 version input. Native tests exercise unchanged source bytes, private output,
 symlink/permission rejection, source/path replacement, same-length byte changes
 with restored timestamps, cancellation and competing publication. They also copy
@@ -121,3 +137,5 @@ public builder CLI, compares its copied executable byte-for-byte and validates
 both generated plists. It removes its own temporary output and never runs the
 agent or changes launchd, installed apps, OS trust or keychains. CI runs this check
 on macOS alongside the native package tests and existing enrollment checks.
+Run local native tests with the same deployment flags shown above; the test that
+copies its own compiled executable deliberately requires the declared baseline.

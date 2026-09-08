@@ -4,6 +4,11 @@ set -eu
 # Build-only acceptance. This never executes the agent, registers a service,
 # installs a package or accesses a production identity/keychain.
 GO_COMMAND=${GO_COMMAND:-go}
+MACOSX_DEPLOYMENT_TARGET=13.0
+CGO_CFLAGS="${CGO_CFLAGS:-} -mmacosx-version-min=13.0"
+CGO_CXXFLAGS="${CGO_CXXFLAGS:-} -mmacosx-version-min=13.0"
+CGO_LDFLAGS="${CGO_LDFLAGS:-} -mmacosx-version-min=13.0"
+export MACOSX_DEPLOYMENT_TARGET CGO_CFLAGS CGO_CXXFLAGS CGO_LDFLAGS
 fixture_parent=${TMPDIR:-/tmp}
 fixture_directory=$(mktemp -d "${fixture_parent%/}/openuem-macos-bundle-check.XXXXXX")
 trap 'rm -rf -- "$fixture_directory"' EXIT

@@ -23,10 +23,44 @@ func fixtureOptions(t *testing.T) Options {
 // a payload. Native tests separately assemble the actual compiled test image.
 func fixtureImage(cpu macho.Cpu) []byte {
 	var result bytes.Buffer
-	for _, word := range []uint32{macho.Magic64, uint32(cpu), 0, uint32(macho.TypeExec), 1, 16, 4, 0, 5, 16, 0, 0} {
+	for _, word := range []uint32{macho.Magic64, uint32(cpu), 0, uint32(macho.TypeExec), 2, 40, 4, 0, 5, 16, 0, 0, 0x32, 24, 1, 13 << 16, 26 << 16, 0} {
 		_ = binary.Write(&result, binary.LittleEndian, word)
 	}
 	return result.Bytes()
+}
+
+func TestMachODeploymentTargetCannotOverstateMacOSCompatibility(t *testing.T) {
+	for _, change := range []func([]byte){
+		func(b []byte) { binary.LittleEndian.PutUint32(b[56:], 2) }, // iOS
+		func(b []byte) { binary.LittleEndian.PutUint32(b[56:], 6) }, // Catalyst
+		func(b []byte) { binary.LittleEndian.PutUint32(b[60:], 26<<16) },
+		func(b []byte) { binary.LittleEndian.PutUint32(b[60:], 13<<16|1) },
+		func(b []byte) { binary.LittleEndian.PutUint32(b[60:], 0) },
+		func(b []byte) { binary.LittleEndian.PutUint32(b[68:], 1) },                                            // Truncated tool array.
+		func(b []byte) { binary.LittleEndian.PutUint32(b[16:], 1); binary.LittleEndian.PutUint32(b[20:], 16) }, // Missing deployment target.
+	} {
+		data := fixtureImage(macho.CpuArm64)
+		change(data)
+		if err := verifyMachO(bytes.NewReader(data), "arm64"); !errors.Is(err, ErrSource) {
+			t.Fatal("incompatible deployment metadata accepted", err)
+		}
+	}
+	data := fixtureImage(macho.CpuArm64)
+	data = append(data, data[48:]...)
+	binary.LittleEndian.PutUint32(data[16:], 3)
+	binary.LittleEndian.PutUint32(data[20:], 64)
+	if err := verifyMachO(bytes.NewReader(data), "arm64"); !errors.Is(err, ErrSource) {
+		t.Fatal("ambiguous deployment targets accepted", err)
+	}
+	// Older macOS commands are valid too, provided they do not claim another OS.
+	data = fixtureImage(macho.CpuAmd64)[:64]
+	binary.LittleEndian.PutUint32(data[20:], 32)
+	binary.LittleEndian.PutUint32(data[48:], 0x24)
+	binary.LittleEndian.PutUint32(data[52:], 16)
+	binary.LittleEndian.PutUint32(data[56:], 11<<16)
+	if err := verifyMachO(bytes.NewReader(data), "amd64"); err != nil {
+		t.Fatal("compatible legacy macOS target rejected", err)
+	}
 }
 
 func TestMachOTargetGuardRejectsOtherContainersTypesAndMissingEntrypoints(t *testing.T) {

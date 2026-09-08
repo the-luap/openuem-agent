@@ -112,18 +112,50 @@ func verifyMachO(reader io.ReaderAt, architecture string) error {
 	if file.Magic != macho.Magic64 || file.Cpu != want || file.Type != macho.TypeExec {
 		return ErrSource
 	}
+	entryPoints, deploymentTargets := 0, 0
 	for _, command := range file.Loads {
 		raw := command.Raw()
 		if len(raw) < 8 {
 			return ErrSource
 		}
 		kind := file.ByteOrder.Uint32(raw)
-		if kind == 0x80000028 && len(raw) >= 24 || kind == 5 && len(raw) >= 16 {
-			return nil // LC_MAIN or LC_UNIXTHREAD (used by the Go linker).
+		switch kind {
+		case 0x80000028: // LC_MAIN
+			if len(raw) != 24 {
+				return ErrSource
+			}
+			entryPoints++
+		case 5: // LC_UNIXTHREAD (used by the Go linker).
+			if len(raw) < 16 {
+				return ErrSource
+			}
+			entryPoints++
+		case 0x32: // LC_BUILD_VERSION: platform, minos, sdk, ntools.
+			if len(raw) < 24 || file.ByteOrder.Uint32(raw[8:]) != 1 || uint64(file.ByteOrder.Uint32(raw[20:]))*8+24 != uint64(len(raw)) {
+				return ErrSource
+			}
+			if !compatibleMinimum(file.ByteOrder.Uint32(raw[12:])) {
+				return ErrSource
+			}
+			deploymentTargets++
+		case 0x24: // LC_VERSION_MIN_MACOSX (older native executables).
+			if len(raw) != 16 || !compatibleMinimum(file.ByteOrder.Uint32(raw[8:])) {
+				return ErrSource
+			}
+			deploymentTargets++
+		case 0x25, 0x2f, 0x30: // iOS, tvOS and watchOS minimum version commands.
+			return ErrSource
 		}
+	}
+	if entryPoints == 1 && deploymentTargets == 1 {
+		return nil
 	}
 	return ErrSource
 }
+
+// loader.h encodes X.Y.Z as xxxx.yy.zz. The app declares macOS 13.0; never
+// hide a newer binary deployment target behind that older property-list value.
+func compatibleMinimum(version uint32) bool { return version >= 10<<16 && version <= 13<<16 }
 
 func layout(o Options) map[string][]byte {
 	return map[string][]byte{"Contents/Info.plist": infoPlist(o), DaemonRelative: daemonPlist()}
