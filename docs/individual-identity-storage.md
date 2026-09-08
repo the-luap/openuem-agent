@@ -2,9 +2,51 @@
 
 The `internal/enrollmentstore` package starts the protected endpoint-storage work
 for individual Windows/Mac enrollment. Both native backends are implemented;
-they are not yet an enabled replacement for the legacy agent runtime. The
-enrollment record format, pending-key/recovery state machine, native bootstrap
-command and runtime selection remain integration steps.
+the durable enrollment state machine connects them to the bounded HTTPS client.
+They are not yet an enabled replacement for the legacy agent runtime. Independent
+bootstrap authorization, the native bootstrap command, runtime selection, renewal
+and signed installer integration remain required integration steps.
+
+## Durable enrollment and recovery
+
+`Store.Enroll` requires an independently authorized `Bootstrap`: server HTTPS
+origin, invitation, platform, architecture, device name and verified release
+digest. Syntax checking does not establish release or server trust. All six
+fields bind subsequent retries; changing any of them returns `ErrConflict`
+without a claim or silent replacement of the existing installation.
+
+The first attempt generates an RSA certificate key and a user NKey locally, then
+exclusively publishes a protected `pending` record before HTTP. Every caller,
+including the winning writer, reloads that record before signing a request.
+Competing writers discard their own generated keys and use the persisted winner.
+The HTTPS client uses system roots or separately authorized server roots, rejects
+redirects and sends only public CSR/key proofs. An issued identity authority is
+never installed as HTTPS trust.
+
+After validating the certificate's key, identity, purpose, lifetime and expected
+WSS origin, the store exclusively publishes `identity`. That record contains the
+public response and a SHA-256 binding to the exact pending record. It returns only
+the reloaded, validated committed identity. A competing complete publication wins
+without replacement. A lost HTTP response, failed local write or cancellation
+retains pending keys for an explicit retry; an already completed enrollment makes
+no new claim. The pending record remains protected after completion because it
+holds the keys and deleting it could race another process recovering issuance.
+
+`Store.Load` distinguishes empty (`ErrMissing`), pending (`ErrPending`) and ready
+states. Orphaned, inaccessible, malformed, mismatched or expired state returns an
+error, never an empty installation or a request to fall back to legacy credentials.
+An expired/revoked invitation can leave pending state that requires an explicit
+future recovery/re-enrollment workflow; this package does not delete or overwrite
+it automatically. Certificate renewal is also a separate pending implementation.
+
+The private, versioned, length-framed codec encodes bootstrap metadata, PKCS#8 RSA
+bytes and a copied NKey seed only at the native storage boundary. It rejects
+truncation, trailing data, oversized fields, weak/wrong key types and ambiguous
+JSON. Each decoded identity owns independent keys and refuses JSON serialization.
+Owned plaintext buffers and native outputs are cleared; Go's RSA internals can
+retain private precomputation, so complete erasure of every managed-memory copy is
+not guaranteed. `Store.Close` joins active operations; callers cancel active HTTP
+contexts before shutdown and stop key users before `Identity.Close`.
 
 ## Windows storage boundary
 
@@ -45,8 +87,8 @@ before the first byte. It flushes and closes that file, then publishes it with
 processes get one complete winner; they must load that record instead of replacing
 it. Failed attempts clean up their own temporary file. The backend never silently
 replaces existing state, and corrupted or inaccessible records never trigger a
-plaintext fallback. Its two immutable records are only a storage primitive;
-callers still need the enrollment/recovery state machine before sending a claim.
+plaintext fallback. `Store` adds the enrollment/recovery state machine on top of
+these two immutable storage primitives.
 
 Existing legacy configuration and shared certificate behavior are unchanged by
 this unconnected package. No end-user activation flag is introduced yet.
@@ -106,3 +148,13 @@ disk contents, the 128 KiB boundary and recovery/publication by a separate proce
 of the same executable. They do not enroll the workstation or read existing user
 credentials. Signed agent/installer integration and physical Windows/Mac
 acceptance remain separate requirements.
+
+All three CI platforms run the common state-machine tests and build the complete
+agent. Windows and macOS also run the lost-response HTTPS/HTTP2 recovery scenario
+using their actual DPAPI/keychain backend. The isolated issuer verifies that
+durable keys exist before the first request, commits issuance, interrupts its
+first response and accepts only the same key binding on retry. Other tests cover
+concurrent enrollment, both possible outcomes of a failed publication, changed
+bootstrap values, unbound responses, corrupt/orphaned records, cancellation and
+shutdown. These fixture tests complement the console's real PostgreSQL/gateway
+claim tests; they do not claim a physical installed-agent acceptance result.

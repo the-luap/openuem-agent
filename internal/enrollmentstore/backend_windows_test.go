@@ -28,6 +28,11 @@ func windowsFixture(t *testing.T) (NativeBackend, string) {
 	return b, directory
 }
 
+func TestWindowsDPAPIDurableEnrollmentRecovery(t *testing.T) {
+	b, _ := windowsFixture(t)
+	runDurableEnrollmentRecovery(t, b)
+}
+
 func TestWindowsStateIsEncryptedPrivateImmutableAndRecoverable(t *testing.T) {
 	b, directory := windowsFixture(t)
 	plaintext := []byte("isolated private identity fixture, never a production key")

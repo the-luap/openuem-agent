@@ -26,6 +26,11 @@ type keychainFixture struct {
 	password           []byte
 }
 
+func TestMacKeychainDurableEnrollmentRecovery(t *testing.T) {
+	f := newKeychainFixture(t)
+	runDurableEnrollmentRecovery(t, f.backend)
+}
+
 func newKeychainFixture(t *testing.T) *keychainFixture {
 	t.Helper()
 	directory := t.TempDir()
