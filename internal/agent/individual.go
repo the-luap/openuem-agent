@@ -30,7 +30,6 @@ type individualRuntime struct {
 	cancel          context.CancelFunc
 	mu              sync.Mutex
 	connectMu       sync.Mutex
-	stopOnce        sync.Once
 	stopping        bool
 	consumerStarted bool
 	work            sync.WaitGroup
@@ -77,7 +76,11 @@ func (a *Agent) configureIndividual() error {
 		identity.Close()
 		return errIndividualAgent
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	parent := a.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
 	a.individual = &individualRuntime{identity: identity, ctx: ctx, cancel: cancel}
 	a.applyIndividualConfig()
 	return nil

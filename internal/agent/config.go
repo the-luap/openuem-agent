@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -159,7 +160,7 @@ func (a *Agent) readConfigFile(configFile string) error {
 		// Read required certificates and private key
 		cwd, err := Getwd()
 		if err != nil {
-			log.Fatalf("[FATAL]: could not get current working directory")
+			return errors.New("agent executable directory is unavailable")
 		}
 
 		key, err = cfg.Section("Certificates").GetKey("AgentCert")
@@ -172,7 +173,7 @@ func (a *Agent) readConfigFile(configFile string) error {
 
 		_, err = openuem_utils.ReadPEMCertificate(a.Config.AgentCert)
 		if err != nil {
-			log.Fatalf("[FATAL]: could not read agent certificate")
+			return errors.New("agent certificate is unavailable")
 		}
 
 		key, err = cfg.Section("Certificates").GetKey("AgentKey")
@@ -185,7 +186,7 @@ func (a *Agent) readConfigFile(configFile string) error {
 
 		_, err = openuem_utils.ReadPEMPrivateKey(a.Config.AgentKey)
 		if err != nil {
-			log.Fatalf("[FATAL]: could not read agent private key")
+			return errors.New("agent private key is unavailable")
 		}
 
 		key, err = cfg.Section("Certificates").GetKey("CACert")
@@ -198,7 +199,7 @@ func (a *Agent) readConfigFile(configFile string) error {
 
 		_, err = openuem_utils.ReadPEMCertificate(a.Config.CACert)
 		if err != nil {
-			log.Fatalf("[FATAL]: could not read CA certificate")
+			return errors.New("agent authority certificate is unavailable")
 		}
 
 		key, err = cfg.Section("Certificates").GetKey("SFTPCert")
@@ -304,7 +305,7 @@ func (c *Config) WriteConfig() error {
 	cfg.Section("Agent").Key("ScriptsRun").SetValue(c.ScriptsRun)
 
 	if err := cfg.SaveTo(configFile); err != nil {
-		log.Fatalf("[FATAL]: could not save config file, reason: %v", err)
+		return err
 	}
 	log.Printf("[INFO]: config has been saved to %s", configFile)
 	return nil
@@ -338,12 +339,10 @@ func (c *Config) SetRestartRequiredFlag() error {
 	return cfg.SaveTo(configFile)
 }
 
-func (a *Agent) SetInitialConfig() {
+func (a *Agent) SetInitialConfig() error {
 	id := uuid.New()
 	a.Config.UUID = id.String()
 	a.Config.Enabled = true
 	a.Config.ExecuteTaskEveryXMinutes = 5
-	if err := a.Config.WriteConfig(); err != nil {
-		log.Fatalf("[FATAL]: could not write agent config: %v", err)
-	}
+	return a.Config.WriteConfig()
 }

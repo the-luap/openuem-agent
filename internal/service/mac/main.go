@@ -20,5 +20,7 @@ func main() {
 	// Instantiate service
 	s := NewService(l)
 
-	s.Execute()
+	if err := s.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

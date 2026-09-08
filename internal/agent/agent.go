@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -30,6 +32,10 @@ import (
 )
 
 type Agent struct {
+	ctx                    context.Context
+	cancel                 context.CancelFunc
+	stopOnce               sync.Once
+	tasks                  taskGroup
 	individual             *individualRuntime
 	Config                 Config
 	TaskScheduler          gocron.Scheduler
@@ -43,6 +49,7 @@ type Agent struct {
 	RemoteDesktop          *remotedesktop.RemoteDesktopService
 	BadgerDB               *badger.DB
 	SFTPServer             *sftp.SFTP
+	sftpDone               <-chan struct{}
 	JetstreamContextCancel context.CancelFunc
 	WingetConfigureJob     gocron.Job
 }
@@ -51,58 +58,63 @@ type JSONActions struct {
 	Actions []openuem_nats.DeployAction `json:"actions"`
 }
 
-func New() Agent {
-	var err error
-	agent := Agent{}
-	if err := agent.configureIndividual(); err != nil {
-		log.Fatal("[FATAL]: individual enrollment configuration or protected identity is unavailable")
+// New validates local identity and configuration before a service can report
+// readiness. It releases every partially initialized resource on failure.
+func New(ctx context.Context) (result *Agent, err error) {
+	if ctx == nil {
+		return nil, errors.New("agent context is required")
 	}
-
-	// Task Scheduler
-	agent.TaskScheduler, err = gocron.NewScheduler()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	a := &Agent{}
+	a.ctx, a.cancel = context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			a.Stop()
+		}
+	}()
+	if err = a.configureIndividual(); err != nil {
+		return nil, errIndividualAgent
+	}
+	a.TaskScheduler, err = gocron.NewScheduler()
 	if err != nil {
-		log.Fatalf("[FATAL]: could not create the scheduler: %v", err)
+		return nil, errors.New("agent scheduler could not be created")
 	}
-
-	// Read Agent Config from openuem.ini file
-	if err := agent.ReadConfig(); err != nil {
-		log.Fatalf("[FATAL]: could not read agent config: %v", err)
+	if err = a.ReadConfig(); err != nil {
+		return nil, errors.New("agent configuration could not be read")
 	}
-
-	// If it's the initial config, set it and write it
-	if agent.Config.UUID == "" {
-		agent.SetInitialConfig()
-		if err := agent.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+	if a.Config.UUID == "" {
+		if err = a.SetInitialConfig(); err != nil {
+			return nil, errors.New("initial agent configuration could not be saved")
 		}
 	}
-
-	if agent.individual == nil {
-		caCert, err := openuem_utils.ReadPEMCertificate(agent.Config.CACert)
+	if a.individual == nil {
+		a.CACert, err = openuem_utils.ReadPEMCertificate(a.Config.CACert)
 		if err != nil {
-			log.Fatalf("[FATAL]: could not read CA certificate")
+			return nil, errors.New("agent authority certificate could not be read")
 		}
-		agent.CACert = caCert
-
-		agent.SFTPCert, err = openuem_utils.ReadPEMCertificate(agent.Config.SFTPCert)
+		a.SFTPCert, err = openuem_utils.ReadPEMCertificate(a.Config.SFTPCert)
 		if err != nil {
-			log.Fatalf("[FATAL]: could not read sftp certificate")
+			return nil, errors.New("agent file transfer certificate could not be read")
 		}
-
 	}
-
-	return agent
+	if err = a.ctx.Err(); err != nil {
+		return nil, err
+	}
+	return a, nil
 }
 
+// Stop is idempotent. The service serializes it after Start has returned.
 func (a *Agent) Stop() {
-	if a.individual != nil {
-		a.individual.stopOnce.Do(a.stop)
-		return
-	}
-	a.stop()
+	a.stopOnce.Do(a.stop)
 }
 
 func (a *Agent) stop() {
+	a.tasks.close()
+	if a.cancel != nil {
+		a.cancel()
+	}
 	if a.individual != nil {
 		a.individual.mu.Lock()
 		a.individual.stopping = true
@@ -115,18 +127,19 @@ func (a *Agent) stop() {
 	}
 	if a.TaskScheduler != nil {
 		if err := a.TaskScheduler.Shutdown(); err != nil {
-			log.Printf("[ERROR]: could not close NATS connection, reason: %s\n", err.Error())
+			log.Printf("[ERROR]: scheduler shutdown returned before all tasks completed: %s\n", err.Error())
 		}
 	}
 
+	// Scheduler shutdown can time out while OS work still runs. Join admitted
+	// tasks before releasing their connections or protected identity.
+	a.tasks.wait()
 	if a.NATSConnection != nil {
 		a.NATSConnection.Close()
 	}
 
-	if a.SFTPServer != nil {
-		if err := a.SFTPServer.Server.Close(); err != nil {
-			log.Printf("[ERROR]: could not close SFTP server, reason: %s\n", err.Error())
-		}
+	if a.sftpDone != nil {
+		<-a.sftpDone
 	}
 
 	if a.BadgerDB != nil {
@@ -201,7 +214,7 @@ func (a *Agent) SendReport(r *report.Report) error {
 	return nil
 }
 
-func (a *Agent) startReportJob() error {
+func (a *Agent) startReportJob(options ...gocron.JobOption) error {
 	var err error
 	// Create task for running the agent
 	if a.Config.ExecuteTaskEveryXMinutes == 0 {
@@ -212,10 +225,11 @@ func (a *Agent) startReportJob() error {
 		gocron.DurationJob(
 			time.Duration(a.Config.ExecuteTaskEveryXMinutes)*time.Minute,
 		),
-		gocron.NewTask(a.ReportTask),
+		gocron.NewTask(a.tasks.wrap(a.ReportTask)),
+		options...,
 	)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not start the agent job: %v", err)
+		log.Printf("[ERROR]: could not start the agent job: %v", err)
 		return err
 	}
 	log.Printf("[INFO]: new agent job has been scheduled every %d minutes", a.Config.ExecuteTaskEveryXMinutes)
@@ -229,10 +243,10 @@ func (a *Agent) startPendingACKJob() error {
 		gocron.DurationJob(
 			SCHEDULETIME_5MIN*time.Minute,
 		),
-		gocron.NewTask(a.PendingACKTask),
+		gocron.NewTask(a.tasks.wrap(a.PendingACKTask)),
 	)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not start the pending ACK job: %v", err)
+		log.Printf("[ERROR]: could not start the pending ACK job: %v", err)
 		return err
 	}
 	log.Printf("[INFO]: new pending ACK job has been scheduled every %d minutes", SCHEDULETIME_5MIN)
@@ -247,7 +261,8 @@ func (a *Agent) ReportTask() {
 	if err := a.SendReport(r); err != nil {
 		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
 		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+			log.Printf("[ERROR]: could not write agent config: %v", err)
+			return
 		}
 		a.RescheduleReportRunTask()
 		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
@@ -262,7 +277,8 @@ func (a *Agent) ReportTask() {
 	// Report run and sent! Use default frequency
 	a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 	if err := a.Config.WriteConfig(); err != nil {
-		log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		log.Printf("[ERROR]: could not write agent config: %v", err)
+		return
 	}
 	a.RescheduleReportRunTask()
 }
@@ -323,7 +339,7 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 		log.Println("[INFO]: agent has been enabled!")
 
 		// Run report async
-		go func() {
+		go a.tasks.wrap(func() {
 			r := a.RunReport()
 			if r == nil {
 				return
@@ -340,7 +356,7 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 
 			// Start report job
 			a.startReportJob()
-		}()
+		})()
 	}
 
 	if err := msg.Ack(); err != nil {
@@ -871,7 +887,7 @@ func (a *Agent) GetRemoteConfig() error {
 		a.Config.SFTPDisabled = config.SFTPDisabled
 		a.Config.RemoteAssistanceDisabled = config.RemoteAssistanceDisabled
 		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+			return err
 		}
 
 		if a.Config.Debug {

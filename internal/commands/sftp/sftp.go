@@ -2,12 +2,14 @@ package sftp
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -51,6 +53,19 @@ func New() *SFTP {
 }
 
 func (s *SFTP) Serve(address string, sftpCert, caCert *x509.Certificate, db *badger.DB) error {
+	return s.ServeContext(context.Background(), address, sftpCert, caCert, db)
+}
+
+// ServeContext owns its listener and connections until cancellation cleanup is
+// joined. Closing the listener directly also covers cancellation before Serve
+// has registered it in the SSH server's internal listener map.
+func (s *SFTP) ServeContext(ctx context.Context, address string, sftpCert, caCert *x509.Certificate, db *badger.DB) error {
+	if ctx == nil {
+		return errors.New("file transfer context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.Server = ssh.Server{
 		Addr: address,
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
@@ -83,7 +98,28 @@ func (s *SFTP) Serve(address string, sftpCert, caCert *x509.Certificate, db *bad
 		},
 	}
 
-	return s.Server.ListenAndServe()
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	closed := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = listener.Close()
+		_ = s.Server.Close()
+		close(closed)
+	})
+	err = s.Server.Serve(listener)
+	if !stop() {
+		<-closed
+	}
+	_ = listener.Close()
+	_ = s.Server.Close()
+	// Join any handlers before the agent releases their certificate/cache.
+	_ = s.Server.Shutdown(context.Background())
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 func isCertValidFromCache(sftpCert, caCert *x509.Certificate, db *badger.DB) (bool, error) {

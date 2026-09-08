@@ -7,5 +7,7 @@ type OpenUEMLogger struct {
 }
 
 func (l *OpenUEMLogger) Close() {
-	l.LogFile.Close()
+	if l != nil && l.LogFile != nil {
+		_ = l.LogFile.Close()
+	}
 }

@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"os"
 	"os/signal"
@@ -10,32 +12,42 @@ import (
 
 	"github.com/open-uem/openuem-agent/internal/agent"
 	"github.com/open-uem/openuem-agent/internal/logger"
+	"github.com/open-uem/openuem-agent/internal/service/lifecycle"
 )
 
 type OpenUEMService struct {
-	Logger *logger.OpenUEMLogger
+	Logger  *logger.OpenUEMLogger
+	factory lifecycle.Factory
 }
 
 func NewService(l *logger.OpenUEMLogger) *OpenUEMService {
-	return &OpenUEMService{
-		Logger: l,
-	}
+	return &OpenUEMService{Logger: l, factory: func(ctx context.Context) (lifecycle.Runtime, error) {
+		a, err := agent.New(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return a, nil
+	}}
 }
 
-func (s *OpenUEMService) Execute() {
-	// Get new agent
-	a := agent.New()
-
-	// Start agent
-	a.Start()
-
-	// Keep the connection alive for service
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	<-done
-
-	// Stop agent
-	log.Println("[INFO]: service has received the stop or shutdown command")
-	s.Logger.Close()
-	a.Stop()
+func (s *OpenUEMService) Execute() error {
+	// Install handlers before opening protected state or starting any agent work.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	defer s.Logger.Close()
+	err := lifecycle.Run(ctx, s.factory, func(phase lifecycle.Phase) {
+		switch phase {
+		case lifecycle.Ready:
+			log.Print("[INFO]: agent service initialized")
+		case lifecycle.Stopping:
+			log.Print("[INFO]: agent service is stopping")
+		}
+	})
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	if err != nil {
+		log.Print("[ERROR]: agent service initialization failed")
+	}
+	return err
 }

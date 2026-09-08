@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/open-uem/openuem-agent/internal/logger"
+	"os"
 )
 
 func main() {
@@ -13,5 +14,7 @@ func main() {
 	// Instantiate service
 	s := NewService(l)
 
-	s.Execute()
+	if err := s.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

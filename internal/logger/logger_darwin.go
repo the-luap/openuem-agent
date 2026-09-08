@@ -16,7 +16,7 @@ func New() *OpenUEMLogger {
 	wd := "/var/log/openuem-agent"
 
 	if _, err := os.Stat(wd); os.IsNotExist(err) {
-		if err := os.MkdirAll(wd, 0660); err != nil {
+		if err := os.MkdirAll(wd, 0700); err != nil {
 			log.Fatalf("[FATAL]: could not create log directory, reason: %v", err)
 		}
 	}

@@ -7,6 +7,11 @@ bootstrap data, native package trust and installed-agent bytes before persisting
 credentials. Installer distribution, service activation, renewal and production
 console/deployment wiring are not complete yet.
 
+The [service lifecycle](service-lifecycle.md) now validates local initialization
+before reporting Windows `Running`, handles Unix termination signals during
+startup, schedules initial inventory asynchronously, and joins owned tasks before
+releasing credentials. This does not automatically register or activate a service.
+
 ## Selection and configuration
 
 An installer-controlled service environment selects the mode:
@@ -82,7 +87,7 @@ commands are not implemented in this runtime yet; unsupported commands receive a
 delayed negative acknowledgment and stay subject to the server's five-delivery
 limit for operator investigation. They are not silently reported as successful.
 Existing software/profile handlers still need complete execution time bounds,
-service-start/stop acceptance, signed updater integration and physical device
+complete service-start/stop acceptance, signed updater integration and physical device
 validation. Cancellation of a broker request does not cancel every inherited
 inventory or operating-system subprocess.
 

@@ -1,0 +1,95 @@
+# Native service initialization and cleanup
+
+The Windows service no longer reports `Running` before identity/configuration
+validation or blocks its control loop on the first inventory report. Linux and
+macOS install SIGTERM/SIGINT handlers before constructing the agent. These are
+service lifecycle changes; installer registration, explicit identity-directory
+provisioning and automatic activation after enrollment remain separate work.
+
+## Initialization
+
+`agent.New(context.Context)` returns an error instead of terminating the process
+on a missing or invalid protected identity, configuration, certificate or
+scheduler. A failed constructor releases its partially initialized resources.
+The individual runtime inherits the service context and still selects protected
+state before reading any shared certificate configuration. No legacy fallback
+is introduced.
+
+`Start` returns configuration and job-registration errors. It registers the first
+inventory report as an immediate scheduler task and starts the scheduler only
+after registration succeeds. A temporary broker connection failure can still
+start the existing reconnect job. Thus `Running` means local initialization and
+work scheduling succeeded; it does not prove that the server is reachable or that
+inventory has been received.
+
+The common lifecycle runner serializes construction, start and cleanup. A stop
+received during initialization cancels the context and waits for the initializer
+to return before calling `Stop`. It never races cleanup against initialization
+or announces readiness after an observed cancellation. Constructors transfer
+ownership of a partially returned runtime for cleanup even when they return an
+error.
+
+Windows publishes `StartPending` with no accepted controls and a 30-second wait
+hint. `Running` accepts Stop/Shutdown only after successful local initialization.
+Initialization failure reaches `StopPending` and a service-specific exit code of
+1; it never passes through `Running`. Stop/Shutdown publishes `StopPending`
+immediately and keeps Interrogate handling available during cleanup. Interrogate
+returns the service's current state, not a possibly stale status in the request.
+Unsupported controls are ignored. No timer fabricates checkpoint progress.
+`svc.Run` reports `Stopped` after the handler has finished cleanup.
+
+These transitions follow Microsoft's [ServiceMain guidance](https://learn.microsoft.com/en-us/windows/win32/services/service-servicemain-function)
+and [service state rules](https://learn.microsoft.com/en-us/windows/win32/services/service-status-transitions).
+The wait hint describes expected progress; it is not an enforced deadline for
+every inherited operating-system operation.
+
+## Cleanup ownership
+
+Stop is idempotent for both service modes. It closes task admission, cancels the
+service context, shuts down messaging/scheduling and joins admitted tasks before
+releasing their protected identity or cache. This includes the asynchronous
+report triggered by an enable command. A scheduler timeout is not mistaken for
+completion of a still-running task. Repeated concurrent Stop calls wait for the
+same cleanup.
+
+The legacy SFTP loop now owns a context-bound listener, including cancellation
+before the SSH server registers that listener. Its loop and shutdown are joined
+before its cache is closed. Individual mode continues to disable SFTP.
+Configuration failures return to their caller instead of calling `log.Fatal`
+from agent work. The service closes its logger after runtime cleanup; new Unix
+log directories include the owner execute bit required to access their files.
+
+These changes deliberately do not claim a bounded stop for every existing
+inventory tool, software/profile handler, legacy broker request, keychain call
+or SFTP authorization request. Work that ignores cancellation is joined rather
+than abandoned with freed resources. Remaining OS execution bounds are required
+for complete native service acceptance.
+
+## Verification
+
+The CI workflow includes lifecycle, native service and SFTP tests alongside the
+existing enrollment, signature, protected storage and broker tests:
+
+```sh
+go test -count=1 ./internal/enrollmentstore ./internal/agent \
+  ./internal/packagesignature ./internal/bootstrapinstall \
+  ./internal/enrollcommand ./internal/service/... ./internal/commands/sftp
+go build ./...
+```
+
+Linux/macOS run the race detector; macOS uses the isolated-keychain test tag.
+Unix service tests send actual SIGTERM to their own fixture subprocess during
+initialization and after start, and verify cleanup and failing startup exit
+codes. They never construct a real inventory agent or signal another process.
+Scheduler tests observe the scheduler's actual shutdown timeout and verify that
+the agent retains its identity until the blocked task finishes.
+
+Windows handler tests cover pending/running state, startup failure, interrogation
+during initialization/cleanup, cancellation during start, unsupported controls,
+single cleanup and logger lifetime. Additional elevated Windows tests create
+uniquely named manual-start SCM fixture services under Local System, query actual
+pending/running/stopped states and failure exit codes, and remove the fixtures
+after releasing their cleanup gates. These fixtures use a fake runtime; existing
+DPAPI/SCM tests separately verify real protected-state access as Local System.
+They do not install or start a production agent or claim physical endpoint
+acceptance.

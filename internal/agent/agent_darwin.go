@@ -41,62 +41,79 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func (a *Agent) Start() {
+func (a *Agent) Start() (err error) {
+	if a.ctx == nil || a.TaskScheduler == nil {
+		return errors.New("agent has not been initialized")
+	}
+	if err := a.ctx.Err(); err != nil {
+		return err
+	}
+	// Register all work before starting the scheduler. Inventory then runs as
+	// an owned task and cannot block service initialization or control handling.
+	defer func() {
+		if err == nil {
+			err = a.ctx.Err()
+		}
+		if err == nil {
+			a.TaskScheduler.Start()
+			log.Println("[INFO]: agent scheduler has started")
+		}
+	}()
 
-	log.Println("[INFO]: agent has been started!")
+	log.Println("[INFO]: agent is initializing")
 
 	// Log agent associated user
 	currentUser, err := user.Current()
 	if err != nil {
-		log.Printf("[ERROR]: %v", err)
+		log.Print("[WARN]: agent account name is unavailable")
+	} else {
+		log.Printf("[INFO]: agent is run as %s", currentUser.Username)
 	}
-	log.Printf("[INFO]: agent is run as %s", currentUser.Username)
 
 	a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
 	if err := a.Config.WriteConfig(); err != nil {
-		log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		return fmt.Errorf("save agent configuration: %w", err)
 	}
 
 	// Agent started so reset restart required flag
 	if err := a.Config.ResetRestartRequiredFlag(); err != nil {
-		log.Fatalf("[FATAL]: could not reset restart required flag, reason: %v", err)
+		return fmt.Errorf("reset agent restart flag: %w", err)
 	}
-
-	// Start task scheduler
-	a.TaskScheduler.Start()
-	log.Println("[INFO]: task scheduler has started!")
 
 	// Start BadgerDB KV and SFTP server only if port is set
 	if a.Config.SFTPPort != "" && !a.Config.SFTPDisabled {
 		cwd, err := Getwd()
 		if err != nil {
 			log.Println("[ERROR]: could not get working directory")
-			return
+			return err
 		}
 
 		badgerPath := filepath.Join(cwd, "badgerdb")
 		if err := os.RemoveAll(badgerPath); err != nil {
 			log.Println("[ERROR]: could not remove badgerdb directory")
-			return
+			return err
 		}
 
 		if err := os.MkdirAll(badgerPath, 0660); err != nil {
 			log.Println("[ERROR]: could not recreate badgerdb directory")
-			return
+			return err
 		}
 
 		a.BadgerDB, err = badger.Open(badger.DefaultOptions(filepath.Join(cwd, "badgerdb")))
 		if err != nil {
-			log.Printf("[ERROR]: %v", err)
+			return fmt.Errorf("open agent file transfer state: %w", err)
 		}
 
+		a.SFTPServer = sftp.New()
+		done := make(chan struct{})
+		a.sftpDone = done
 		go func() {
-			a.SFTPServer = sftp.New()
-			err = a.SFTPServer.Serve(":"+a.Config.SFTPPort, a.SFTPCert, a.CACert, a.BadgerDB)
+			defer close(done)
+			err := a.SFTPServer.ServeContext(a.ctx, ":"+a.Config.SFTPPort, a.SFTPCert, a.CACert, a.BadgerDB)
 			if err != nil {
 				log.Printf("[ERROR]: %v", err)
 			}
-			log.Println("[INFO]: SFTP server has started!")
+			log.Println("[INFO]: SFTP server has stopped")
 		}()
 	} else {
 		log.Println("[INFO]: SFTP port is not set so SFTP server is not started!")
@@ -106,43 +123,21 @@ func (a *Agent) Start() {
 	a.NATSConnection, err = a.connectBroker()
 	if err != nil {
 		log.Printf("[ERROR]: %v", err)
-		a.startNATSConnectJob()
-		return
+		return a.startNATSConnectJob()
 	}
 	a.SubscribeToNATSSubjects()
 
-	// Run report for the first time after start if agent is enabled
 	if a.Config.Enabled {
-		r := a.RunReport()
-		if r == nil {
-			return
+		if err := a.startReportJob(gocron.WithStartAt(gocron.WithStartImmediately())); err != nil {
+			return err
 		}
-
-		// Send first report to NATS
-		if err := a.SendReport(r); err != nil {
-			a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN // Try to send it again in 5 minutes
-			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
-		} else {
-			// Get remote config
-			if err := a.GetRemoteConfig(); err != nil {
-				log.Printf("[ERROR]: could not get remote config %v", err)
-			}
-			log.Println("[INFO]: remote config requested")
-
-			// Start scheduled report job with default frequency
-			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
-		}
-
-		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
-		}
-
-		a.startReportJob()
 	}
 
 	// Start other jobs associated
-	a.startPendingACKJob()
-	a.startCheckForAnsibleProfilesJob()
+	if err := a.startPendingACKJob(); err != nil {
+		return err
+	}
+	return a.startCheckForAnsibleProfilesJob()
 }
 
 func (a *Agent) startNATSConnectJob() error {
@@ -158,7 +153,7 @@ func (a *Agent) startNATSConnectJob() error {
 			time.Duration(time.Duration(a.Config.ExecuteTaskEveryXMinutes)*time.Minute),
 		),
 		gocron.NewTask(
-			func() {
+			a.tasks.wrap(func() {
 				a.NATSConnection, err = a.connectBroker()
 				if err != nil {
 					return
@@ -172,11 +167,11 @@ func (a *Agent) startNATSConnectJob() error {
 				a.startReportJob()
 				a.startPendingACKJob()
 				a.startCheckForAnsibleProfilesJob()
-			},
+			}),
 		),
 	)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not start the NATS connect job: %v", err)
+		log.Printf("[ERROR]: could not start the NATS connect job: %v", err)
 		return err
 	}
 	log.Printf("[INFO]: new NATS connect job has been scheduled every %d minutes", a.Config.ExecuteTaskEveryXMinutes)
@@ -319,7 +314,8 @@ func (a *Agent) NewConfigSubscribe() error {
 		}
 
 		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+			log.Printf("[ERROR]: could not write agent config: %v", err)
+			return
 		}
 
 		if err := a.Config.SetRestartRequiredFlag(); err != nil {
@@ -415,10 +411,10 @@ func (a *Agent) startCheckForAnsibleProfilesJob() error {
 		gocron.DurationJob(
 			time.Duration(a.Config.WingetConfigureFrequency)*time.Minute,
 		),
-		gocron.NewTask(a.GetUnixConfigureProfiles),
+		gocron.NewTask(a.tasks.wrap(a.GetUnixConfigureProfiles)),
 	)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not start the check for Ansible profiles job, reason: %v", err)
+		log.Printf("[ERROR]: could not start the check for Ansible profiles job, reason: %v", err)
 		return err
 	}
 	log.Printf("[INFO]: new check for Ansible profiles job has been scheduled every %d minutes", a.Config.WingetConfigureFrequency)
