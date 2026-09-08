@@ -8,6 +8,19 @@ checkpoint. It does not issue an identity, install software or start the service
 The native command, consent/origin authorization, trusted release-key provisioning
 and installer/service activation still need to connect these components.
 
+`OpenRunningAgent` opens the current executable before bootstrap network work and
+retains its read-only descriptor until the caller closes it. `Executable.Verify`
+checks the actual native target, release checkpoint/expiry and separate signed
+`agent_size`/`agent_sha256` binding. An installer hash or version label cannot
+substitute for these bytes. It checks the original file identity, current path,
+size, modification time and write permissions before and after hashing. Unix
+permits only the current account/root owner and no group/other write permission;
+Windows permits trusted owner/writers (current account, System, Administrators)
+while allowing public read access, and denies write/delete sharing while open.
+The installer must own the path and protect its ancestors. This verifies release
+bytes and file identity; it is not remote process or operating-system attestation.
+The native enrollment command still needs to require this check before issuance.
+
 Each operation creates a new private `package-<UUID>` child directory. It creates
 the signed artifact filename with exclusive private permissions before writing
 any bytes. The native client downloads only the configuration's exact release
@@ -42,3 +55,10 @@ checkpoint rollback, concurrent closure and preserving an unexpected replacement
 The exported production path rejects an unsigned fixture. Windows additionally
 stages the licensed Go EV-signature fixture through the real native verifier and
 checks cleanup. Test packages are never installed or executed.
+
+Staging commit `5076ec5` passed [Windows, macOS and Linux CI](https://github.com/the-luap/openuem-agent/actions/runs/34191314823).
+Installed-executable tests separately read the actual running test binary, bind its
+bytes in a signed fixture release and check immutable path identity, checkpoints,
+missing/wrong bindings, permissions and cancellation. Windows tests allow public
+read access, reject untrusted writers and verify the open executable cannot be
+modified or replaced. They use only temporary files and do not change OS trust.
