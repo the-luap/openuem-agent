@@ -9,6 +9,20 @@ permissions:
   contents: read
 
 jobs:
+  mac-storage:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Isolated noninteractive keychain and separate process recovery
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore
+
   windows-storage:
     runs-on: windows-latest
     timeout-minutes: 10

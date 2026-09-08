@@ -1,10 +1,10 @@
 # Individual endpoint identity storage
 
 The `internal/enrollmentstore` package starts the protected endpoint-storage work
-for individual Windows/Mac enrollment. It is currently a Windows backend, not an
-enabled replacement for the legacy agent runtime. The enrollment record format,
-pending-key/recovery state machine, native bootstrap command, runtime selection
-and macOS keychain backend remain integration steps.
+for individual Windows/Mac enrollment. Both native backends are implemented;
+they are not yet an enabled replacement for the legacy agent runtime. The
+enrollment record format, pending-key/recovery state machine, native bootstrap
+command and runtime selection remain integration steps.
 
 ## Windows storage boundary
 
@@ -51,6 +51,29 @@ callers still need the enrollment/recovery state machine before sending a claim.
 Existing legacy configuration and shared certificate behavior are unchanged by
 this unconnected package. No end-user activation flag is introduced yet.
 
+## macOS storage boundary
+
+The root launchd daemon uses only `/Library/Keychains/System.keychain`, following
+[Apple TN3137](https://developer.apple.com/documentation/Technotes/tn3137-on-mac-keychains).
+An absolute, private installation directory determines a SHA-256 service namespace.
+Generic-password items use that service and the record name as their account.
+Queries explicitly restrict the search list to the opened keychain; they never
+fall back to a user's login keychain. All native operations disable interaction.
+A locked, inaccessible or corrupt keychain fails closed without a password prompt.
+
+Each immutable item has an explicit trusted-application ACL for the executable
+creating it. The installer must invoke the installed agent to perform enrollment,
+so the service uses the same application identity. Production release signing and
+upgrade compatibility must be verified with the actual signing credentials.
+The bridge uses the legacy file-keychain APIs required by system daemons, with
+deprecation suppression limited to that C bridge. Builds without CGO report an
+unsupported backend and cannot silently fall back to plaintext files.
+
+`SecItemAdd` exclusively publishes a complete record. Independent handles cannot
+replace each other's keys. Reads copy at most 128 KiB into caller-owned memory;
+temporary native copies are cleared before freeing. Handles serialize operations
+and close against their Core Foundation reference.
+
 ## Verification
 
 The native Windows workflow runs:
@@ -69,8 +92,17 @@ which the parent reads. The test stops/deletes only its own service and cleans u
 its private temporary directory. Native execution requires an elevated Windows
 runner with Service Control Manager access; a cross-build alone does not verify it.
 
-The macOS backend must use a file-based keychain for a system daemon, following
-[Apple TN3137](https://developer.apple.com/documentation/Technotes/tn3137-on-mac-keychains).
-Tests must use an isolated temporary keychain; they must not enroll this workstation
-or read existing user credentials. Signed agent/installer integration and physical
-Windows/Mac acceptance remain separate requirements.
+The native macOS workflow runs:
+
+```sh
+CGO_ENABLED=1 go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore
+```
+
+The explicit test tag enables a fixture bridge excluded from production builds.
+Tests create password-protected temporary keychains, restrict all queries to
+their own items and delete only their own keychain references. They verify locked
+keychain rejection, namespace separation, eight competing publishers, encrypted
+disk contents, the 128 KiB boundary and recovery/publication by a separate process
+of the same executable. They do not enroll the workstation or read existing user
+credentials. Signed agent/installer integration and physical Windows/Mac
+acceptance remain separate requirements.
