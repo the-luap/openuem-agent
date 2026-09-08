@@ -132,6 +132,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/the-luap/openuem-nats v0.11.1-0.20260908054238-92c941119613 h1:fwTIVY4DBYdcdFhTPURoGEXE7dW7nkrNWrU7US06u1w=
 github.com/the-luap/openuem-nats v0.11.1-0.20260908054238-92c941119613/go.mod h1:Y5Zz2a4L7Tu2EUixIE9y8O+N7cJcPxP4xTFZZEZ4mX0=
+github.com/the-luap/openuem-nats v0.11.1-0.20260908154109-4e6e26103fd9 h1:nvrIfUfsBCjPi9ObeH7vAsb/1B3Oaj9Iit49m3MxhdQ=
+github.com/the-luap/openuem-nats v0.11.1-0.20260908154109-4e6e26103fd9/go.mod h1:Y5Zz2a4L7Tu2EUixIE9y8O+N7cJcPxP4xTFZZEZ4mX0=
 github.com/tklauser/go-sysconf v0.3.16 h1:frioLaCQSsF5Cy1jgRBrzr6t502KIIwQ0MArYICU0nA=
 github.com/tklauser/go-sysconf v0.3.16/go.mod h1:/qNL9xxDhc7tx3HSRsLWNnuzbVfh3e7gh/BmM179nYI=
 github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9RXw=
@@ -189,3 +191,5 @@ gopkg.in/yaml.v2 v2.4.0/go.mod h1:RDklbk79AGWmwhnvt/jBztapEOGDOx6ZbXqjP6csGnQ=
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+howett.net/plist v1.0.1 h1:37GdZ8tP09Q35o9ych3ehygcsL+HqKSwzctveSlarvM=
+howett.net/plist v1.0.1/go.mod h1:lqaXoTrLY4hg8tnEzNru53gicrbv7rrk+2xJA/7hw9g=

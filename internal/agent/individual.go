@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -37,6 +38,7 @@ type individualRuntime struct {
 	work            sync.WaitGroup
 	brokerClosed    <-chan struct{}
 	connection      *nats.Conn
+	hardwareVersion atomic.Int32
 }
 
 func individualDirectory(mode, directory string) (string, error) {

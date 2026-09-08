@@ -4,10 +4,14 @@ import (
 	"fmt"
 
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/nats/enrollment"
 )
 
 type Report struct {
 	openuem_nats.AgentReport
+	// Individual Mac evidence has a separate capability-negotiated RPC. Never
+	// serialize an MDM binding proof into the legacy desktop report.
+	Hardware *enrollment.HardwareInventory `json:"-"`
 }
 
 func (r *Report) logOS() {

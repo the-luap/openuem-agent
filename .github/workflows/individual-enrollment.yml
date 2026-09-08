@@ -19,7 +19,7 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Durable enrollment state and bounded HTTPS recovery
-        run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice
+        run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware
       - name: Build the agent
         run: go build ./...
 
@@ -40,7 +40,7 @@ jobs:
       - name: Isolated noninteractive keychain and separate process recovery
         env:
           CGO_ENABLED: '1'
-        run: go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice
+        run: go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware
       - name: Root-only readiness over isolated native Unix sockets
         run: scripts/check-macos-readiness.sh
       - name: Root filesystem and read-only native activation fixtures
@@ -68,7 +68,7 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Native DPAPI, private publication and Local System recovery
-        run: go test -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice
+        run: go test -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware
       - name: Build the agent
         run: go build ./...
       - name: Native enrollment help does not start the service

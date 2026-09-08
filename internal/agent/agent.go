@@ -228,11 +228,14 @@ func (a *Agent) SendReport(r *report.Report) error {
 	if a.NATSConnection == nil {
 		return fmt.Errorf("NATS connection is not ready")
 	}
-	_, err = a.requestBroker("report", data, 4*time.Minute)
+	msg, err := a.requestBroker("report", data, 4*time.Minute)
 	if err != nil {
 		return err
 	}
-	return nil
+	if a.individual != nil && (msg == nil || (len(msg.Data) != 0 && string(msg.Data) != "Report received!")) {
+		return errors.New("individual inventory report was not accepted")
+	}
+	return a.sendHardware(r.Hardware)
 }
 
 func (a *Agent) startReportJob(options ...gocron.JobOption) error {
@@ -899,7 +902,13 @@ func (a *Agent) GetRemoteConfig() error {
 	config := openuem_nats.Config{}
 
 	if err := json.Unmarshal(msg.Data, &config); err != nil {
+		a.setHardwareCapability(0)
 		return err
+	}
+	if config.Ok {
+		a.setHardwareCapability(config.HardwareInventoryVersion)
+	} else {
+		a.setHardwareCapability(0)
 	}
 
 	if config.Ok {

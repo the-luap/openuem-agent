@@ -83,6 +83,7 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	howett.net/plist v1.0.1
 )
 
-replace github.com/open-uem/nats => github.com/the-luap/openuem-nats v0.11.1-0.20260908054238-92c941119613
+replace github.com/open-uem/nats => github.com/the-luap/openuem-nats v0.11.1-0.20260908154109-4e6e26103fd9
