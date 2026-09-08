@@ -41,9 +41,10 @@ is preserved. No offline bypass, self-signed exception or unsigned fallback exis
 Unavailable revocation/notarization services can therefore prevent acceptance.
 
 Tests cover real subprocess cancellation/output bounds, private file/route limits,
-unsigned data and malformed helper invocations. Windows CI copies a Microsoft-
-signed system executable solely as verification data, checks it, modifies its
-signed bytes and requires rejection. macOS creates an isolated unsigned installer
+unsigned data and malformed helper invocations. Windows CI copies the Go project's
+existing EV-signed test executable solely as verification data, checks it, modifies
+its signed bytes and requires rejection. A copied catalog-signed Windows system
+file is unsuitable as an embedded-signature fixture. macOS creates an isolated unsigned installer
 with a non-executable text payload and requires native rejection; it is never
 installed. No workstation trust settings or signing credentials are changed.
 An actual OpenUEM Authenticode release and Developer-ID-signed, notarized package

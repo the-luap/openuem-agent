@@ -6,26 +6,21 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"golang.org/x/sys/windows"
 )
 
-func TestWindowsAuthenticodeAcceptsSystemSignedBytesAndRejectsMutation(t *testing.T) {
-	// Copy a Microsoft-signed OS executable only as signature-verification data;
-	// it is never executed. No certificate is imported into the test machine.
-	directory, err := windows.GetSystemDirectory()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestWindowsAuthenticodeAcceptsEmbeddedSignatureAndRejectsMutation(t *testing.T) {
+	// The Go project's existing EV-signed fixture has an embedded signature;
+	// unlike a catalog-signed Windows system file it is independently verifiable
+	// after copying. It is never executed and no certificate is imported.
 	path := filepath.Join(privateTestDirectory(t), "signed-fixture.exe")
-	copySignatureFixture(t, filepath.Join(directory, "WindowsPowerShell", "v1.0", "powershell.exe"), path)
+	copySignatureFixture(t, filepath.Join("testdata", "ev-signed-file.exe"), path)
 	if !validCandidate(path, "exe") {
-		t.Fatal("system signature fixture did not meet private staging requirements")
+		t.Fatal("signature fixture did not meet private staging requirements")
 	}
 	if err := Verify(context.Background(), path, "exe"); err != nil {
 		// Only this known public test fixture exposes its native error code. The
 		// production helper returns an exit status and no diagnostic contents.
-		t.Fatal("Microsoft-signed fixture was not accepted", err, "native fixture status", verifyWindowsFile(path))
+		t.Fatal("embedded-signature fixture was not accepted", err, "native fixture status", verifyWindowsFile(path))
 	}
 	file, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
