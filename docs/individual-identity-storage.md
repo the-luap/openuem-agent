@@ -3,9 +3,10 @@
 The `internal/enrollmentstore` package starts the protected endpoint-storage work
 for individual Windows/Mac enrollment. Both native backends are implemented;
 the durable enrollment state machine connects them to the bounded HTTPS client.
-They are not yet an enabled replacement for the legacy agent runtime. Independent
-bootstrap authorization, the native bootstrap command, runtime selection, renewal
-and signed installer integration remain required integration steps.
+The [opt-in service runtime](individual-agent-runtime.md) now loads that identity
+before legacy certificate configuration. Independent bootstrap authorization,
+the native bootstrap command, renewal and signed installer integration remain
+required integration steps.
 
 ## Durable enrollment and recovery
 
@@ -90,8 +91,8 @@ replaces existing state, and corrupted or inaccessible records never trigger a
 plaintext fallback. `Store` adds the enrollment/recovery state machine on top of
 these two immutable storage primitives.
 
-Existing legacy configuration and shared certificate behavior are unchanged by
-this unconnected package. No end-user activation flag is introduced yet.
+Legacy configuration remains the default when the individual service mode is not
+configured. There is no finished end-user installer or bootstrap command yet.
 
 ## macOS storage boundary
 
@@ -121,7 +122,7 @@ and close against their Core Foundation reference.
 The native Windows workflow runs:
 
 ```sh
-go test -count=1 ./internal/enrollmentstore
+go test -count=1 ./internal/enrollmentstore ./internal/agent
 ```
 
 Tests cover encrypted bytes on disk, restart, immutable publication, twelve
@@ -137,7 +138,7 @@ runner with Service Control Manager access; a cross-build alone does not verify 
 The native macOS workflow runs:
 
 ```sh
-CGO_ENABLED=1 go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore
+CGO_ENABLED=1 go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore ./internal/agent
 ```
 
 The explicit test tag enables a fixture bridge excluded from production builds.

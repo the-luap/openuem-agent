@@ -30,6 +30,7 @@ import (
 )
 
 type Agent struct {
+	individual             *individualRuntime
 	Config                 Config
 	TaskScheduler          gocron.Scheduler
 	ReportJob              gocron.Job
@@ -53,6 +54,9 @@ type JSONActions struct {
 func New() Agent {
 	var err error
 	agent := Agent{}
+	if err := agent.configureIndividual(); err != nil {
+		log.Fatal("[FATAL]: individual enrollment configuration or protected identity is unavailable")
+	}
 
 	// Task Scheduler
 	agent.TaskScheduler, err = gocron.NewScheduler()
@@ -73,21 +77,42 @@ func New() Agent {
 		}
 	}
 
-	caCert, err := openuem_utils.ReadPEMCertificate(agent.Config.CACert)
-	if err != nil {
-		log.Fatalf("[FATAL]: could not read CA certificate")
-	}
-	agent.CACert = caCert
+	if agent.individual == nil {
+		caCert, err := openuem_utils.ReadPEMCertificate(agent.Config.CACert)
+		if err != nil {
+			log.Fatalf("[FATAL]: could not read CA certificate")
+		}
+		agent.CACert = caCert
 
-	agent.SFTPCert, err = openuem_utils.ReadPEMCertificate(agent.Config.SFTPCert)
-	if err != nil {
-		log.Fatalf("[FATAL]: could not read sftp certificate")
+		agent.SFTPCert, err = openuem_utils.ReadPEMCertificate(agent.Config.SFTPCert)
+		if err != nil {
+			log.Fatalf("[FATAL]: could not read sftp certificate")
+		}
+
 	}
 
 	return agent
 }
 
 func (a *Agent) Stop() {
+	if a.individual != nil {
+		a.individual.stopOnce.Do(a.stop)
+		return
+	}
+	a.stop()
+}
+
+func (a *Agent) stop() {
+	if a.individual != nil {
+		a.individual.mu.Lock()
+		a.individual.stopping = true
+		a.individual.cancel()
+		connection := a.individual.connection
+		a.individual.mu.Unlock()
+		if connection != nil {
+			connection.Close()
+		}
+	}
 	if a.TaskScheduler != nil {
 		if err := a.TaskScheduler.Shutdown(); err != nil {
 			log.Printf("[ERROR]: could not close NATS connection, reason: %s\n", err.Error())
@@ -108,6 +133,13 @@ func (a *Agent) Stop() {
 		if err := a.BadgerDB.Close(); err != nil {
 			log.Printf("[ERROR]: could not close BadgerDB connection, reason: %s\n", err.Error())
 		}
+	}
+	if a.individual != nil {
+		a.individual.work.Wait()
+		if a.individual.brokerClosed != nil {
+			<-a.individual.brokerClosed
+		}
+		a.individual.identity.Close()
 	}
 	log.Println("[INFO]: agent has been stopped!")
 }
@@ -162,7 +194,7 @@ func (a *Agent) SendReport(r *report.Report) error {
 	if a.NATSConnection == nil {
 		return fmt.Errorf("NATS connection is not ready")
 	}
-	_, err = a.NATSConnection.Request("report", data, 4*time.Minute)
+	_, err = a.requestBroker("report", data, 4*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -606,7 +638,7 @@ func (a *Agent) SendDeployResult(r *openuem_nats.DeployAction) error {
 		return err
 	}
 
-	response, err := a.NATSConnection.Request("deployresult", data, 2*time.Minute)
+	response, err := a.requestBroker("deployresult", data, 2*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -626,26 +658,30 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		a.CreateAgentJetStreamConsumer()
 	}()
 
-	// Subscribe to Remote Desktop
-	err := a.StartRemoteDesktopSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
-	}
+	var err error
+	if a.individual == nil {
+		// Subscribe to Remote Desktop
+		err = a.StartRemoteDesktopSubscribe()
+		if err != nil {
+			log.Printf("[ERROR]: %v\n", err)
+		}
 
-	err = a.StopRemoteDesktopSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
-	}
+		err = a.StopRemoteDesktopSubscribe()
+		if err != nil {
+			log.Printf("[ERROR]: %v\n", err)
+		}
 
-	// Subscribe to RustDesk subjects
-	err = a.StartRustDeskSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
-	}
+		// Subscribe to RustDesk subjects
+		err = a.StartRustDeskSubscribe()
+		if err != nil {
+			log.Printf("[ERROR]: %v\n", err)
+		}
 
-	err = a.StopRustDeskSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
+		err = a.StopRustDeskSubscribe()
+		if err != nil {
+			log.Printf("[ERROR]: %v\n", err)
+		}
+
 	}
 
 	err = a.InstallPackageSubscribe()
@@ -747,6 +783,10 @@ func (a *Agent) SubscribeToNATSSubjects() {
 }
 
 func (a *Agent) CreateAgentJetStreamConsumer() {
+	if a.individual != nil {
+		a.startIndividualConsumer(a.JetStreamAgentHandler)
+		return
+	}
 	var ctx context.Context
 
 	js, err := jetstream.New(a.NATSConnection)
@@ -810,7 +850,7 @@ func (a *Agent) GetRemoteConfig() error {
 		return err
 	}
 
-	msg, err := a.NATSConnection.Request("agentconfig", data, 10*time.Minute)
+	msg, err := a.requestBroker("agentconfig", data, 10*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -842,6 +882,17 @@ func (a *Agent) GetRemoteConfig() error {
 }
 
 func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
+	if a.individual != nil {
+		id := a.individual.identity.Response.DeviceID
+		if len(msg.Data()) > 64<<10 || (msg.Subject() != "agent.enable."+id && msg.Subject() != "agent.disable."+id && msg.Subject() != "agent.report."+id) {
+			// Signed updater/uninstall integration is separate work. Preserve an
+			// unsupported command for bounded redelivery/operator investigation;
+			// never accept legacy certificate/private-key delivery in this mode.
+			_ = msg.NakWithDelay(5 * time.Minute)
+			log.Print("[ERROR]: individual agent command is not supported by this runtime")
+			return
+		}
+	}
 	if msg.Subject() == "agent.enable."+a.Config.UUID {
 		a.EnableAgentHandler(msg)
 	}
@@ -854,7 +905,7 @@ func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
 		a.RunReportHandler(msg)
 	}
 
-	if msg.Subject() == "agent.certificate."+a.Config.UUID {
+	if a.individual == nil && msg.Subject() == "agent.certificate."+a.Config.UUID {
 		a.AgentCertificateHandler(msg)
 	}
 }
@@ -922,7 +973,7 @@ func (a *Agent) SendProfileReport(report *openuem_nats.ProfileReport) error {
 		return err
 	}
 
-	if _, err := a.NATSConnection.Request("wingetcfg.report", data, 2*time.Minute); err != nil {
+	if _, err := a.requestBroker("wingetcfg.report", data, 2*time.Minute); err != nil {
 		return err
 	}
 

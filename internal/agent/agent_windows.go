@@ -96,7 +96,7 @@ func (a *Agent) Start() {
 	}
 
 	// Try to connect to NATS server and start a reconnect job if failed
-	a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
+	a.NATSConnection, err = a.connectBroker()
 	if err != nil {
 		log.Printf("[ERROR]: %v", err)
 		a.startNATSConnectJob()
@@ -152,7 +152,7 @@ func (a *Agent) startNATSConnectJob() error {
 		),
 		gocron.NewTask(
 			func() {
-				a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
+				a.NATSConnection, err = a.connectBroker()
 				if err != nil {
 					return
 				}
@@ -333,7 +333,7 @@ func (a *Agent) GetWingetConfigureProfiles() {
 		log.Println("[DEBUG]: wingetcfg.profile sending request")
 	}
 
-	msg, err := a.NATSConnection.Request("wingetcfg.profiles", data, 5*time.Minute)
+	msg, err := a.requestBroker("wingetcfg.profiles", data, 5*time.Minute)
 	if err != nil {
 		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
 		if err := a.Config.SetRestartRequiredFlag(); err != nil {
@@ -530,7 +530,7 @@ func (a *Agent) SendWinGetCfgDeploymentReport(packageID, packageName, action str
 		return err
 	}
 
-	if _, err := a.NATSConnection.Request("wingetcfg.deploy", data, 2*time.Minute); err != nil {
+	if _, err := a.requestBroker("wingetcfg.deploy", data, 2*time.Minute); err != nil {
 		return err
 	}
 
@@ -550,7 +550,7 @@ func (a *Agent) SendWinGetCfgExcludedPackage(packageIDs []string) {
 			return
 		}
 
-		if _, err := a.NATSConnection.Request("wingetcfg.exclude", data, 2*time.Minute); err != nil {
+		if _, err := a.requestBroker("wingetcfg.exclude", data, 2*time.Minute); err != nil {
 			log.Printf("[ERROR]: could not send package exclude for package %s and agent %s", id, a.Config.UUID)
 		}
 	}
@@ -562,6 +562,10 @@ func (a *Agent) RescheduleWingetConfigureTask() {
 }
 
 func (a *Agent) NewConfigSubscribe() error {
+	if a.individual != nil {
+		// Individual configuration is requested on the scoped subject.
+		return nil
+	}
 	_, err := a.NATSConnection.Subscribe("agent.newconfig", func(msg *nats.Msg) {
 
 		config := openuem_nats.Config{}
@@ -1867,7 +1871,7 @@ func (a *Agent) RunProfileSubscribe() error {
 			log.Printf("[ERROR]: could not respond to console request to run a profile, reason: %v", err)
 		}
 
-		msg, err := a.NATSConnection.Request("wingetcfg.profiles", msg.Data, 5*time.Minute)
+		msg, err := a.requestBroker("wingetcfg.profiles", msg.Data, 5*time.Minute)
 		if err != nil {
 			log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
 			if err := a.Config.SetRestartRequiredFlag(); err != nil {

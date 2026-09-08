@@ -52,6 +52,8 @@ type Identity struct {
 	Response      enrollment.Response
 	Origin        string
 	ReleaseDigest string
+	Platform      string
+	Architecture  string
 }
 
 func (Identity) String() string               { return "[protected individual agent identity]" }
@@ -259,7 +261,7 @@ func (s *Store) loadIdentity(p *pending) (*Identity, error) {
 	if _, err = enrollment.ValidateResponse(response, p.bootstrap.Origin, &p.keys.Certificate.PublicKey, time.Now()); err != nil {
 		return nil, ErrUnavailable
 	}
-	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest}
+	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest, Platform: p.bootstrap.Platform, Architecture: p.bootstrap.Architecture}
 	p.keys = nil // transfer ownership, including when returning a competing result
 	return identity, nil
 }

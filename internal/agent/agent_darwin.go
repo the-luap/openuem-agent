@@ -103,7 +103,7 @@ func (a *Agent) Start() {
 	}
 
 	// Try to connect to NATS server and start a reconnect job if failed
-	a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
+	a.NATSConnection, err = a.connectBroker()
 	if err != nil {
 		log.Printf("[ERROR]: %v", err)
 		a.startNATSConnectJob()
@@ -159,7 +159,7 @@ func (a *Agent) startNATSConnectJob() error {
 		),
 		gocron.NewTask(
 			func() {
-				a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
+				a.NATSConnection, err = a.connectBroker()
 				if err != nil {
 					return
 				}
@@ -289,6 +289,10 @@ func (a *Agent) RescheduleAnsibleConfigureTask() {
 }
 
 func (a *Agent) NewConfigSubscribe() error {
+	if a.individual != nil {
+		// Individual configuration is requested on the scoped subject.
+		return nil
+	}
 	_, err := a.NATSConnection.Subscribe("agent.newconfig", func(msg *nats.Msg) {
 
 		config := openuem_nats.Config{}
@@ -464,7 +468,7 @@ func (a *Agent) GetUnixConfigureProfiles() {
 		log.Println("[DEBUG]: ansiblecfg.profile sending request")
 	}
 
-	msg, err := a.NATSConnection.Request("ansiblecfg.profiles", data, 5*time.Minute)
+	msg, err := a.requestBroker("ansiblecfg.profiles", data, 5*time.Minute)
 	if err != nil {
 		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
 		if err := a.Config.SetRestartRequiredFlag(); err != nil {
@@ -1071,7 +1075,7 @@ func (a *Agent) RunProfileSubscribe() error {
 			log.Printf("[ERROR]: could not respond to console request to run a profile, reason: %v", err)
 		}
 
-		msg, err := a.NATSConnection.Request("ansiblecfg.profiles", msg.Data, 5*time.Minute)
+		msg, err := a.requestBroker("ansiblecfg.profiles", msg.Data, 5*time.Minute)
 		if err != nil {
 			log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
 			if err := a.Config.SetRestartRequiredFlag(); err != nil {

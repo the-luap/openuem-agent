@@ -15,6 +15,7 @@ const SCHEDULETIME_5MIN = 5
 const SCHEDULETIME_30MIN = 30
 
 type Config struct {
+	individual               bool
 	NATSServers              string
 	UUID                     string
 	ExecuteTaskEveryXMinutes int
@@ -40,6 +41,10 @@ type Config struct {
 func (a *Agent) ReadConfig() error {
 	// Get conf file
 	configFile := openuem_utils.GetAgentConfigFile()
+	return a.readConfigFile(configFile)
+}
+
+func (a *Agent) readConfigFile(configFile string) error {
 
 	f, err := os.Open(configFile)
 	if err != nil {
@@ -87,20 +92,23 @@ func (a *Agent) ReadConfig() error {
 		return err
 	}
 
-	key, err = cfg.Section("NATS").GetKey("NATSServers")
-	if err != nil {
-		log.Println("[ERROR]: could not get NATSServers")
-		return err
-	}
-	a.Config.NATSServers = key.String()
-
-	key, err = cfg.Section("NATS").GetKey("WebSocketPort")
-	if err == nil {
-		if _, err := strconv.Atoi(key.String()); err != nil {
-			log.Println("[ERROR]: the WebSocket port is not valid")
+	if a.individual == nil {
+		key, err = cfg.Section("NATS").GetKey("NATSServers")
+		if err != nil {
+			log.Println("[ERROR]: could not get NATSServers")
 			return err
 		}
-		a.Config.WebSocketPort = key.String()
+		a.Config.NATSServers = key.String()
+
+		key, err = cfg.Section("NATS").GetKey("WebSocketPort")
+		if err == nil {
+			if _, err := strconv.Atoi(key.String()); err != nil {
+				log.Println("[ERROR]: the WebSocket port is not valid")
+				return err
+			}
+			a.Config.WebSocketPort = key.String()
+		}
+
 	}
 
 	key, err = cfg.Section("Agent").GetKey("Debug")
@@ -147,62 +155,65 @@ func (a *Agent) ReadConfig() error {
 		a.Config.VNCProxyPort = ""
 	}
 
-	// Read required certificates and private key
-	cwd, err := Getwd()
-	if err != nil {
-		log.Fatalf("[FATAL]: could not get current working directory")
-	}
+	if a.individual == nil {
+		// Read required certificates and private key
+		cwd, err := Getwd()
+		if err != nil {
+			log.Fatalf("[FATAL]: could not get current working directory")
+		}
 
-	key, err = cfg.Section("Certificates").GetKey("AgentCert")
-	if err != nil {
-		log.Println("[ERROR]: could not get agent certificate from config file")
-		a.Config.AgentCert = filepath.Join(cwd, "certificates", "agent.cer")
-	} else {
-		a.Config.AgentCert = key.String()
-	}
+		key, err = cfg.Section("Certificates").GetKey("AgentCert")
+		if err != nil {
+			log.Println("[ERROR]: could not get agent certificate from config file")
+			a.Config.AgentCert = filepath.Join(cwd, "certificates", "agent.cer")
+		} else {
+			a.Config.AgentCert = key.String()
+		}
 
-	_, err = openuem_utils.ReadPEMCertificate(a.Config.AgentCert)
-	if err != nil {
-		log.Fatalf("[FATAL]: could not read agent certificate")
-	}
+		_, err = openuem_utils.ReadPEMCertificate(a.Config.AgentCert)
+		if err != nil {
+			log.Fatalf("[FATAL]: could not read agent certificate")
+		}
 
-	key, err = cfg.Section("Certificates").GetKey("AgentKey")
-	if err != nil {
-		log.Println("[ERROR]: could not get agent private key from config file")
-		a.Config.AgentKey = filepath.Join(cwd, "certificates", "agent.key")
-	} else {
-		a.Config.AgentKey = key.String()
-	}
+		key, err = cfg.Section("Certificates").GetKey("AgentKey")
+		if err != nil {
+			log.Println("[ERROR]: could not get agent private key from config file")
+			a.Config.AgentKey = filepath.Join(cwd, "certificates", "agent.key")
+		} else {
+			a.Config.AgentKey = key.String()
+		}
 
-	_, err = openuem_utils.ReadPEMPrivateKey(a.Config.AgentKey)
-	if err != nil {
-		log.Fatalf("[FATAL]: could not read agent private key")
-	}
+		_, err = openuem_utils.ReadPEMPrivateKey(a.Config.AgentKey)
+		if err != nil {
+			log.Fatalf("[FATAL]: could not read agent private key")
+		}
 
-	key, err = cfg.Section("Certificates").GetKey("CACert")
-	if err != nil {
-		log.Println("[ERROR]: could not get CA certificate from config file")
-		a.Config.CACert = filepath.Join(cwd, "certificates", "ca.cer")
-	} else {
-		a.Config.CACert = key.String()
-	}
+		key, err = cfg.Section("Certificates").GetKey("CACert")
+		if err != nil {
+			log.Println("[ERROR]: could not get CA certificate from config file")
+			a.Config.CACert = filepath.Join(cwd, "certificates", "ca.cer")
+		} else {
+			a.Config.CACert = key.String()
+		}
 
-	_, err = openuem_utils.ReadPEMCertificate(a.Config.CACert)
-	if err != nil {
-		log.Fatalf("[FATAL]: could not read CA certificate")
-	}
+		_, err = openuem_utils.ReadPEMCertificate(a.Config.CACert)
+		if err != nil {
+			log.Fatalf("[FATAL]: could not read CA certificate")
+		}
 
-	key, err = cfg.Section("Certificates").GetKey("SFTPCert")
-	if err != nil {
-		log.Println("[ERROR]: could not get SFTP certificate from config file")
-		a.Config.SFTPCert = filepath.Join(cwd, "certificates", "sftp.cer")
-	} else {
-		a.Config.SFTPCert = key.String()
-	}
-	_, err = openuem_utils.ReadPEMCertificate(a.Config.SFTPCert)
-	if err != nil {
-		log.Println("[ERROR]: could not read sftp certificate")
-		a.Config.SFTPCert = ""
+		key, err = cfg.Section("Certificates").GetKey("SFTPCert")
+		if err != nil {
+			log.Println("[ERROR]: could not get SFTP certificate from config file")
+			a.Config.SFTPCert = filepath.Join(cwd, "certificates", "sftp.cer")
+		} else {
+			a.Config.SFTPCert = key.String()
+		}
+		_, err = openuem_utils.ReadPEMCertificate(a.Config.SFTPCert)
+		if err != nil {
+			log.Println("[ERROR]: could not read sftp certificate")
+			a.Config.SFTPCert = ""
+		}
+
 	}
 
 	key, err = cfg.Section("Agent").GetKey("WingetConfigureFrequency")
@@ -264,11 +275,13 @@ func (a *Agent) ReadConfig() error {
 		a.Config.ScriptsRun = key.String()
 	}
 
+	a.applyIndividualConfig()
 	log.Println("[INFO]: agent has read its settings from the INI file")
 	return nil
 }
 
 func (c *Config) WriteConfig() error {
+	c.enforceIndividualTransport()
 	// Get conf file
 	configFile := openuem_utils.GetAgentConfigFile()
 
