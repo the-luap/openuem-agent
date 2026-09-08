@@ -88,8 +88,8 @@ func verifyWindowsFile(path string) error {
 	runtime.KeepAlive(info)
 	runtime.KeepAlive(name)
 	runtime.KeepAlive(file)
-	if verifyErr != nil || closeErr != nil {
-		return ErrUntrusted
+	if verifyErr != nil {
+		return verifyErr
 	}
-	return nil
+	return closeErr
 }

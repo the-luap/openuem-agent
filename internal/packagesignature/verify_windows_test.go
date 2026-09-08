@@ -19,8 +19,13 @@ func TestWindowsAuthenticodeAcceptsSystemSignedBytesAndRejectsMutation(t *testin
 	}
 	path := filepath.Join(privateTestDirectory(t), "signed-fixture.exe")
 	copySignatureFixture(t, filepath.Join(directory, "WindowsPowerShell", "v1.0", "powershell.exe"), path)
+	if !validCandidate(path, "exe") {
+		t.Fatal("system signature fixture did not meet private staging requirements")
+	}
 	if err := Verify(context.Background(), path, "exe"); err != nil {
-		t.Fatal("Microsoft-signed fixture was not accepted", err)
+		// Only this known public test fixture exposes its native error code. The
+		// production helper returns an exit status and no diagnostic contents.
+		t.Fatal("Microsoft-signed fixture was not accepted", err, "native fixture status", verifyWindowsFile(path))
 	}
 	file, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
