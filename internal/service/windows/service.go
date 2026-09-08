@@ -9,6 +9,7 @@ import (
 
 	"github.com/open-uem/openuem-agent/internal/agent"
 	"github.com/open-uem/openuem-agent/internal/logger"
+	"github.com/open-uem/openuem-agent/internal/runtimeoptions"
 	"github.com/open-uem/openuem-agent/internal/service/lifecycle"
 	"golang.org/x/sys/windows/svc"
 )
@@ -18,9 +19,15 @@ type OpenUEMService struct {
 	factory lifecycle.Factory
 }
 
-func NewService(l *logger.OpenUEMLogger) *OpenUEMService {
+func NewService(l *logger.OpenUEMLogger, options runtimeoptions.Options) *OpenUEMService {
 	return &OpenUEMService{Logger: l, factory: func(ctx context.Context) (lifecycle.Runtime, error) {
-		a, err := agent.New(ctx)
+		var a *agent.Agent
+		var err error
+		if options.IdentityDirectory != "" {
+			a, err = agent.NewIndividual(ctx, options.IdentityDirectory)
+		} else {
+			a, err = agent.New(ctx)
+		}
 		if err != nil {
 			return nil, err
 		}

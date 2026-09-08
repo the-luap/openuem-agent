@@ -3,8 +3,10 @@
 The Windows service no longer reports `Running` before identity/configuration
 validation or blocks its control loop on the first inventory report. Linux and
 macOS install SIGTERM/SIGINT handlers before constructing the agent. These are
-service lifecycle changes; installer registration, explicit identity-directory
+service lifecycle changes; installer registration, operational configuration
 provisioning and automatic activation after enrollment remain separate work.
+The subsequent explicit `serve -identity-directory` selection is described in
+[runtime configuration](individual-agent-runtime.md).
 
 ## Initialization
 
@@ -93,3 +95,7 @@ after releasing their cleanup gates. These fixtures use a fake runtime; existing
 DPAPI/SCM tests separately verify real protected-state access as Local System.
 They do not install or start a production agent or claim physical endpoint
 acceptance.
+
+Commit `6d66ea5` passed [all three native CI jobs](https://github.com/the-luap/openuem-agent/actions/runs/34198267075),
+including the real Windows SCM fixture and Unix signal subprocesses, alongside
+the existing native enrollment and protected-state checks.

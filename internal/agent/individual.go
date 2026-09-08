@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"log"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -54,8 +53,8 @@ func individualDirectory(mode, directory string) (string, error) {
 	}
 }
 
-func (a *Agent) configureIndividual() error {
-	directory, err := individualDirectory(os.Getenv("OPENUEM_INDIVIDUAL_AGENT_MODE"), os.Getenv("OPENUEM_AGENT_IDENTITY_DIRECTORY"))
+func (a *Agent) configureIndividual(mode, directory string) error {
+	directory, err := individualDirectory(mode, directory)
 	if err != nil || directory == "" {
 		return err
 	}

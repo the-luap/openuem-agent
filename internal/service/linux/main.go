@@ -4,15 +4,21 @@ package main
 
 import (
 	"github.com/open-uem/openuem-agent/internal/logger"
+	"github.com/open-uem/openuem-agent/internal/runtimeoptions"
 	"os"
 )
 
 func main() {
+	options, start, code := runtimeoptions.Read(os.Args[1:], os.Stdout, os.Stderr)
+	if !start {
+		os.Exit(code)
+	}
+
 	// Instantiate logger
 	l := logger.New()
 
 	// Instantiate service
-	s := NewService(l)
+	s := NewService(l, options)
 
 	if err := s.Execute(); err != nil {
 		os.Exit(1)

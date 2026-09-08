@@ -14,7 +14,30 @@ releasing credentials. This does not automatically register or activate a servic
 
 ## Selection and configuration
 
-An installer-controlled service environment selects the mode:
+An installer-controlled service definition can now select the completed identity
+explicitly, using arguments to the installed service executable:
+
+```text
+openuem-agent serve -identity-directory <absolute protected enrollment directory>
+```
+
+Windows still runs through Service Control Manager as Local System; macOS runs
+through launchd as root. The command does not create or register either service.
+Its sole enrollment argument is a non-secret directory. It loads the existing
+identity without an invitation, release download or new claim. The original
+invitation can therefore expire without requiring another enrollment at restart;
+the device certificate itself must still be valid. Service definitions and every
+path ancestor must remain controlled by the trusted installer/administrator.
+
+`serve` requires a canonical absolute path (a drive-letter path on Windows),
+rejects duplicate options, network/device path syntax, relative paths, unknown
+overrides and extra arguments, and reports only generic invalid-input diagnostics.
+`serve -help` exits before logging, storage or service initialization. Explicit
+selection does not read the legacy enrollment environment variables. Operational
+INI settings and native protected-store access checks remain required.
+
+For compatibility, invoking the service executable without arguments preserves
+the installer-controlled environment selection:
 
 ```text
 OPENUEM_INDIVIDUAL_AGENT_MODE=true

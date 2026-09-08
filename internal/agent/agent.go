@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
+	"github.com/open-uem/openuem-agent/internal/nativepath"
 	openuem_utils "github.com/open-uem/utils"
 	"gopkg.in/ini.v1"
 )
@@ -60,7 +62,21 @@ type JSONActions struct {
 
 // New validates local identity and configuration before a service can report
 // readiness. It releases every partially initialized resource on failure.
-func New(ctx context.Context) (result *Agent, err error) {
+func New(ctx context.Context) (*Agent, error) {
+	return newAgent(ctx, os.Getenv("OPENUEM_INDIVIDUAL_AGENT_MODE"), os.Getenv("OPENUEM_AGENT_IDENTITY_DIRECTORY"))
+}
+
+// NewIndividual selects the identity from an explicit protected service
+// definition. It never consults enrollment environment variables or reclaims an
+// invitation; the native store validates the completed identity on every start.
+func NewIndividual(ctx context.Context, directory string) (*Agent, error) {
+	if !nativepath.Valid(directory) {
+		return nil, errIndividualAgent
+	}
+	return newAgent(ctx, "true", directory)
+}
+
+func newAgent(ctx context.Context, mode, directory string) (result *Agent, err error) {
 	if ctx == nil {
 		return nil, errors.New("agent context is required")
 	}
@@ -74,7 +90,7 @@ func New(ctx context.Context) (result *Agent, err error) {
 			a.Stop()
 		}
 	}()
-	if err = a.configureIndividual(); err != nil {
+	if err = a.configureIndividual(mode, directory); err != nil {
 		return nil, errIndividualAgent
 	}
 	a.TaskScheduler, err = gocron.NewScheduler()

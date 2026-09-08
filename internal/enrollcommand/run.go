@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/open-uem/nats/enrollment/keyfile"
 	"github.com/open-uem/openuem-agent/internal/bootstrapinstall"
 	"github.com/open-uem/openuem-agent/internal/enrollmentstore"
+	"github.com/open-uem/openuem-agent/internal/nativepath"
 )
 
 var (
@@ -219,14 +219,8 @@ func validOptions(o Options) bool {
 		return false
 	}
 	for _, path := range []string{o.InvitationFile, o.ReleaseKeysFile, o.IdentityDirectory, o.StagingDirectory} {
-		if !filepath.IsAbs(path) || filepath.Clean(path) != path || !utf8.ValidString(path) || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
+		if !nativepath.Valid(path) {
 			return false
-		}
-		if runtime.GOOS == "windows" {
-			volume := filepath.VolumeName(path)
-			if len(volume) != 2 || volume[1] != ':' || !((volume[0] >= 'A' && volume[0] <= 'Z') || (volume[0] >= 'a' && volume[0] <= 'z')) {
-				return false
-			}
 		}
 	}
 	return o.IdentityDirectory != o.StagingDirectory

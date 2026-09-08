@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,6 +44,15 @@ func TestAgentInitializationErrorsReturnWithoutStartingWork(t *testing.T) {
 	}
 	a.Stop()
 	a.Stop()
+	if a, err := NewIndividual(context.Background(), ""); a != nil || !errors.Is(err, errIndividualAgent) {
+		t.Fatal("explicit mode silently selected legacy credentials")
+	}
+	if a, err := NewIndividual(context.Background(), "relative"); a != nil || !errors.Is(err, errIndividualAgent) {
+		t.Fatal("relative identity directory accepted")
+	}
+	if a, err := NewIndividual(ctx, filepath.Join(t.TempDir(), "identity")); a != nil || !errors.Is(err, context.Canceled) {
+		t.Fatal("canceled explicit mode touched native storage", err)
+	}
 }
 
 func TestStopJoinsSchedulerWorkAfterItsOwnTimeout(t *testing.T) {

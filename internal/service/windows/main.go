@@ -11,6 +11,7 @@ import (
 	"github.com/open-uem/openuem-agent/internal/enrollcommand"
 	"github.com/open-uem/openuem-agent/internal/logger"
 	"github.com/open-uem/openuem-agent/internal/packagesignature"
+	"github.com/open-uem/openuem-agent/internal/runtimeoptions"
 	"golang.org/x/sys/windows/svc"
 )
 
@@ -25,11 +26,16 @@ func main() {
 	// the agent will use two CPUs at maximum
 	runtime.GOMAXPROCS(2)
 
+	options, start, code := runtimeoptions.Read(os.Args[1:], os.Stdout, os.Stderr)
+	if !start {
+		os.Exit(code)
+	}
+
 	// Instantiate logger
 	l := logger.New()
 
 	// Instantiate service
-	s := NewService(l)
+	s := NewService(l, options)
 
 	// Run service
 	err := svc.Run("openuem-agent", s)
