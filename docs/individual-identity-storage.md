@@ -12,9 +12,25 @@ required integration steps.
 
 `Store.Enroll` requires an independently authorized `Bootstrap`: server HTTPS
 origin, invitation, platform, architecture, device name and verified release
-digest. Syntax checking does not establish release or server trust. All six
-fields bind subsequent retries; changing any of them returns `ErrConflict`
+digest. Syntax checking does not establish release or server trust. These fields
+bind subsequent retries; changing any of them returns `ErrConflict`
 without a claim or silent replacement of the existing installation.
+
+`Store.EnrollVerified` accepts the shared library's verified signed bootstrap
+configuration and additionally persists its expected organization/site IDs and
+release sequence. It rechecks the current durable checkpoint, config/release
+validity, and expiry before and after the HTTPS claim. A response for another
+organization/site is rejected before identity publication even if its certificate
+otherwise matches the local key. Complete identity loads also verify that scope.
+The caller still independently authorizes the origin and signing keys and verifies
+the package's native signature before invoking the enrollment method.
+
+`Store.Checkpoint` returns zero only for an actually empty installation. Pending
+state already protects the selected sequence/digest, including after a lost reply.
+The earlier explicitly configured claim API permits records without the newer
+optional scope/sequence fields for compatibility. Such records remain loadable;
+they cannot reset the signed bootstrap checkpoint to zero. Migrating that preview
+state requires an explicit future operation rather than silent key replacement.
 
 The first attempt generates an RSA certificate key and a user NKey locally, then
 exclusively publishes a protected `pending` record before HTTP. Every caller,
@@ -156,6 +172,8 @@ using their actual DPAPI/keychain backend. The isolated issuer verifies that
 durable keys exist before the first request, commits issuance, interrupts its
 first response and accepts only the same key binding on retry. Other tests cover
 concurrent enrollment, both possible outcomes of a failed publication, changed
-bootstrap values, unbound responses, corrupt/orphaned records, cancellation and
-shutdown. These fixture tests complement the console's real PostgreSQL/gateway
+bootstrap values, wrong returned scope, release rollback, corrupt/orphaned records,
+cancellation and shutdown. A timed HTTPS test verifies that a configuration
+expiring after server issuance cannot publish a ready identity. These fixture
+tests complement the console's real PostgreSQL/gateway
 claim tests; they do not claim a physical installed-agent acceptance result.

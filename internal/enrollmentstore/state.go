@@ -6,12 +6,14 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
+	"math"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/open-uem/nats/enrollment"
+	"github.com/open-uem/nats/enrollment/artifacts"
 )
 
 var (
@@ -30,6 +32,11 @@ type Bootstrap struct {
 	Architecture  string `json:"architecture"`
 	DeviceName    string `json:"device_name"`
 	ReleaseDigest string `json:"release_digest"`
+	// Optional only for compatibility with the earlier explicitly configured
+	// claim API. Signed bootstrap integration always sets all three fields.
+	TenantID        int    `json:"tenant_id,omitempty"`
+	SiteID          int    `json:"site_id,omitempty"`
+	ReleaseSequence uint64 `json:"release_sequence,omitempty"`
 }
 
 func (Bootstrap) String() string     { return "[individual enrollment bootstrap]" }
@@ -41,7 +48,12 @@ func (b Bootstrap) valid() bool {
 		(b.Platform == "windows" || b.Platform == "macos") &&
 		(b.Architecture == "amd64" || b.Architecture == "arm64") &&
 		len(b.DeviceName) <= 255 && utf8.ValidString(b.DeviceName) && !strings.ContainsAny(b.DeviceName, "\x00\r\n") &&
-		err == nil && len(digest) == sha256.Size && hex.EncodeToString(digest) == b.ReleaseDigest
+		err == nil && len(digest) == sha256.Size && hex.EncodeToString(digest) == b.ReleaseDigest &&
+		((b.TenantID == 0 && b.SiteID == 0) || (b.TenantID > 0 && b.SiteID > 0)) && b.ReleaseSequence <= math.MaxInt64
+}
+
+func (b Bootstrap) matchesScope(response enrollment.Response) bool {
+	return b.TenantID == 0 || (b.TenantID == response.TenantID && b.SiteID == response.SiteID)
 }
 
 // Identity owns its decoded keys. Stop their users before Close; they must not be
@@ -124,6 +136,30 @@ func (s *Store) Load() (*Identity, error) {
 	return s.loadIdentity(p)
 }
 
+// Checkpoint returns the durable release selected before the first claim. Only
+// an actually empty installation returns a zero checkpoint. Earlier records that
+// lack a sequence remain loadable but cannot reset signed-bootstrap rollback
+// checks to zero; their explicit migration is a separate operation.
+func (s *Store) Checkpoint() (artifacts.Checkpoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.backend == nil {
+		return artifacts.Checkpoint{}, ErrUnavailable
+	}
+	p, err := s.loadPending()
+	if errors.Is(err, ErrMissing) {
+		return artifacts.Checkpoint{}, nil
+	}
+	if err != nil {
+		return artifacts.Checkpoint{}, err
+	}
+	defer p.close()
+	if p.bootstrap.ReleaseSequence == 0 {
+		return artifacts.Checkpoint{}, ErrUnavailable
+	}
+	return artifacts.Checkpoint{Sequence: p.bootstrap.ReleaseSequence, Digest: p.bootstrap.ReleaseDigest}, nil
+}
+
 // Enroll persists locally generated keys before the first HTTPS request. A retry
 // must present the identical bootstrap and uses exactly the winning stored keys.
 // Server roots are separately authorized HTTPS roots; nil means system roots.
@@ -198,7 +234,7 @@ func (s *Store) enroll(ctx context.Context, bootstrap Bootstrap, claim claimFunc
 	if err != nil {
 		return nil, err
 	}
-	if response == nil {
+	if response == nil || !bootstrap.matchesScope(*response) {
 		return nil, enrollment.ErrInvalidResponse
 	}
 	if _, err = enrollment.ValidateResponse(*response, bootstrap.Origin, &p.keys.Certificate.PublicKey, time.Now()); err != nil {
@@ -255,7 +291,7 @@ func (s *Store) loadIdentity(p *pending) (*Identity, error) {
 	}
 	defer clear(data)
 	response, err := decodeIdentity(data, p.digest)
-	if err != nil {
+	if err != nil || !p.bootstrap.matchesScope(response) {
 		return nil, ErrUnavailable
 	}
 	if _, err = enrollment.ValidateResponse(response, p.bootstrap.Origin, &p.keys.Certificate.PublicKey, time.Now()); err != nil {

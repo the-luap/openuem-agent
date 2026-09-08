@@ -85,4 +85,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace github.com/open-uem/nats => github.com/the-luap/openuem-nats v0.11.1-0.20260908040644-2503532eb824
+replace github.com/open-uem/nats => github.com/the-luap/openuem-nats v0.11.1-0.20260908043122-d21252be66de

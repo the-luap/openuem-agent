@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -26,6 +28,8 @@ import (
 	"time"
 
 	"github.com/open-uem/nats/enrollment"
+	"github.com/open-uem/nats/enrollment/artifacts"
+	signedbootstrap "github.com/open-uem/nats/enrollment/bootstrap"
 )
 
 // The memory backend exists only in tests. Production Open always requires the
@@ -81,7 +85,7 @@ func (b *memoryBackend) Create(name string, data []byte) error {
 func (b *memoryBackend) Close() error { b.mu.Lock(); defer b.mu.Unlock(); b.closed = true; return nil }
 
 func testBootstrap() Bootstrap {
-	return Bootstrap{Origin: "https://uem.example.test", Invitation: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{13}, 32)), Platform: "windows", Architecture: "amd64", DeviceName: "Isolated endpoint", ReleaseDigest: strings.Repeat("b", 64)}
+	return Bootstrap{Origin: "https://uem.example.test", Invitation: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{13}, 32)), Platform: "windows", Architecture: "amd64", DeviceName: "Isolated endpoint", ReleaseDigest: strings.Repeat("b", 64), TenantID: 3, SiteID: 4, ReleaseSequence: 42}
 }
 
 type fixtureIssuer struct {
@@ -195,13 +199,15 @@ func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 	server.StartTLS()
 	defer server.Close()
 	bootstrap.Origin = server.URL
+	verified := signedConfigurationFixture(t, bootstrap)
+	bootstrap.ReleaseDigest = verified.Checkpoint().Digest
 	roots := x509.NewCertPool()
 	roots.AddCert(server.Certificate())
 	store := &Store{backend: backend}
 	if _, err := store.Load(); !errors.Is(err, ErrMissing) {
 		t.Fatal("new installation was not empty", err)
 	}
-	if identity, err := store.Enroll(context.Background(), bootstrap, roots); err == nil || identity != nil {
+	if identity, err := store.EnrollVerified(context.Background(), verified, bootstrap.DeviceName, roots); err == nil || identity != nil {
 		t.Fatal("lost reply activated an identity")
 	}
 	if _, err := store.Load(); !errors.Is(err, ErrPending) {
@@ -209,13 +215,17 @@ func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 	}
 	// A new state-machine instance has no in-memory copy of the generated keys.
 	restarted := &Store{backend: backend}
-	identity, err := restarted.Enroll(context.Background(), bootstrap, roots)
+	identity, err := restarted.EnrollVerified(context.Background(), verified, bootstrap.DeviceName, roots)
 	if err != nil {
 		t.Fatal("same-key restart could not recover issuance", err)
 	}
 	defer identity.Close()
 	if count.Load() != 2 || issuer.requests != 2 {
 		t.Fatal("recovery sent an unexpected number of claims")
+	}
+	checkpoint, err := restarted.Checkpoint()
+	if err != nil || checkpoint != verified.Checkpoint() {
+		t.Fatal("restart lost the signed release checkpoint", err)
 	}
 	loaded, err := restarted.Load()
 	if err != nil {
@@ -228,7 +238,7 @@ func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 	if _, err := identity.Keys.Request(bootstrap.Invitation, bootstrap.Platform, bootstrap.Architecture, bootstrap.DeviceName); err != nil {
 		t.Fatal("closing a separate load wiped live identity keys", err)
 	}
-	again, err := restarted.Enroll(context.Background(), bootstrap, roots)
+	again, err := restarted.EnrollVerified(context.Background(), verified, bootstrap.DeviceName, roots)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,6 +252,51 @@ func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 	if strings.Contains(fmt.Sprintf("%+v %#v", bootstrap, bootstrap), bootstrap.Invitation) {
 		t.Fatal("formatted bootstrap exposed its invitation")
 	}
+}
+
+func signedConfigurationFixture(t *testing.T, b Bootstrap, validity ...time.Duration) *signedbootstrap.Verified {
+	t.Helper()
+	releasePublic, releaseKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(releaseKey)
+	configPublic, configKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(configKey)
+	now := time.Now().UTC().Truncate(time.Second)
+	lifetime := time.Hour
+	if len(validity) != 0 {
+		lifetime = validity[0]
+	}
+	content := []byte("non-executable signed configuration fixture")
+	digest := sha256.Sum256(content)
+	format := "msi"
+	if b.Platform == "macos" {
+		format = "pkg"
+	}
+	releaseEnvelope, err := artifacts.Sign(artifacts.Manifest{Schema: 1, Sequence: b.ReleaseSequence, Version: "0.12.0", PublishedAt: now.Add(-time.Hour), ExpiresAt: now.Add(24 * time.Hour), Artifacts: []artifacts.Artifact{{Platform: b.Platform, Architecture: b.Architecture, Format: format, Filename: "openuem-agent-0.12.0-" + b.Platform + "-" + b.Architecture + "." + format, Size: int64(len(content)), SHA256: hex.EncodeToString(digest[:])}}}, releaseKey, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := artifacts.Verify(releaseEnvelope, []ed25519.PublicKey{releasePublic}, now, artifacts.Checkpoint{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := signedbootstrap.Sign(signedbootstrap.Config{Schema: 1, Origin: b.Origin, Organization: "Isolated organization", Site: "Isolated site", TenantID: b.TenantID, SiteID: b.SiteID, Invitation: b.Invitation, Platform: b.Platform, Architecture: b.Architecture, IssuedAt: now, ExpiresAt: now.Add(lifetime), ReleaseDigest: release.Digest(), ReleaseEnvelope: releaseEnvelope}, configKey, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := signedbootstrap.Verify(data, signedbootstrap.Trust{Origin: b.Origin, BootstrapKeys: []ed25519.PublicKey{configPublic}, ReleaseKeys: []ed25519.PublicKey{releasePublic}, Platform: b.Platform, Architecture: b.Architecture}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verified.VerifyPackage(bytes.NewReader(content)); err != nil {
+		t.Fatal(err)
+	}
+	return verified
 }
 
 func TestDurableEnrollmentRecoversACommittedClaimWithALostHTTPSResponse(t *testing.T) {
@@ -324,6 +379,9 @@ func TestPendingBootstrapCannotBeReplacedOrRedirected(t *testing.T) {
 		func(b *Bootstrap) { b.Architecture = "arm64" },
 		func(b *Bootstrap) { b.DeviceName = "Changed name" },
 		func(b *Bootstrap) { b.ReleaseDigest = strings.Repeat("a", 64) },
+		func(b *Bootstrap) { b.TenantID = 7 },
+		func(b *Bootstrap) { b.SiteID = 8 },
+		func(b *Bootstrap) { b.ReleaseSequence = 43 },
 	} {
 		other := config
 		change(&other)
@@ -507,7 +565,7 @@ func TestUnboundIssuanceCannotPublishAnIdentity(t *testing.T) {
 	config := testBootstrap()
 	preparePending(t, b, config)
 	issuer := newFixtureIssuer(t)
-	for _, variant := range []string{"nil", "wrong origin", "wrong local key"} {
+	for _, variant := range []string{"nil", "wrong origin", "wrong local key", "wrong organization", "wrong site"} {
 		t.Run(variant, func(t *testing.T) {
 			_, err := (&Store{backend: b}).enroll(context.Background(), config, func(_ context.Context, request enrollment.Request) (*enrollment.Response, error) {
 				if variant == "nil" {
@@ -529,7 +587,14 @@ func TestUnboundIssuanceCannotPublishAnIdentity(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				response.Endpoint = "wss://other.example.test/agent-channel"
+				switch variant {
+				case "wrong organization":
+					response.TenantID++
+				case "wrong site":
+					response.SiteID++
+				default:
+					response.Endpoint = "wss://other.example.test/agent-channel"
+				}
 				return response, nil
 			})
 			if !errors.Is(err, enrollment.ErrInvalidResponse) || len(b.records) != 1 {
@@ -584,5 +649,110 @@ func TestStoreCloseJoinsAnActiveClaimAfterCallerCancellation(t *testing.T) {
 	}
 	if len(b.records) != 1 {
 		t.Fatal("shutdown discarded pending keys or activated an identity")
+	}
+}
+
+func TestCheckpointCannotResetExistingOrCorruptEnrollmentToZero(t *testing.T) {
+	b := newMemoryBackend(t)
+	s := &Store{backend: b}
+	if checkpoint, err := s.Checkpoint(); err != nil || checkpoint != (artifacts.Checkpoint{}) {
+		t.Fatal("empty store did not provide its initial checkpoint", err)
+	}
+	config := testBootstrap()
+	preparePending(t, b, config)
+	if checkpoint, err := s.Checkpoint(); err != nil || checkpoint.Sequence != config.ReleaseSequence || checkpoint.Digest != config.ReleaseDigest {
+		t.Fatal("pending keys did not protect the checkpoint", err)
+	}
+	// An earlier preview record has no sequence. It stays readable through the
+	// original state API but cannot become a zero checkpoint in the signed flow.
+	legacy := newMemoryBackend(t)
+	config.TenantID, config.SiteID, config.ReleaseSequence = 0, 0, 0
+	preparePending(t, legacy, config)
+	if _, err := (&Store{backend: legacy}).Load(); !errors.Is(err, ErrPending) {
+		t.Fatal("earlier pending state was not readable", err)
+	}
+	if _, err := (&Store{backend: legacy}).Checkpoint(); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("earlier state reset signed rollback protection", err)
+	}
+	b.records[pendingRecord][0] ^= 1
+	if _, err := s.Checkpoint(); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("corrupt state reset signed rollback protection", err)
+	}
+}
+
+func TestSignedBootstrapCannotRollbackTheDurablePendingRelease(t *testing.T) {
+	b := newMemoryBackend(t)
+	config := testBootstrap()
+	config.ReleaseSequence = 43
+	preparePending(t, b, config)
+	config.ReleaseSequence = 42
+	verified := signedConfigurationFixture(t, config)
+	if _, err := (&Store{backend: b}).EnrollVerified(context.Background(), verified, config.DeviceName, nil); !errors.Is(err, artifacts.ErrRollback) {
+		t.Fatal("signed bootstrap ignored a newer durable checkpoint", err)
+	}
+	if len(b.records) != 1 {
+		t.Fatal("rollback changed pending state")
+	}
+}
+
+func TestSignedConfigurationExpiringDuringHTTPSCannotPublishIdentity(t *testing.T) {
+	keys, err := enrollment.GenerateKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer releaseKeys(keys)
+	issuer := newFixtureIssuer(t)
+	var expiry atomic.Int64
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request enrollment.Request
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		response, err := issuer.claim("https://"+r.Host, request)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		timer := time.NewTimer(time.Until(time.Unix(0, expiry.Load())) + 10*time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-timer.C:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+	config := testBootstrap()
+	config.Origin = server.URL
+	verified := signedConfigurationFixture(t, config, 3*time.Second)
+	expiry.Store(verified.Config().ExpiresAt.UnixNano())
+	config.ReleaseDigest = verified.Checkpoint().Digest
+	data, err := encodePending(config, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(data)
+	b := newMemoryBackend(t)
+	if err := b.Create(pendingRecord, data); err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
+	store := &Store{backend: b}
+	identity, err := store.EnrollVerified(context.Background(), verified, config.DeviceName, roots)
+	if identity != nil || !errors.Is(err, signedbootstrap.ErrExpired) {
+		t.Fatal("expired configuration published an identity", err)
+	}
+	issuer.mu.Lock()
+	issued := issuer.requests == 1 && issuer.response != nil
+	issuer.mu.Unlock()
+	if !issued {
+		t.Fatal("test did not cross expiry after committed issuance")
+	}
+	if _, err := store.Load(); !errors.Is(err, ErrPending) {
+		t.Fatal("expired configuration discarded recovery keys or activated state", err)
 	}
 }
