@@ -18,9 +18,7 @@ func TestWindowsAuthenticodeAcceptsEmbeddedSignatureAndRejectsMutation(t *testin
 		t.Fatal("signature fixture did not meet private staging requirements")
 	}
 	if err := Verify(context.Background(), path, "exe"); err != nil {
-		// Only this known public test fixture exposes its native error code. The
-		// production helper returns an exit status and no diagnostic contents.
-		t.Fatal("embedded-signature fixture was not accepted", err, "native fixture status", verifyWindowsFile(path))
+		t.Fatal("embedded-signature fixture was not accepted", err)
 	}
 	file, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {

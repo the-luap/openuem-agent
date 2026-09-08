@@ -49,3 +49,7 @@ with a non-executable text payload and requires native rejection; it is never
 installed. No workstation trust settings or signing credentials are changed.
 An actual OpenUEM Authenticode release and Developer-ID-signed, notarized package
 still require release credentials and separate installation/device acceptance.
+
+Agent `fddf331` passed [Windows, macOS and Linux CI](https://github.com/the-luap/openuem-agent/actions/runs/34190495485),
+including the unchanged native trust policy, embedded-signature acceptance and
+mutation rejection, isolated Keychain/DPAPI tests and full agent builds.

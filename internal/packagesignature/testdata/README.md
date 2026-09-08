@@ -4,6 +4,8 @@
 `golang.org/x/sys@v0.47.0/windows/testdata/ev-signed-file.exe`.
 Its original BSD license is retained in `LICENSE`.
 
+SHA-256: `5d92ebb58e887fe05878ac8805bc125eb47916764678668cd8cbd4c092cd6667`.
+
 The Go project generated this small executable from a program that prints
 `Hello Gophers!`, then applied an EV Authenticode signature with a DigiCert
 timestamp. The upstream fixture documentation is available at
