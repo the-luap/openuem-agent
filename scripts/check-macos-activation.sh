@@ -2,8 +2,8 @@
 set -eu
 
 # Root filesystem and native read-only framework acceptance in isolated fixtures.
-# Tests never register/unregister a native daemon or start inventory. The keychain
-# test tag additionally prevents the production System-keychain backend from use.
+# Tests inject identity stores and registration controllers; they never register
+# a native daemon, start inventory or open a production identity/keychain.
 GO_COMMAND=${GO_COMMAND:-go}
 fixture_directory=$(mktemp -d /tmp/openuem-activation-check.XXXXXX)
 trap 'rm -rf -- "$fixture_directory"' EXIT

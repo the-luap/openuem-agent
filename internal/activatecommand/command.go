@@ -7,8 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"os/signal"
 
 	"github.com/open-uem/openuem-agent/internal/nativepath"
 )
@@ -89,7 +87,7 @@ func handle(ctx context.Context, args []string, output, diagnostics io.Writer, r
 		fmt.Fprintln(diagnostics, ErrOptions)
 		return true, 2
 	}
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	ctx, stop := activationContext(ctx)
 	defer stop()
 	result, err := run(ctx, Options{IdentityDirectory: directory.value})
 	if result.Registered {

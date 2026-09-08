@@ -100,6 +100,9 @@ configuration remain on failure. Waiting and signature subprocesses use a
 two-minute context deadline, and canceled subprocesses are joined. Apple's
 registration/status methods are synchronous and cannot be interrupted during a
 native call; this is not a hard wall-clock bound on those framework methods.
+The macOS command handles both interrupt and termination signals through that
+context; an abrupt process kill or operating-system shutdown can still bypass
+local cleanup.
 
 ## Verification and remaining acceptance
 
