@@ -9,6 +9,7 @@ const (
 	maxProtectedSize = maxRecordSize + (64 << 10)
 	pendingRecord    = "pending"
 	identityRecord   = "identity"
+	recipientRecord  = "recipient-v1"
 )
 
 var (
@@ -18,7 +19,7 @@ var (
 	ErrUnsupported = errors.New("native enrollment storage is unavailable on this platform")
 )
 
-// NativeBackend stores two immutable, separately protected records. Create must
+// NativeBackend stores immutable, separately protected records. Create must
 // publish a complete durable record exclusively; it must never replace an existing
 // record. Load returns owned plaintext that the caller must clear after decoding.
 // These low-level operations do not authorize an origin or perform enrollment.
@@ -28,4 +29,6 @@ type NativeBackend interface {
 	Close() error
 }
 
-func validRecord(record string) bool { return record == pendingRecord || record == identityRecord }
+func validRecord(record string) bool {
+	return record == pendingRecord || record == identityRecord || record == recipientRecord
+}

@@ -31,6 +31,11 @@ func TestMacKeychainDurableEnrollmentRecovery(t *testing.T) {
 	runDurableEnrollmentRecovery(t, f.backend)
 }
 
+func TestMacKeychainDurableRecoveryRecipient(t *testing.T) {
+	f := newKeychainFixture(t)
+	runDurableRecipient(t, f.backend)
+}
+
 func newKeychainFixture(t *testing.T) *keychainFixture {
 	t.Helper()
 	directory := t.TempDir()

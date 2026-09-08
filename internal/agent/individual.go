@@ -39,6 +39,9 @@ type individualRuntime struct {
 	brokerClosed    <-chan struct{}
 	connection      *nats.Conn
 	hardwareVersion atomic.Int32
+	recoveryVersion atomic.Int32
+	recoveryStarted bool
+	recovery        *recoveryClient
 }
 
 func individualDirectory(mode, directory string) (string, error) {
@@ -103,6 +106,18 @@ func (a *Agent) configureIndividual(mode, directory string) error {
 	}
 	ctx, cancel := context.WithCancel(parent)
 	a.individual = &individualRuntime{identity: identity, directory: directory, ctx: ctx, cancel: cancel}
+	if platform == "macos" {
+		key, err := store.LoadOrCreateRecipient(identity)
+		if err == nil {
+			a.individual.recovery, err = newRecoveryClient(identity, key)
+			if err != nil {
+				key.Close()
+			}
+		}
+		if err != nil {
+			log.Print("[ERROR]: protected FileVault validation recipient is unavailable")
+		}
+	}
 	a.applyIndividualConfig()
 	return nil
 }

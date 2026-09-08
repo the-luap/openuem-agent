@@ -33,6 +33,11 @@ func TestWindowsDPAPIDurableEnrollmentRecovery(t *testing.T) {
 	runDurableEnrollmentRecovery(t, b)
 }
 
+func TestWindowsDPAPIDurableRecoveryRecipient(t *testing.T) {
+	b, _ := windowsFixture(t)
+	runDurableRecipient(t, b)
+}
+
 func TestWindowsStateIsEncryptedPrivateImmutableAndRecoverable(t *testing.T) {
 	b, directory := windowsFixture(t)
 	plaintext := []byte("isolated private identity fixture, never a production key")

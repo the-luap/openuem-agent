@@ -66,6 +66,18 @@ retain private precomputation, so complete erasure of every managed-memory copy 
 not guaranteed. `Store.Close` joins active operations; callers cancel active HTTP
 contexts before shutdown and stop key users before `Identity.Close`.
 
+## Private recovery recipient
+
+Mac runtime startup also loads or exclusively creates `recipient-v1`, a separate
+X25519 key for [private FileVault validation](macos-filevault-validation.md).
+The record binds to the exact pending-record digest, origin, device ID and scope.
+It leaves both existing v1 records unchanged. Concurrent starts reload the durable
+winner; corrupt or foreign recipient records are never silently replaced. An
+orphan recipient also prevents an installation from being treated as empty.
+Failure to access this optional key disables recovery validation while ordinary
+authenticated inventory remains available. Native backend tests cover the third
+record in an isolated Mac keychain and Windows DPAPI fixtures.
+
 ## Windows storage boundary
 
 `OpenNative` receives an absolute directory beneath an installer-controlled parent.

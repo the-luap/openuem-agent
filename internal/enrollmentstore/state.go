@@ -301,7 +301,11 @@ func (s *Store) loadPending() (*pending, error) {
 		other, otherErr := s.backend.Load(identityRecord)
 		clear(other)
 		if errors.Is(otherErr, ErrMissing) {
-			return nil, ErrMissing
+			recipient, recipientErr := s.backend.Load(recipientRecord)
+			clear(recipient)
+			if errors.Is(recipientErr, ErrMissing) {
+				return nil, ErrMissing
+			}
 		}
 		return nil, ErrUnavailable
 	}
