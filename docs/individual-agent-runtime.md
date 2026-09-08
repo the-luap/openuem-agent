@@ -1,9 +1,11 @@
 # Individual agent runtime integration
 
 The Windows/macOS service can now select the protected individual identity before
-reading any legacy certificate files. This is an opt-in integration path. Signed
-bootstrap authorization, the native enrollment command, installer distribution,
-renewal and production console/deployment wiring are not complete yet.
+reading any legacy certificate files. This is an opt-in integration path. The
+[native enrollment command](native-enrollment-command.md) now verifies authorized
+bootstrap data, native package trust and installed-agent bytes before persisting
+credentials. Installer distribution, service activation, renewal and production
+console/deployment wiring are not complete yet.
 
 ## Selection and configuration
 

@@ -111,3 +111,7 @@ machine-DPAPI storage, then verifies retry uses the persisted identity without a
 second claim. Test packages are never installed or executed. macOS CI uses only an
 isolated test keychain; positive notarized OpenUEM release acceptance and physical
 endpoint installation still require the real signing credentials and devices.
+
+Commit `8bc63f8` passed [Windows, macOS and Linux CI](https://github.com/the-luap/openuem-agent/actions/runs/34193859066),
+including the full native Windows flow, all platform builds and invocation of
+`enroll -help` from the actual Windows/macOS service entry points.
