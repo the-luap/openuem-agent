@@ -3,8 +3,9 @@
 `internal/packagesignature.Verify` adds the operating system's installer policy
 check to the independently signed release/configuration protocol. It does not
 install or execute the candidate and does not authorize an OpenUEM release by
-itself. The bootstrap and updater must still integrate this check with protected
-staging, release pins, package hashes, checkpoints and installation acceptance.
+itself. The bootstrap and updater must still integrate this check with release pins
+and installation acceptance. [Protected package staging](bootstrap-package-staging.md)
+now joins native verification to exact-origin downloads, file hashes and checkpoints.
 
 Candidates must be regular, nonempty files of at most 512 MiB, with the exact
 supported extension (`exe`/`msi` on Windows, `pkg` on macOS). The immediate staging
