@@ -19,6 +19,7 @@ func (r *Report) getComputerInfo(debug bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/usr/sbin/system_profiler", "-json", "SPHardwareDataType")
+	cmd.WaitDelay = 2 * time.Second
 	var output bytes.Buffer
 	cmd.Stdout = &hardwareOutput{buffer: &output}
 	cmd.Stderr = io.Discard
