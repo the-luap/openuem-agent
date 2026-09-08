@@ -3,8 +3,10 @@
 The Mac collector runs `/usr/sbin/system_profiler -json SPHardwareDataType` once
 per hardware attempt with a 30-second deadline and a 1 MiB output limit. It
 preserves the reported hardware model (including `iMacPro1,1`), distinguishes the
-hardware platform UUID from provisioning UDID, and accepts numeric or numeric
-string core counts. Unrecognized core formats remain unknown (zero); they are
+hardware platform UUID from provisioning UDID, and accepts numeric, numeric
+string and self-consistent `proc total:class:class...` core counts. It checks that
+the class counts sum to the total without assigning class names. Unrecognized
+or inconsistent core formats remain unknown (zero); they are
 never guessed. Memory retains the existing inventory unit, MB. Hardware without
 valid stable identifiers remains ordinary inventory and cannot become association
 evidence.
@@ -36,7 +38,7 @@ records or grant access to another management channel.
 
 Deploy the updated registry and broker authorization service first, then the
 worker, then agents. Devices must reconnect to obtain updated broker permissions.
-The module pins the shared protocol at `4e6e26103fd9`. Fixture tests cover model
+The module pins the shared protocol at `249bb9d5e690`. Fixture tests cover model
 preservation, identifiers, absent data, memory/core parsing, both plist formats,
 file metadata protections, strict receipts and a real TLS/WSS NATS hardware RPC.
 They do not read this workstation's hardware or managed preferences. Physical
@@ -44,4 +46,5 @@ MDM profile delivery and system preference materialization remain separate Mac
 acceptance requirements.
 
 References: [Apple managed-preferences schema, pinned revision](https://github.com/apple/device-management/blob/67045e2fa06f528b196c01edee6a8bf88b844beb/mdm/profiles/com.apple.ManagedClient.preferences.yaml),
-[Go plist format support](https://github.com/DHowett/go-plist).
+[Go plist format support](https://github.com/DHowett/go-plist),
+[first-hand structured core-count diagnostic](https://github.com/vladkens/macmon/issues/47).

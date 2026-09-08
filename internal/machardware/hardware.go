@@ -58,6 +58,30 @@ func cores(raw json.RawMessage) int64 {
 	if json.Unmarshal(raw, &text) != nil {
 		text = string(raw)
 	}
+	// Apple silicon reports a total followed by core-class counts. Retain
+	// only a self-consistent total; do not infer the meaning of each class.
+	if vector, ok := strings.CutPrefix(text, "proc "); ok {
+		parts := strings.Split(vector, ":")
+		if len(parts) < 3 || len(parts) > 8 {
+			return 0
+		}
+		var total, sum int64
+		for i, part := range parts {
+			value, err := strconv.ParseInt(part, 10, 64)
+			if err != nil || value < 0 || value > 4096 || strconv.FormatInt(value, 10) != part {
+				return 0
+			}
+			if i == 0 {
+				total = value
+			} else {
+				sum += value
+			}
+		}
+		if total > 0 && sum == total {
+			return total
+		}
+		return 0
+	}
 	value, err := strconv.ParseInt(text, 10, 64)
 	if err != nil || value <= 0 || value > 4096 {
 		return 0

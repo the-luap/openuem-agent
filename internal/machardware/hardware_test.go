@@ -42,6 +42,15 @@ func TestHardwareParserPreservesRealModelAndDistinctIdentifiers(t *testing.T) {
 	}
 }
 
+func TestStructuredCoreCountsRequireConsistentTotal(t *testing.T) {
+	for input, want := range map[string]int64{"proc 8:4:4": 8, "proc 18:6:0:12": 18, "proc 8:8:0": 8, "proc 8:4:3": 0, "proc 8:4:-4": 0, "proc 0:0:0": 0, "proc 8": 0, "proc 8:04:4": 0, "proc 8:four:4": 0, "proc 4097:4096:1": 0} {
+		data, _ := json.Marshal(input)
+		if got := cores(data); got != want {
+			t.Fatalf("core count %q = %d, want %d", input, got, want)
+		}
+	}
+}
+
 func TestBindingParserAcceptsBinaryAndXMLWithoutCoercionOrSecretErrors(t *testing.T) {
 	token := base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("x", 32)))
 	valid := map[string]any{"ChallengeID": "12345678-1234-4234-8234-123456789abc", "DeviceID": "12345678-1234-4234-8234-123456789abd", "Token": token}
