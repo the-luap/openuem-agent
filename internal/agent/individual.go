@@ -26,6 +26,8 @@ var errIndividualAgent = errors.New("individual agent configuration or protected
 // immutable identity/scope comes only from the protected enrollment store.
 type individualRuntime struct {
 	identity        *enrollmentstore.Identity
+	directory       string
+	readiness       readinessEndpoint
 	ctx             context.Context
 	cancel          context.CancelFunc
 	mu              sync.Mutex
@@ -98,7 +100,7 @@ func (a *Agent) configureIndividual(mode, directory string) error {
 		parent = context.Background()
 	}
 	ctx, cancel := context.WithCancel(parent)
-	a.individual = &individualRuntime{identity: identity, ctx: ctx, cancel: cancel}
+	a.individual = &individualRuntime{identity: identity, directory: directory, ctx: ctx, cancel: cancel}
 	a.applyIndividualConfig()
 	return nil
 }

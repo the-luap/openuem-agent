@@ -140,6 +140,11 @@ func (a *Agent) stop() {
 		if connection != nil {
 			connection.Close()
 		}
+		// Readiness borrows the broker signing key. Close joins any in-flight
+		// proofs before the protected identity can be released below.
+		if a.individual.readiness != nil {
+			_ = a.individual.readiness.Close()
+		}
 	}
 	if a.TaskScheduler != nil {
 		if err := a.TaskScheduler.Shutdown(); err != nil {

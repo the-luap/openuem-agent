@@ -31,11 +31,13 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/nats-io/nkeys"
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	openuem_runtime "github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
+	"github.com/open-uem/openuem-agent/internal/localready"
 	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
 	openuem_utils "github.com/open-uem/utils"
 	"gopkg.in/yaml.v3"
@@ -55,8 +57,9 @@ func (a *Agent) Start() (err error) {
 			err = a.ctx.Err()
 		}
 		if err == nil {
-			a.TaskScheduler.Start()
-			log.Println("[INFO]: agent scheduler has started")
+			err = a.startInitializedScheduler(func(ctx context.Context, directory string, identity localready.Identity, signer nkeys.KeyPair) (readinessEndpoint, error) {
+				return localready.Listen(ctx, directory, identity, signer)
+			})
 		}
 	}()
 

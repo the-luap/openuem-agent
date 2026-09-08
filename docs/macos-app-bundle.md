@@ -117,12 +117,16 @@ an owned staging directory; crash recovery is not automatic.
 
 Apple documents the [notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
 This builder does not implement the signing/notarization pipeline, PKG installation,
-guided consent, `SMAppService` registration/approval, authenticated readiness,
+guided consent, `SMAppService` registration/approval,
 identity/binding migration or secure updates. Existing macOS `enroll` and `serve`
 remain explicit administrator interfaces. Do not install this draft as a completed
 end-user enrollment flow. An installed release needs its final signed executable
 to perform enrollment itself so its System-keychain application ACL matches the
 same executable when the daemon starts.
+
+The individual-agent runtime now provides a separate
+[authenticated local readiness endpoint](macos-local-readiness.md). Connecting
+that proof to native registration and approval remains pending.
 
 ## Verification
 
