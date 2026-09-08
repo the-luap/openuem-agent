@@ -8,10 +8,10 @@ initialized reconnect schedule can be ready while the broker is offline: this
 proof does not report remote connectivity, inventory receipt or compliance.
 
 Legacy mode and earlier identities without executable bindings do not publish
-this endpoint. macOS service activation will use it after native registration and
-administrator approval; that activation integration is still pending. The agent
-continues to use its explicit `serve -identity-directory` interface. No new public
-command installs, registers or changes an OS service in this change.
+this endpoint. [macOS activation](native-macos-activation.md) uses it after native
+registration and administrator approval. The daemon continues to use its explicit
+`serve -identity-directory` interface. The readiness endpoint itself accepts no
+installation, registration or management commands.
 
 ## Authentication and admission
 

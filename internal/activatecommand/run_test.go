@@ -205,7 +205,7 @@ func TestActivationRefusesInvalidContextPathAndUnsupportedPlatform(t *testing.T)
 	if _, err := run(context.Background(), Options{IdentityDirectory: "relative"}, d); !errors.Is(err, ErrOptions) {
 		t.Fatal(err)
 	}
-	d.platform = "darwin"
+	d.platform = "linux"
 	if _, err := run(context.Background(), o, d); !errors.Is(err, ErrUnsupported) {
 		t.Fatal(err)
 	}

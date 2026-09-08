@@ -15,26 +15,38 @@ import (
 
 const usage = `Usage: openuem-agent activate -identity-directory <absolute protected path>
 
-Register and start the installed Windows agent using its completed enrollment.
-Run as an elevated administrator from the installed signed agent executable.
+Register and start the installed Windows or macOS agent using its completed enrollment.
+Run as an elevated administrator/root from the installed signed agent executable.
 The executable, installation directory and every ancestor must already belong
-to the trusted installer. The installation directory and executable must be owned
-by Local System or Administrators and must not allow other accounts to write.
+to the trusted installer. This starts inventory collection and administrator
+management for the previously authorized enrollment. No invitation, key, server
+override or service-name override is accepted.
 
-The command creates private operational configuration and log directories under
-the installed executable's directory, registers an automatic Local System service,
-and waits up to two minutes for local service readiness. This starts inventory
-collection and administrator management for the previously authorized enrollment.
-It accepts no invitation, key, server override or service-name override.
+Windows: the executable and installation directory must be owned by Local System
+or Administrators and must not allow other accounts to write. Private configuration
+and log directories are created under the installed executable's directory. The
+command registers an automatic Local System service and waits for initialization.
 
-Existing compatible configuration and the same service are reused. A foreign or
-legacy service/configuration is rejected without replacement. Completed identity
+macOS 13+: use /Applications/OpenUEM Agent.app/Contents/MacOS/openuem-agent and
+-identity-directory /Library/OpenUEMAgent/identity. The final app must be root-owned,
+signed with Developer ID Application and notarized. The sealed app/daemon metadata
+must match the supported bundle layout. Operational configuration is prepared under
+/Library/OpenUEMAgent/etc/openuem-agent and logs under /var/log/openuem-agent.
+SMAppService registration may require administrator approval in System Settings >
+General > Login Items. Allow OpenUEM Agent, then retry this command. A pending
+approval returns public JSON with approval_required: true and exit status 3.
+Readiness requires an authenticated local response from the enrolled daemon.
+
+Existing compatible configuration and the same service are reused. Conflicting
+configuration or service metadata causes an error. Completed identity
 state is retained on failure. Cancellation stops waiting; an already registered
-service may continue starting. Inspect service status before retrying.
+service may continue starting. Inspect service status before retrying. Waiting and
+signature subprocesses have a two-minute context deadline; synchronous macOS
+framework calls cannot be interrupted while executing.
 
 Running means the local service initialized; verify device connectivity in the
-management console. macOS activation and signed installer integration are separate
-work. Use enroll -help for initial enrollment and serve -help for service arguments.
+management console. Signed installer distribution remains separate work. Use
+enroll -help for initial enrollment and serve -help for service arguments.
 `
 
 type directoryFlag struct {
@@ -93,8 +105,12 @@ func handle(ctx context.Context, args []string, output, diagnostics io.Writer, r
 		fmt.Fprintln(diagnostics, "Activation waiting was canceled; retain the identity and inspect native service status before retrying.")
 		return true, 130
 	}
+	if errors.Is(err, ErrApproval) {
+		fmt.Fprintln(diagnostics, ErrApproval)
+		return true, 3
+	}
 	message := ErrStart
-	for _, known := range []error{ErrOptions, ErrUnsupported, ErrAccess, ErrIdentity, ErrConflict, ErrConfiguration, ErrRegistration, ErrStart, ErrCleanup} {
+	for _, known := range []error{ErrOptions, ErrUnsupported, ErrAccess, ErrIdentity, ErrConflict, ErrConfiguration, ErrRegistration, ErrStart, ErrCleanup, ErrSignature} {
 		if errors.Is(err, known) {
 			message = known
 			break

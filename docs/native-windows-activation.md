@@ -16,7 +16,7 @@ executable and existing trusted parent directories. Run `activate -help` for
 usage. The command starts inventory and management through the service associated
 with the previously authorized enrollment. It is an administrator deployment
 interface; a signed end-user installer and its consent UI remain separate work.
-macOS activation is not implemented by this command.
+The same entry point has a separate [macOS activation flow](native-macos-activation.md).
 
 ## Admission and ownership
 

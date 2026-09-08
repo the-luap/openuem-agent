@@ -3,7 +3,9 @@
 package macbundle
 
 import (
+	"bytes"
 	"debug/macho"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +17,7 @@ import (
 
 const (
 	BundleName           = "OpenUEM Agent.app"
+	InstallationPath     = "/Applications/" + BundleName
 	BundleIdentifier     = "org.openuem.agent"
 	DaemonLabel          = "org.openuem.agent.daemon"
 	ExecutableRelative   = "Contents/MacOS/openuem-agent"
@@ -31,6 +34,7 @@ var (
 	ErrExists      = errors.New("the destination app bundle already exists; select a separate output directory")
 	ErrBuild       = errors.New("the draft app bundle could not be assembled")
 	ErrDurability  = errors.New("the draft app bundle was published, but output synchronization failed")
+	ErrMetadata    = errors.New("the installed app metadata does not match the supported service layout")
 )
 
 type Options struct {
@@ -159,4 +163,26 @@ func compatibleMinimum(version uint32) bool { return version >= 10<<16 && versio
 
 func layout(o Options) map[string][]byte {
 	return map[string][]byte{"Contents/Info.plist": infoPlist(o), DaemonRelative: daemonPlist()}
+}
+
+// ValidateMetadata accepts exactly the builder's property lists. Version/build
+// may vary by release; service identity, arguments, account and launch policy
+// cannot. Reconstructing and comparing the complete document also rejects
+// duplicate keys, aliases, extra fields and alternate XML interpretations.
+func ValidateMetadata(info, daemon []byte) error {
+	if len(info) == 0 || len(info) > 32<<10 || !bytes.Equal(daemon, daemonPlist()) {
+		return ErrMetadata
+	}
+	var document struct {
+		Strings []string `xml:"dict>string"`
+	}
+	if xml.Unmarshal(info, &document) != nil || len(document.Strings) != 9 {
+		return ErrMetadata
+	}
+	version, buildText := document.Strings[6], document.Strings[7]
+	build, err := strconv.Atoi(buildText)
+	if err != nil || strconv.Itoa(build) != buildText || build < 1 || build > 9999 || !versionPattern.MatchString(version) || !bytes.Equal(info, infoPlist(Options{Version: version, Build: build})) {
+		return ErrMetadata
+	}
+	return nil
 }

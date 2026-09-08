@@ -24,17 +24,20 @@ var (
 	ErrRegistration  = errors.New("the native agent service could not be registered")
 	ErrStart         = errors.New("the registered agent service did not reach its running state; retain the identity and retry after correcting the service error")
 	ErrCleanup       = errors.New("activation finished, but local activation resources could not be closed")
+	ErrSignature     = errors.New("the installed app requires a valid notarized Developer ID Application signature")
+	ErrApproval      = errors.New("the macOS daemon is registered but requires administrator approval in System Settings > General > Login Items; allow OpenUEM Agent, then retry activation")
 )
 
 type Options struct{ IdentityDirectory string }
 
 // Running describes the native service state, never remote inventory delivery.
 type Result struct {
-	Registered bool   `json:"registered"`
-	Running    bool   `json:"running"`
-	DeviceID   string `json:"device_id"`
-	TenantID   int    `json:"tenant_id"`
-	SiteID     int    `json:"site_id"`
+	Registered       bool   `json:"registered"`
+	Running          bool   `json:"running"`
+	ApprovalRequired bool   `json:"approval_required,omitempty"`
+	DeviceID         string `json:"device_id"`
+	TenantID         int    `json:"tenant_id"`
+	SiteID           int    `json:"site_id"`
 }
 
 type identityStore interface {
@@ -76,7 +79,7 @@ func run(ctx context.Context, options Options, deps dependencies) (result Result
 	if ctx == nil || !nativepath.Valid(options.IdentityDirectory) {
 		return result, ErrOptions
 	}
-	if deps.platform != "windows" || (deps.architecture != "amd64" && deps.architecture != "arm64") {
+	if (deps.platform != "windows" && deps.platform != "darwin") || (deps.architecture != "amd64" && deps.architecture != "arm64") {
 		return result, ErrUnsupported
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -114,7 +117,11 @@ func run(ctx context.Context, options Options, deps dependencies) (result Result
 	}
 	defer identity.Close()
 	checkpoint, err := store.Checkpoint()
-	if err != nil || checkpoint.Sequence == 0 || checkpoint.Digest != identity.ReleaseDigest || identity.Platform != deps.platform || identity.Architecture != deps.architecture || identity.Keys == nil || identity.Keys.Certificate == nil || identity.Keys.Broker == nil || identity.AgentSize <= 0 || identity.AgentSHA256 == "" {
+	identityPlatform := deps.platform
+	if identityPlatform == "darwin" {
+		identityPlatform = "macos"
+	}
+	if err != nil || checkpoint.Sequence == 0 || checkpoint.Digest != identity.ReleaseDigest || identity.Platform != identityPlatform || identity.Architecture != deps.architecture || identity.Keys == nil || identity.Keys.Certificate == nil || identity.Keys.Broker == nil || identity.AgentSize <= 0 || identity.AgentSHA256 == "" {
 		return result, ErrIdentity
 	}
 	check := func() error {
@@ -141,6 +148,15 @@ func run(ctx context.Context, options Options, deps dependencies) (result Result
 		return result, err
 	}
 	defer closeResource(install.Close)
+	defer func() {
+		if reporter, ok := install.(interface{ RegistrationResult() (bool, bool) }); ok {
+			registered, approval := reporter.RegistrationResult()
+			if registered {
+				result.Registered, result.ApprovalRequired = true, approval
+				result.DeviceID, result.TenantID, result.SiteID = identity.Response.DeviceID, identity.Response.TenantID, identity.Response.SiteID
+			}
+		}
+	}()
 	for _, action := range []func(context.Context) error{install.PrepareConfiguration, install.Register} {
 		if err := check(); err != nil {
 			return result, err

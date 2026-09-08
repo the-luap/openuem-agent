@@ -54,3 +54,13 @@ func TestActivationHelpAndCancellationDoNotClaimRunning(t *testing.T) {
 		t.Fatal("cancellation misstated service state")
 	}
 }
+
+func TestActivationApprovalReturnsActionablePartialState(t *testing.T) {
+	var out, diag bytes.Buffer
+	_, code := handle(context.Background(), []string{"activate", "-identity-directory", t.TempDir()}, &out, &diag, func(context.Context, Options) (Result, error) {
+		return Result{Registered: true, ApprovalRequired: true, DeviceID: fixtureDeviceID, TenantID: 3, SiteID: 4}, ErrApproval
+	})
+	if code != 3 || !strings.Contains(out.String(), `"approval_required":true`) || !strings.Contains(out.String(), `"running":false`) || !strings.Contains(diag.String(), "System Settings") {
+		t.Fatal("approval state was reported as startup success", code, out.String(), diag.String())
+	}
+}

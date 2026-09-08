@@ -4,9 +4,10 @@ The installed Windows/macOS agent handles `enroll` before creating a logger or
 starting its service. The command joins independently authorized bootstrap data,
 native installer trust, the installed executable's signed byte binding and native
 protected identity storage. It does not execute the downloaded installer or
-activate the service. Windows has a separate [activation command](native-windows-activation.md).
-A finished end-user installer, release signing/provisioning pipeline and macOS
-activation remain required integration work.
+activate the service. Separate [Windows](native-windows-activation.md) and
+[macOS](native-macos-activation.md) activation flows use the completed identity.
+A finished end-user installer, release signing/provisioning pipeline and final
+signed-release acceptance remain required integration work.
 
 Run `openuem-agent enroll -help` for the complete English usage. On Windows invoke
 the installed `openuem-agent.exe`; on macOS invoke the installed agent binary.
