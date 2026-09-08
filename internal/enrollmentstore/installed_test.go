@@ -8,11 +8,34 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/open-uem/nats/enrollment"
 	"github.com/open-uem/nats/enrollment/artifacts"
 )
+
+func TestStoredAgentBindingRejectsPartialAndNoncanonicalPairs(t *testing.T) {
+	for _, pair := range []struct {
+		size   int64
+		digest string
+	}{
+		{0, strings.Repeat("a", 64)}, {1, ""}, {-1, strings.Repeat("a", 64)},
+		{artifacts.MaxPackageSize + 1, strings.Repeat("a", 64)}, {1, strings.Repeat("A", 64)},
+		{1, strings.Repeat("g", 64)}, {1, strings.Repeat("a", 63)},
+	} {
+		backend := newMemoryBackend(t)
+		config := testBootstrap()
+		config.AgentSize, config.AgentSHA256 = pair.size, pair.digest
+		_, err := (&Store{backend: backend}).enroll(context.Background(), config, func(context.Context, enrollment.Request) (*enrollment.Response, error) {
+			t.Fatal("invalid executable binding reached a claim")
+			return nil, nil
+		})
+		if !errors.Is(err, ErrUnavailable) || len(backend.records) != 0 {
+			t.Fatal("invalid executable binding was persisted", err)
+		}
+	}
+}
 
 func TestInstalledEnrollmentChecksAdmissionAtEveryPublicationBoundary(t *testing.T) {
 	for _, failure := range []int{1, 2, 3} {
@@ -73,7 +96,19 @@ func TestInstalledEnrollmentChecksAdmissionAtEveryPublicationBoundary(t *testing
 			if err != nil {
 				t.Fatal("admission recovery failed", err)
 			}
+			artifact := verified.Artifact()
+			if identity.AgentSize != artifact.AgentSize || identity.AgentSHA256 != artifact.AgentSHA256 {
+				t.Fatal("admitted executable binding was not returned")
+			}
 			identity.Close()
+			loaded, err := store.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if loaded.AgentSize != artifact.AgentSize || loaded.AgentSHA256 != artifact.AgentSHA256 {
+				t.Fatal("protected state lost the admitted executable binding")
+			}
+			loaded.Close()
 			issuer.mu.Lock()
 			if issuer.requests != requests+1 || (binding != "" && issuer.binding != binding) {
 				t.Error("recovery replaced an issued key binding")

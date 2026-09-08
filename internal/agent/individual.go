@@ -16,6 +16,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	openuem "github.com/open-uem/nats"
 	"github.com/open-uem/nats/enrollment"
+	"github.com/open-uem/openuem-agent/internal/bootstrapinstall"
 	"github.com/open-uem/openuem-agent/internal/enrollmentstore"
 )
 
@@ -74,6 +75,23 @@ func (a *Agent) configureIndividual(mode, directory string) error {
 	if identity.Platform != platform || identity.Architecture != runtime.GOARCH {
 		identity.Close()
 		return errIndividualAgent
+	}
+	if identity.AgentSize > 0 || identity.AgentSHA256 != "" {
+		image, err := bootstrapinstall.OpenRunningAgent()
+		if err != nil {
+			identity.Close()
+			return errIndividualAgent
+		}
+		ctx := a.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		err = image.VerifyStoredBinding(ctx, identity.AgentSize, identity.AgentSHA256)
+		closeErr := image.Close()
+		if err != nil || closeErr != nil {
+			identity.Close()
+			return errIndividualAgent
+		}
 	}
 	parent := a.ctx
 	if parent == nil {

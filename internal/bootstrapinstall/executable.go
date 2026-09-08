@@ -2,6 +2,8 @@ package bootstrapinstall
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -114,6 +116,52 @@ func (e *Executable) unchanged() bool {
 	}
 	current, err := e.file.Stat()
 	return err == nil && os.SameFile(e.info, current) && current.Size() == e.info.Size() && current.ModTime().Equal(e.info.ModTime()) && codeFileProtected(e.file, current) == nil
+}
+
+// InstalledPath returns the retained executable's path only while its local
+// file identity and permissions remain unchanged. It does not verify a release
+// signature/hash; enrollment must independently perform Verify before admitting
+// an identity. Service activation uses this local check after loading that state.
+func (e *Executable) InstalledPath() (string, error) {
+	if e == nil {
+		return "", ErrPackage
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.file == nil || e.info == nil || !e.unchanged() {
+		return "", ErrPackage
+	}
+	return e.path, nil
+}
+
+// VerifyStoredBinding verifies the executable admitted during completed native
+// enrollment, after its invitation/release envelope may have expired. The size
+// and digest must come from protected identity state, never a command argument.
+func (e *Executable) VerifyStoredBinding(ctx context.Context, size int64, digest string) error {
+	if e == nil || ctx == nil || size <= 0 || size > artifacts.MaxPackageSize {
+		return ErrPackage
+	}
+	decoded, err := hex.DecodeString(digest)
+	if err != nil || len(decoded) != sha256.Size || hex.EncodeToString(decoded) != digest {
+		return ErrPackage
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if e.file == nil || e.info == nil || e.info.Size() != size || !e.unchanged() {
+		return ErrPackage
+	}
+	hash := sha256.New()
+	count, err := io.Copy(hash, contextReader{ctx: ctx, reader: io.NewSectionReader(e.file, 0, size+1)})
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil || count != size || hex.EncodeToString(hash.Sum(nil)) != digest || !e.unchanged() {
+		return ErrPackage
+	}
+	return nil
 }
 
 func (e *Executable) Close() error {

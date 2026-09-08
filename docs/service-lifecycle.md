@@ -3,8 +3,10 @@
 The Windows service no longer reports `Running` before identity/configuration
 validation or blocks its control loop on the first inventory report. Linux and
 macOS install SIGTERM/SIGINT handlers before constructing the agent. These are
-service lifecycle changes; installer registration, operational configuration
-provisioning and automatic activation after enrollment remain separate work.
+service lifecycle changes. Windows now has a separate
+[activation command](native-windows-activation.md) for configuration, registration
+and startup after completed enrollment. End-user installer integration and macOS
+service registration remain separate work.
 The subsequent explicit `serve -identity-directory` selection is described in
 [runtime configuration](individual-agent-runtime.md).
 

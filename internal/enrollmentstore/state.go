@@ -37,6 +37,10 @@ type Bootstrap struct {
 	TenantID        int    `json:"tenant_id,omitempty"`
 	SiteID          int    `json:"site_id,omitempty"`
 	ReleaseSequence uint64 `json:"release_sequence,omitempty"`
+	// Installed-agent admission binds these bytes before pending publication.
+	// Both fields are absent in older records, which remain readable.
+	AgentSize   int64  `json:"agent_size,omitempty"`
+	AgentSHA256 string `json:"agent_sha256,omitempty"`
 }
 
 func (Bootstrap) String() string     { return "[individual enrollment bootstrap]" }
@@ -44,12 +48,14 @@ func (b Bootstrap) GoString() string { return b.String() }
 
 func (b Bootstrap) valid() bool {
 	digest, err := hex.DecodeString(b.ReleaseDigest)
+	agentDigest, agentErr := hex.DecodeString(b.AgentSHA256)
+	agentValid := b.AgentSize == 0 && b.AgentSHA256 == "" || b.AgentSize > 0 && b.AgentSize <= artifacts.MaxPackageSize && agentErr == nil && len(agentDigest) == sha256.Size && hex.EncodeToString(agentDigest) == b.AgentSHA256
 	return enrollment.ValidOrigin(b.Origin) && enrollment.ValidToken(b.Invitation) &&
 		(b.Platform == "windows" || b.Platform == "macos") &&
 		(b.Architecture == "amd64" || b.Architecture == "arm64") &&
 		len(b.DeviceName) <= 255 && utf8.ValidString(b.DeviceName) && !strings.ContainsAny(b.DeviceName, "\x00\r\n") &&
 		err == nil && len(digest) == sha256.Size && hex.EncodeToString(digest) == b.ReleaseDigest &&
-		((b.TenantID == 0 && b.SiteID == 0) || (b.TenantID > 0 && b.SiteID > 0)) && b.ReleaseSequence <= math.MaxInt64
+		((b.TenantID == 0 && b.SiteID == 0) || (b.TenantID > 0 && b.SiteID > 0)) && b.ReleaseSequence <= math.MaxInt64 && agentValid
 }
 
 func (b Bootstrap) matchesScope(response enrollment.Response) bool {
@@ -66,6 +72,8 @@ type Identity struct {
 	ReleaseDigest string
 	Platform      string
 	Architecture  string
+	AgentSize     int64
+	AgentSHA256   string
 }
 
 func (Identity) String() string               { return "[protected individual agent identity]" }
@@ -320,7 +328,7 @@ func (s *Store) loadIdentity(p *pending) (*Identity, error) {
 	if _, err = enrollment.ValidateResponse(response, p.bootstrap.Origin, &p.keys.Certificate.PublicKey, time.Now()); err != nil {
 		return nil, ErrUnavailable
 	}
-	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest, Platform: p.bootstrap.Platform, Architecture: p.bootstrap.Architecture}
+	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest, Platform: p.bootstrap.Platform, Architecture: p.bootstrap.Architecture, AgentSize: p.bootstrap.AgentSize, AgentSHA256: p.bootstrap.AgentSHA256}
 	p.keys = nil // transfer ownership, including when returning a competing result
 	return identity, nil
 }

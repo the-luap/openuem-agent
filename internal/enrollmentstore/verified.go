@@ -45,6 +45,10 @@ func (s *Store) enrollVerified(ctx context.Context, verified *bootstrap.Verified
 	}
 	config := verified.Config()
 	b := Bootstrap{Origin: config.Origin, Invitation: config.Invitation, Platform: config.Platform, Architecture: config.Architecture, DeviceName: deviceName, ReleaseDigest: config.ReleaseDigest, TenantID: config.TenantID, SiteID: config.SiteID}
+	if admission != nil {
+		artifact := verified.Artifact()
+		b.AgentSize, b.AgentSHA256 = artifact.AgentSize, artifact.AgentSHA256
+	}
 	if !b.valid() || b.TenantID <= 0 || b.SiteID <= 0 {
 		return nil, ErrUnavailable
 	}

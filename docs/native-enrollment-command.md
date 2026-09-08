@@ -4,8 +4,9 @@ The installed Windows/macOS agent handles `enroll` before creating a logger or
 starting its service. The command joins independently authorized bootstrap data,
 native installer trust, the installed executable's signed byte binding and native
 protected identity storage. It does not execute the downloaded installer or
-activate the service. A finished end-user installer, release signing/provisioning
-pipeline and service activation/recovery remain required integration work.
+activate the service. Windows has a separate [activation command](native-windows-activation.md).
+A finished end-user installer, release signing/provisioning pipeline and macOS
+activation remain required integration work.
 
 Run `openuem-agent enroll -help` for the complete English usage. On Windows invoke
 the installed `openuem-agent.exe`; on macOS invoke the installed agent binary.
@@ -72,6 +73,12 @@ The command's callback verifies both retained files and the latest checkpoint re
 before entering the store. It does not call store methods recursively while the
 store holds its lifetime lock. Existing exclusive pending publication still rejects
 a competing different bootstrap rather than replacing its keys or scope.
+
+Installed admission also persists the signed executable size and SHA-256 in the
+protected pending record. Completed identity loads retain this binding, and the
+individual runtime checks its actual running image on subsequent starts. Older
+unbound records remain readable but cannot use Windows activation; binding
+migration and authorized executable updates are separate required operations.
 
 A failed check after server issuance leaves pending keys intact. Repeating the
 same command can recover with those exact keys while the invitation/configuration

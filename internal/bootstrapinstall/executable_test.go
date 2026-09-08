@@ -2,6 +2,8 @@ package bootstrapinstall
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +14,59 @@ import (
 	"github.com/open-uem/nats/enrollment/artifacts"
 	"github.com/open-uem/nats/enrollment/keyfile"
 )
+
+func TestStoredExecutableBindingRequiresCanonicalHashAndRetainedBytes(t *testing.T) {
+	content := []byte("installed executable binding fixture")
+	sum := sha256.Sum256(content)
+	digest := hex.EncodeToString(sum[:])
+	path := filepath.Join(t.TempDir(), "agent")
+	if err := keyfile.Create(path, content); err != nil {
+		t.Fatal(err)
+	}
+	image, err := openAgentExecutable(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer image.Close()
+	ctx := context.Background()
+	if err := image.VerifyStoredBinding(ctx, int64(len(content)), digest); err != nil {
+		t.Fatal("completed binding could not be used without a live invitation", err)
+	}
+	for _, c := range []struct {
+		size   int64
+		digest string
+	}{
+		{0, digest}, {artifacts.MaxPackageSize + 1, digest}, {int64(len(content) + 1), digest},
+		{int64(len(content)), ""}, {int64(len(content)), strings.ToUpper(digest)},
+		{int64(len(content)), strings.Repeat("a", 64)},
+	} {
+		if err := image.VerifyStoredBinding(ctx, c.size, c.digest); !errors.Is(err, ErrPackage) {
+			t.Fatal("invalid stored binding accepted", err)
+		}
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := image.VerifyStoredBinding(canceled, int64(len(content)), digest); !errors.Is(err, context.Canceled) {
+		t.Fatal("stored executable hashing ignored cancellation", err)
+	}
+	if runtime.GOOS != "windows" {
+		// Preserve the path, length and timestamp: the content hash must still
+		// catch a change. Windows denies writing while the image is retained.
+		if err := os.WriteFile(path, []byte(strings.Repeat("x", len(content))), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, image.info.ModTime(), image.info.ModTime()); err != nil {
+			t.Fatal(err)
+		}
+		if err := image.VerifyStoredBinding(ctx, int64(len(content)), digest); !errors.Is(err, ErrPackage) {
+			t.Fatal("changed executable bytes retained the old identity binding", err)
+		}
+	}
+	image.Close()
+	if err := image.VerifyStoredBinding(ctx, int64(len(content)), digest); !errors.Is(err, ErrPackage) {
+		t.Fatal("closed executable accepted a stored binding", err)
+	}
+}
 
 func TestInstalledAgentRequiresSeparateReleaseBindingAndStableFileIdentity(t *testing.T) {
 	content := []byte("non-executable installed-agent fixture")

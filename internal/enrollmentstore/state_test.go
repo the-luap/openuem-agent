@@ -393,6 +393,7 @@ func TestPendingBootstrapCannotBeReplacedOrRedirected(t *testing.T) {
 		func(b *Bootstrap) { b.TenantID = 7 },
 		func(b *Bootstrap) { b.SiteID = 8 },
 		func(b *Bootstrap) { b.ReleaseSequence = 43 },
+		func(b *Bootstrap) { b.AgentSize, b.AgentSHA256 = 1, strings.Repeat("a", 64) },
 	} {
 		other := config
 		change(&other)
