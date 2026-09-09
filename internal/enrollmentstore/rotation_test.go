@@ -40,6 +40,41 @@ func rotationFixture(t *testing.T, backend NativeBackend) (*Store, *Identity, *R
 	return s, i, j, task, nonce
 }
 
+func TestRotationJournalPreservesAdmissionBootAndDoesNotUpgradeLegacyEvidence(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		backend := newMemoryBackend(t)
+		_, identity, j, task, nonce := rotationFixture(t, backend)
+		defer identity.Close()
+		boot := uuid.NewString()
+		var admitted bool
+		var entry *RotationEntry
+		var err error
+		if legacy {
+			admitted, entry, err = j.Begin(*task, nonce)
+		} else {
+			admitted, entry, err = j.BeginWithBootSession(*task, nonce, boot)
+		}
+		if err != nil || !admitted || entry == nil || (entry.BootSessionID == boot) == legacy {
+			t.Fatal("incorrect immutable boot admission", err)
+		}
+		before, err := backend.Load(rotationRecord(false, task.Context.Ordinal))
+		if err != nil {
+			t.Fatal(err)
+		}
+		admitted, entry, err = j.BeginWithBootSession(*task, nonce, uuid.NewString())
+		if err != nil || admitted || (entry.BootSessionID == boot) == legacy {
+			t.Fatal("retry rewrote original boot evidence", err)
+		}
+		after, err := backend.Load(rotationRecord(false, task.Context.Ordinal))
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatal("boot evidence was replaced", err)
+		}
+		if _, _, err = j.BeginWithBootSession(*task, nonce, ""); err == nil {
+			t.Fatal("missing boot evidence admitted")
+		}
+	}
+}
+
 func journalResult(t *testing.T, j *RotationJournal, i *Identity, c enrollment.RotationContext, nonce []byte, outcome string) *enrollment.RotationResult {
 	t.Helper()
 	var key []byte
@@ -56,6 +91,7 @@ func journalResult(t *testing.T, j *RotationJournal, i *Identity, c enrollment.R
 func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 	t.Helper()
 	s, i, j, task, nonce := rotationFixture(t, backend)
+	boot := uuid.NewString()
 	before := make(map[string][]byte)
 	for _, name := range []string{pendingRecord, identityRecord, recipientRecord, rotationAnchorRecord} {
 		var err error
@@ -87,7 +123,7 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 				results <- admission{err: err}
 				return
 			}
-			won, _, err := journal.Begin(*task, nonce)
+			won, _, err := journal.BeginWithBootSession(*task, nonce, boot)
 			results <- admission{won, err}
 		})
 	}
@@ -105,7 +141,7 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 	if winners != 1 {
 		t.Fatal("attempt did not have exactly one durable creator", winners)
 	}
-	if won, entry, err := j.Begin(*task, nonce); err != nil || won || entry == nil || entry.Result != nil || !bytes.Equal(entry.Nonce, nonce) {
+	if won, entry, err := j.BeginWithBootSession(*task, nonce, boot); err != nil || won || entry == nil || entry.Result != nil || !bytes.Equal(entry.Nonce, nonce) {
 		t.Fatal("intent-only retry authorized another execution", won, err)
 	}
 	result := journalResult(t, j, i, task.Context, nonce, "rotated")
@@ -126,8 +162,8 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	won, entry, err := restarted.Begin(*task, nonce)
-	if err != nil || won || entry == nil || entry.Result == nil {
+	won, entry, err := restarted.BeginWithBootSession(*task, nonce, boot)
+	if err != nil || won || entry == nil || entry.Result == nil || entry.BootSessionID != boot {
 		t.Fatal("restart lost the receipt or admitted another mutation", err)
 	}
 	want, _ := json.Marshal(result)

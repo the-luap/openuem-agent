@@ -17,7 +17,10 @@ const maxRotationOutput = 8192
 type FileVaultRotation struct {
 	outcome string
 	key     []byte
+	stopped bool
 }
+
+func (r *FileVaultRotation) ExecutionStopped() bool { return r != nil && r.stopped }
 
 func (*FileVaultRotation) String() string               { return "[private FileVault rotation result]" }
 func (r *FileVaultRotation) GoString() string           { return r.String() }
@@ -106,6 +109,9 @@ func rotateFileVaultRecoveryKey(ctx context.Context, key []byte, command command
 	// the OS left its key unchanged. Never map it to a retryable preflight error.
 	r.outcome = "uncertain"
 	runErr := cmd.Wait()
+	// Unlike a newly acquired parent lease, reaping this exact direct process
+	// establishes that it cannot continue running after an agent recovery check.
+	r.stopped = cmd.ProcessState != nil
 	if output.overflow {
 		return r
 	}

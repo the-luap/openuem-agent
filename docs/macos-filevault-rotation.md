@@ -1,8 +1,8 @@
 # Private FileVault rotation
 
-The individual Mac agent implements encrypted rotation protocol v1, a protected
+The individual Mac agent implements encrypted rotation protocol v2, a protected
 attempt journal, a private process lease and a bounded local OS driver. Execution
-requires both `recovery_task_version: 1` and `rotation_task_version: 1` from a
+requires both `recovery_task_version: 1` and `rotation_task_version: 2` from a
 compatible worker, an accessible journal and an encrypted authorized task.
 Absent, unsupported or legacy capabilities never enable rotation. Worker routing,
 console escrow authorization and physical Mac acceptance are separate integration
@@ -24,7 +24,11 @@ rotation-result-v1-NNN
 ```
 
 The start record contains the installation binding, complete rotation context,
-32-byte nonce and SHA-256 digest of the exact encrypted task. It contains no PRK.
+32-byte nonce, SHA-256 digest of the exact encrypted task and kernel boot-session
+UUID read from `kern.bootsessionuuid`. New records use the v2 start-record framing
+inside the same fixed slot names. Legacy v1 records remain readable, without
+inventing boot evidence or rewriting their original contents. Neither format
+contains a PRK.
 The result record contains the binding and the certificate-signed outcome with
 any new key encrypted to the separate console return recipient. Records are
 immutable and never garbage-collected or reused. The server registry imposes the
@@ -46,13 +50,15 @@ and encrypted signed receipt, and refuse accidental JSON serialization.
    Immutable admission prevents duplicate execution, but an intent-only reader
    must not report a still-running owner's attempt as crashed. A busy lease
    means that another process owns this work; it must not trigger recovery.
-3. Call `Begin`. Only `admitted=true` permits a bounded OS attempt. That return
+3. Read `macsecurity.BootSessionID` and call `BeginWithBootSession`. Only
+   `admitted=true` permits a bounded OS attempt. That return
    requires exclusive intent creation and a successful reload of matching durable
    evidence while the task is still live. A lost commit response, expired task,
    conflicting context, changed ciphertext or different nonce never admits work.
 4. An existing intent never permits another mutation. `Lookup` returns the exact
-   cached receipt if present. After excluding a live owner, an intent without a
-   receipt requires an uncertainty report and independent native escrow recovery.
+   cached receipt if present. A free parent lease does not exclude an orphaned
+   command. An intent without a receipt stays blocked during the same kernel boot.
+   A different boot from the recorded admission permits signed stopping evidence.
 5. Create a signed encrypted result and call `RecordResult` before transmitting
    it. Retain the exact encrypted result in memory for persistence retries. A lost
    storage confirmation can be retried without regenerating ciphertext. Only an
@@ -60,7 +66,7 @@ and encrypted signed receipt, and refuse accidental JSON serialization.
 
 `Lookup` and `RecordResult` allow receipts after the execution deadline, while
 still requiring the active signing certificate and exact scope, context and nonce.
-`Begin` rejects expired execution. An orphan result, malformed framed record,
+`BeginWithBootSession` rejects missing boot identity and expired execution. An orphan result, malformed framed record,
 noncanonical JSON, changed signature or foreign installation binding fails closed.
 
 The runtime validates the old PRK before mutation, passes keys only via owned
@@ -86,6 +92,8 @@ Closing it or terminating its process releases the kernel lock. The empty file
 is deliberately never unlinked, so another owner cannot lock a replacement inode
 while an existing descriptor remains locked. The lease contains no secret or
 execution evidence; the protected journal retains that evidence after a crash.
+A launched child can survive the parent and continue after this lock becomes
+available. Acquiring the lock therefore never proves that the command stopped.
 
 ## OS driver and runtime
 
@@ -124,9 +132,20 @@ The runtime signs and encrypts it while holding the lease, publishes it to the
 journal, releases/clears plaintext and then sends the receipt. Storage retries keep
 the exact encrypted bytes; lost network acknowledgements retry the saved receipt.
 A restarted runtime reads its journal before decryption or execution. A busy lease
-cannot be treated as a crashed owner. An intent-only record becomes signed
-uncertainty, never another rotation. A receipt request without local evidence
-cannot invent an execution nonce or trigger a mutation.
+cannot be treated as a crashed owner. An intent-only record during the same kernel
+boot waits without reporting or repeating execution. A new kernel boot excludes
+the old process and permits an `uncertain` receipt with signed
+`execution_stopped: true`. During normal execution, the driver may report this
+evidence after `Wait` reaps its exact mutation process. A missing/unknown exit
+does not receive this flag. No automatic reboot is performed.
+
+Deadline expiry, reconnecting the agent or changing its PID is insufficient.
+Legacy intents without a boot UUID and immutable uncertainty receipts without
+the stopping flag cannot authorize automatic old-key resolution. Native escrow
+and retained key history remain available for recovery. A receipt request without
+local evidence cannot invent an execution nonce or trigger a mutation. Protocol
+v2 negotiation prevents an old worker or agent from enabling the new workflow;
+validation remains protocol v1 and existing encrypted context bindings are retained.
 
 One owned goroutine serializes registration, read-only validation and rotation,
 sharing the protected recipient epoch without races. The enrollment store stays
@@ -150,7 +169,11 @@ record lifecycle through its DPAPI backend. All test keys are synthetic. No test
 executes `fdesetup`, reads workstation encryption state or changes a real key.
 Mac lease tests use private temporary directories, concurrent handles and a
 separate helper process that is killed to verify automatic kernel release. They
-also reject unsafe path/file types without altering existing state.
+also reject unsafe path/file types without altering existing state. A two-process
+fixture proves that the child survives while its crashed parent releases the lease.
+A read-only kernel test checks boot UUID availability and stability. Runtime tests
+separately verify observed termination, same-boot waiting, simulated subsequent
+boots, missing boot evidence and conservative legacy handling.
 Driver tests launch only the Go fixture executable and exercise stdin/environment
 isolation, all outcomes, timeouts, process-start failure, malformed output,
 candidate preservation and secret clearing. Output-parser fuzzing checks bounded

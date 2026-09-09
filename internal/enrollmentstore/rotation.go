@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	rotationAnchorMagic = "openuem/enrollment/rotation/anchor/v1\x00"
-	rotationStartMagic  = "openuem/enrollment/rotation/start/v1\x00"
-	rotationResultMagic = "openuem/enrollment/rotation/result/v1\x00"
+	rotationAnchorMagic  = "openuem/enrollment/rotation/anchor/v1\x00"
+	rotationStartMagic   = "openuem/enrollment/rotation/start/v1\x00"
+	rotationStartMagicV2 = "openuem/enrollment/rotation/start/v2\x00"
+	rotationResultMagic  = "openuem/enrollment/rotation/result/v1\x00"
 )
 
 // RotationJournal holds no PRK or private signing key. Its Store must remain
@@ -30,10 +31,11 @@ type RotationJournal struct {
 }
 
 type RotationEntry struct {
-	Context    enrollment.RotationContext
-	Nonce      []byte
-	TaskDigest []byte
-	Result     *enrollment.RotationResult
+	BootSessionID string
+	Context       enrollment.RotationContext
+	Nonce         []byte
+	TaskDigest    []byte
+	Result        *enrollment.RotationResult
 }
 
 func (*RotationEntry) String() string               { return "[protected FileVault rotation journal entry]" }
@@ -158,7 +160,11 @@ func (j *RotationJournal) lookup(c enrollment.RotationContext) (*RotationEntry, 
 	if startErr != nil || resultErr != nil && !errors.Is(resultErr, ErrMissing) {
 		return nil, ErrUnavailable
 	}
-	fields, err := decodeFields(start, rotationStartMagic, 4)
+	magic, count := rotationStartMagic, 4
+	if bytes.HasPrefix(start, []byte(rotationStartMagicV2)) {
+		magic, count = rotationStartMagicV2, 5
+	}
+	fields, err := decodeFields(start, magic, count)
 	if err != nil || !bytes.Equal(fields[0], j.binding) || len(fields[2]) != 32 || len(fields[3]) != 32 {
 		return nil, ErrUnavailable
 	}
@@ -167,6 +173,12 @@ func (j *RotationJournal) lookup(c enrollment.RotationContext) (*RotationEntry, 
 		return nil, ErrUnavailable
 	}
 	entry := &RotationEntry{Context: saved, Nonce: bytes.Clone(fields[2]), TaskDigest: bytes.Clone(fields[3])}
+	if count == 5 {
+		entry.BootSessionID = string(fields[4])
+		if !enrollment.ValidDeviceID(entry.BootSessionID) {
+			return nil, ErrUnavailable
+		}
+	}
 	if errors.Is(resultErr, ErrMissing) {
 		return entry, nil
 	}
@@ -186,6 +198,20 @@ func (j *RotationJournal) lookup(c enrollment.RotationContext) (*RotationEntry, 
 // A lost commit response, conflicting slot or failed reload never admits an OS
 // command. The caller must authenticate/decrypt the task before supplying nonce.
 func (j *RotationJournal) Begin(task enrollment.RotationTask, nonce []byte) (admitted bool, entry *RotationEntry, err error) {
+	return j.begin(task, nonce, "")
+}
+
+// BeginWithBootSession preserves kernel boot identity before an OS command can
+// start. A different later boot can exclude orphaned commands after agent death.
+// Legacy intents remain readable but cannot acquire invented boot evidence.
+func (j *RotationJournal) BeginWithBootSession(task enrollment.RotationTask, nonce []byte, boot string) (bool, *RotationEntry, error) {
+	if !enrollment.ValidDeviceID(boot) {
+		return false, nil, ErrUnavailable
+	}
+	return j.begin(task, nonce, boot)
+}
+
+func (j *RotationJournal) begin(task enrollment.RotationTask, nonce []byte, boot string) (admitted bool, entry *RotationEntry, err error) {
 	if j == nil || j.store == nil {
 		return false, nil, ErrUnavailable
 	}
@@ -202,7 +228,13 @@ func (j *RotationJournal) Begin(task enrollment.RotationTask, nonce []byte) (adm
 	}
 	if entry == nil {
 		bound, _ := json.Marshal(task.Context)
-		record, err := encodeFields(rotationStartMagic, j.binding, bound, nonce, digest[:])
+		magic := rotationStartMagic
+		fields := [][]byte{j.binding, bound, nonce, digest[:]}
+		if boot != "" {
+			magic = rotationStartMagicV2
+			fields = append(fields, []byte(boot))
+		}
+		record, err := encodeFields(magic, fields...)
 		if err != nil {
 			return false, nil, ErrUnavailable
 		}
@@ -214,7 +246,7 @@ func (j *RotationJournal) Begin(task enrollment.RotationTask, nonce []byte) (adm
 		}
 		entry, err = j.lookup(task.Context)
 	}
-	if err != nil || entry == nil || !bytes.Equal(entry.Nonce, nonce) || !bytes.Equal(entry.TaskDigest, digest[:]) || !task.Valid(time.Now()) {
+	if err != nil || entry == nil || admitted && entry.BootSessionID != boot || !bytes.Equal(entry.Nonce, nonce) || !bytes.Equal(entry.TaskDigest, digest[:]) || !task.Valid(time.Now()) {
 		return false, nil, ErrUnavailable
 	}
 	if entry.Result != nil {

@@ -59,7 +59,7 @@ func (j *rotationJournalFixture) Lookup(c enrollment.RotationContext) (*enrollme
 	return cloneRotationEntry(entry), nil
 }
 
-func (j *rotationJournalFixture) Begin(task enrollment.RotationTask, nonce []byte) (bool, *enrollmentstore.RotationEntry, error) {
+func (j *rotationJournalFixture) BeginWithBootSession(task enrollment.RotationTask, nonce []byte, boot string) (bool, *enrollmentstore.RotationEntry, error) {
 	j.beginCalls++
 	entry, err := j.Lookup(task.Context)
 	if err != nil {
@@ -73,7 +73,7 @@ func (j *rotationJournalFixture) Begin(task enrollment.RotationTask, nonce []byt
 	}
 	wire, _ := json.Marshal(task)
 	digest := sha256.Sum256(wire)
-	entry = &enrollmentstore.RotationEntry{Context: task.Context, Nonce: bytes.Clone(nonce), TaskDigest: bytes.Clone(digest[:])}
+	entry = &enrollmentstore.RotationEntry{Context: task.Context, BootSessionID: boot, Nonce: bytes.Clone(nonce), TaskDigest: bytes.Clone(digest[:])}
 	j.entries[task.Context.Ordinal] = entry
 	return true, cloneRotationEntry(entry), nil
 }
@@ -118,7 +118,10 @@ type rotationFixtureResult struct {
 	outcome string
 	key     []byte
 	closed  bool
+	stopped bool
 }
+
+func (r *rotationFixtureResult) ExecutionStopped() bool { return r.stopped }
 
 func (r *rotationFixtureResult) Outcome() string { return r.outcome }
 func (r *rotationFixtureResult) Key() []byte     { return r.key }
@@ -137,6 +140,7 @@ type rotationRuntimeFixture struct {
 	borrowed  []byte
 	local     *rotationFixtureResult
 	runHook   func(context.Context)
+	bootID    string
 }
 
 func newRotationRuntimeFixture(t *testing.T) *rotationRuntimeFixture {
@@ -155,7 +159,8 @@ func newRotationRuntimeFixture(t *testing.T) *rotationRuntimeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.client = &rotationClient{recovery: recovery, journal: j}
+	f.bootID = uuid.NewString()
+	f.client = &rotationClient{recovery: recovery, journal: j, bootSession: func() (string, error) { return f.bootID, nil }}
 	f.client.lease = func() (io.Closer, rotationRunner, error) {
 		if j.busy || j.leased {
 			return nil, nil, macsecurity.ErrRotationBusy
@@ -172,7 +177,7 @@ func newRotationRuntimeFixture(t *testing.T) *rotationRuntimeFixture {
 			if !ok || deadline.After(time.Unix(f.task.Context.Binding.ExpiresAt, 0)) || deadline.After(recovery.certificate.NotAfter.Add(-enrollment.RotationReceiptGrace)) {
 				t.Error("driver exceeded mutation or certificate deadline")
 			}
-			f.local = &rotationFixtureResult{outcome: "rotated", key: []byte("1111-2222-3333-4444-5555-6666")}
+			f.local = &rotationFixtureResult{stopped: true, outcome: "rotated", key: []byte("1111-2222-3333-4444-5555-6666")}
 			if f.runHook != nil {
 				f.runHook(ctx)
 			}
@@ -197,7 +202,7 @@ func (f *rotationRuntimeFixture) exchange(result func(*enrollment.RotationResult
 		if err != nil {
 			return nil, err
 		}
-		reply := enrollment.RotationReply{Version: 1, Protocol: enrollment.RotationProtocol, OK: true}
+		reply := enrollment.RotationReply{Version: enrollment.RotationVersion, Protocol: enrollment.RotationProtocol, OK: true}
 		if r.Action == "poll" {
 			reply.Task = f.task
 		} else if r.Action == "result" {
@@ -232,7 +237,7 @@ func TestRotationRuntimePrivateTransportPersistsBeforeSendingAndRetriesOnlyRecei
 			t.Error(err)
 			return
 		}
-		reply := enrollment.RotationReply{Version: 1, Protocol: enrollment.RotationProtocol, OK: true}
+		reply := enrollment.RotationReply{Version: enrollment.RotationVersion, Protocol: enrollment.RotationProtocol, OK: true}
 		if request.Action == "poll" {
 			polls++
 			reply.Task = f.task
@@ -338,13 +343,13 @@ func TestRotationRuntimePersistsChangedKeyDespiteShutdownAndWriteFailures(t *tes
 	}
 }
 
-func TestRotationRuntimeRecoversIntentOnlyAfterExcludingLiveOwner(t *testing.T) {
+func TestRotationRuntimeRecoversIntentOnlyAfterAnotherKernelBoot(t *testing.T) {
 	f := newRotationRuntimeFixture(t)
 	lease, _, err := f.client.lease()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if admitted, _, err := f.journal.Begin(*f.task, f.nonce); err != nil || !admitted {
+	if admitted, _, err := f.journal.BeginWithBootSession(*f.task, f.nonce, f.bootID); err != nil || !admitted {
 		t.Fatal(err)
 	}
 	lease.Close()
@@ -356,12 +361,12 @@ func TestRotationRuntimeRecoversIntentOnlyAfterExcludingLiveOwner(t *testing.T) 
 		if err != nil {
 			return nil, err
 		}
-		reply := enrollment.RotationReply{Version: 1, Protocol: enrollment.RotationProtocol, OK: true}
+		reply := enrollment.RotationReply{Version: enrollment.RotationVersion, Protocol: enrollment.RotationProtocol, OK: true}
 		if request.Action == "poll" {
 			reply.Receipt = &f.task.Context
 		} else {
 			reports++
-			if request.Result.Outcome != "uncertain" || request.Result.NewKey != nil || enrollment.VerifyRotationResult(*request.Result, f.client.recovery.certificate, time.Now()) != nil {
+			if request.Result.Outcome != "uncertain" || !request.Result.ExecutionStopped || request.Result.NewKey != nil || enrollment.VerifyRotationResult(*request.Result, f.client.recovery.certificate, time.Now()) != nil {
 				t.Error("intent recovery lost signed uncertainty")
 			}
 		}
@@ -372,8 +377,58 @@ func TestRotationRuntimeRecoversIntentOnlyAfterExcludingLiveOwner(t *testing.T) 
 		t.Fatal("live owner was reported as crashed", err)
 	}
 	f.journal.busy = false
+	if err := f.client.cycle(t.Context(), f.register, exchange); err != nil || reports != 0 || f.journal.entries[1].Result != nil || f.runs != 0 {
+		t.Fatal("free parent lease became stopping proof during the same boot", err)
+	}
+	f.bootID = uuid.NewString()
 	if err := f.client.cycle(t.Context(), f.register, exchange); err != nil || reports != 1 || f.runs != 0 || f.journal.beginCalls != 1 {
 		t.Fatal("interrupted attempt was rerun", err)
+	}
+}
+
+func TestRotationRuntimeRequiresBootIdentityBeforeAdmission(t *testing.T) {
+	for _, boot := range []string{"", "invalid", uuid.Nil.String()} {
+		f := newRotationRuntimeFixture(t)
+		f.bootID = boot
+		if err := f.client.cycle(t.Context(), f.register, f.exchange(nil)); err == nil || f.runs != 0 || f.journal.beginCalls != 0 {
+			t.Fatal("missing kernel boot evidence admitted mutation", err)
+		}
+	}
+}
+
+func TestRotationRuntimeUnobservedExitAndLegacyIntentStayBlocked(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		f := newRotationRuntimeFixture(t)
+		f.runHook = func(context.Context) {
+			clear(f.local.key)
+			f.local.key = nil
+			f.local.outcome = "uncertain"
+			f.local.stopped = false
+		}
+		reports := 0
+		exchange := f.exchange(func(result *enrollment.RotationResult) error {
+			reports++
+			if !result.ExecutionStopped {
+				t.Error("missing stopping evidence")
+			}
+			return nil
+		})
+		if err := f.client.cycle(t.Context(), f.register, exchange); err != nil || reports != 0 || f.runs != 1 || f.journal.entries[1].Result != nil {
+			t.Fatal("unobserved exit became stopping proof", err)
+		}
+		if legacy {
+			f.journal.entries[1].BootSessionID = ""
+		}
+		if err := f.client.cycle(t.Context(), f.register, exchange); err != nil || reports != 0 || f.runs != 1 {
+			t.Fatal("same boot retried mutation", err)
+		}
+		f.bootID = uuid.NewString()
+		if err := f.client.cycle(t.Context(), f.register, exchange); err != nil || f.runs != 1 {
+			t.Fatal("new boot retried mutation", err)
+		}
+		if legacy && reports != 0 || !legacy && reports != 1 {
+			t.Fatal("invented legacy proof or lost recorded boot evidence")
+		}
 	}
 }
 
@@ -394,7 +449,7 @@ func TestRotationRuntimeRejectsForeignTasksAndUnknownReceiptRequests(t *testing.
 			bad := *f.task
 			mutate(&bad)
 			exchange := func(context.Context, []byte) ([]byte, error) {
-				return json.Marshal(enrollment.RotationReply{Version: 1, Protocol: enrollment.RotationProtocol, OK: true, Task: &bad})
+				return json.Marshal(enrollment.RotationReply{Version: enrollment.RotationVersion, Protocol: enrollment.RotationProtocol, OK: true, Task: &bad})
 			}
 			if err := f.client.cycle(t.Context(), f.register, exchange); err == nil || f.runs != 0 || f.journal.beginCalls != 0 {
 				t.Fatal("foreign task reached durable admission", err)
@@ -402,7 +457,7 @@ func TestRotationRuntimeRejectsForeignTasksAndUnknownReceiptRequests(t *testing.
 		})
 	}
 	exchange := func(context.Context, []byte) ([]byte, error) {
-		return json.Marshal(enrollment.RotationReply{Version: 1, Protocol: enrollment.RotationProtocol, OK: true, Receipt: &f.task.Context})
+		return json.Marshal(enrollment.RotationReply{Version: enrollment.RotationVersion, Protocol: enrollment.RotationProtocol, OK: true, Receipt: &f.task.Context})
 	}
 	if err := f.client.cycle(t.Context(), f.register, exchange); err == nil || f.runs != 0 || f.journal.recordCalls != 0 {
 		t.Fatal("unknown receipt request invented execution evidence", err)
@@ -446,7 +501,7 @@ func TestRotationRuntimeRequiresExplicitCompatibleCapabilities(t *testing.T) {
 	// goroutine without issuing any network request or local OS command.
 	runtime.cancel()
 	for _, tc := range []struct{ recovery, rotation, wantRecovery, wantRotation int }{
-		{0, 0, 0, 0}, {0, 1, 0, 0}, {1, 0, 1, 0}, {1, 2, 1, 0}, {2, 1, 0, 0}, {1, 1, 1, 1},
+		{0, 0, 0, 0}, {0, 1, 0, 0}, {1, 0, 1, 0}, {1, 3, 1, 0}, {2, 2, 0, 0}, {1, 1, 1, 0}, {1, 2, 1, 2},
 	} {
 		f.agent.setRecoveryCapabilities(tc.recovery, tc.rotation)
 		runtime.work.Wait()
@@ -455,16 +510,16 @@ func TestRotationRuntimeRequiresExplicitCompatibleCapabilities(t *testing.T) {
 		}
 	}
 	runtime.rotation = nil
-	f.agent.setRecoveryCapabilities(1, 1)
+	f.agent.setRecoveryCapabilities(1, enrollment.RotationVersion)
 	if runtime.rotationVersion.Load() != 0 {
 		t.Fatal("missing protected journal enabled rotation")
 	}
 	runtime.recovery = nil
-	f.agent.setRecoveryCapabilities(1, 1)
+	f.agent.setRecoveryCapabilities(1, enrollment.RotationVersion)
 	if runtime.recoveryVersion.Load() != 0 || runtime.rotationVersion.Load() != 0 {
 		t.Fatal("missing Mac recipient enabled recovery")
 	}
-	(&Agent{}).setRecoveryCapabilities(1, 1)
+	(&Agent{}).setRecoveryCapabilities(1, enrollment.RotationVersion)
 	if f.runs != 0 || f.journal.beginCalls != 0 {
 		t.Fatal("capability negotiation directly admitted an OS mutation")
 	}
@@ -487,7 +542,7 @@ func TestRotationRuntimePreservesCandidatesAndSignsConservativeOutcomes(t *testi
 			if err := f.client.cycle(t.Context(), f.register, f.exchange(func(result *enrollment.RotationResult) error { receipt = result; return nil })); err != nil {
 				t.Fatal(err)
 			}
-			if receipt == nil || receipt.Outcome != tc.want || (receipt.NewKey != nil) != (tc.want == "unverified") || enrollment.VerifyRotationResult(*receipt, f.client.recovery.certificate, time.Now()) != nil {
+			if receipt == nil || receipt.Outcome != tc.want || receipt.ExecutionStopped != (tc.want == "uncertain") || (receipt.NewKey != nil) != (tc.want == "unverified") || enrollment.VerifyRotationResult(*receipt, f.client.recovery.certificate, time.Now()) != nil {
 				t.Fatal("candidate or conservative outcome was lost")
 			}
 			if !f.local.closed || !bytes.Equal(f.borrowed, make([]byte, 29)) {

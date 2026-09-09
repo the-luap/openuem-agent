@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,8 +16,149 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/sys/unix"
 )
+
+func TestBootSessionIDStableWithinKernelBoot(t *testing.T) {
+	first, err := BootSessionID()
+	if err != nil {
+		t.Fatal("kernel boot identity is unavailable", err)
+	}
+	parsed, err := uuid.Parse(first)
+	if err != nil || parsed == uuid.Nil || parsed.String() != first {
+		t.Fatal("noncanonical boot identity")
+	}
+	second, err := BootSessionID()
+	if err != nil || first != second {
+		t.Fatal("boot identity changed without a kernel reboot", err)
+	}
+}
+
+// Both processes are this test binary. The child only waits for EOF on a
+// private pipe. No system management command or real device operation runs.
+func TestRotationOrphanProcessFixture(t *testing.T) {
+	index := slices.Index(os.Args, "--rotation-orphan-fixture")
+	if index < 0 {
+		return
+	}
+	if index+2 >= len(os.Args) {
+		os.Exit(91)
+	}
+	mode, directory := os.Args[index+1], os.Args[index+2]
+	time.AfterFunc(20*time.Second, func() { os.Exit(92) })
+	control := os.NewFile(3, "fixture-control")
+	if mode == "child" {
+		fmt.Printf("child:%d\n", os.Getpid())
+		_, _ = io.Copy(io.Discard, control)
+		fmt.Println("stopped")
+		os.Exit(0)
+	}
+	if mode != "parent" {
+		os.Exit(93)
+	}
+	lease, err := acquireFileVaultLease(directory, uint32(os.Geteuid()))
+	if err != nil {
+		os.Exit(94)
+	}
+	defer lease.Close()
+	child := exec.Command(os.Args[0], "-test.run=^TestRotationOrphanProcessFixture$", "--", "--rotation-orphan-fixture", "child", directory)
+	child.ExtraFiles = []*os.File{control}
+	child.Stdout = os.Stdout
+	if err := child.Run(); err != nil {
+		os.Exit(95)
+	}
+	os.Exit(0)
+}
+
+func TestRotationFreeParentLeaseDoesNotProveChildStopped(t *testing.T) {
+	dir := privateLeaseDirectory(t)
+	controlRead, controlWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer controlRead.Close()
+	defer controlWrite.Close()
+	outputRead, outputWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer outputRead.Close()
+	defer outputWrite.Close()
+	parent := exec.Command(os.Args[0], "-test.run=^TestRotationOrphanProcessFixture$", "--", "--rotation-orphan-fixture", "parent", dir)
+	parent.ExtraFiles, parent.Stdout = []*os.File{controlRead}, outputWrite
+	if err = parent.Start(); err != nil {
+		t.Fatal(err)
+	}
+	controlRead.Close()
+	outputWrite.Close()
+	waited := false
+	defer func() {
+		if !waited {
+			parent.Process.Kill()
+			parent.Wait()
+		}
+		controlWrite.Close()
+	}()
+	lines := make(chan string, 2)
+	go func() {
+		defer close(lines)
+		scanner := bufio.NewScanner(outputRead)
+		for scanner.Scan() {
+			lines <- scanner.Text()
+		}
+	}()
+	var pid int
+	select {
+	case line := <-lines:
+		if n, err := fmt.Sscanf(line, "child:%d", &pid); err != nil || n != 1 || pid <= 0 {
+			t.Fatal("orphan fixture failed to start")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("orphan fixture startup timed out")
+	}
+	if lease, err := acquireFileVaultLease(dir, uint32(os.Geteuid())); !errors.Is(err, ErrRotationBusy) {
+		if lease != nil {
+			lease.Close()
+		}
+		t.Fatal("parent did not hold its lease", err)
+	}
+	if err := parent.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	_ = parent.Wait()
+	waited = true
+	if err := unix.Kill(pid, 0); err != nil {
+		t.Fatal("child did not survive its parent", err)
+	}
+	lease, err := acquireFileVaultLease(dir, uint32(os.Geteuid()))
+	if err != nil {
+		t.Fatal("parent death did not release its lease", err)
+	}
+	defer lease.Close()
+	select {
+	case <-lines:
+		t.Fatal("child stopped before control pipe closed")
+	default:
+	}
+	controlWrite.Close()
+	select {
+	case line := <-lines:
+		if line != "stopped" {
+			t.Fatal("child failed controlled shutdown")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("child shutdown timed out")
+	}
+	select {
+	case _, open := <-lines:
+		if open {
+			t.Fatal("unexpected fixture output")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("child retained its output descriptor")
+	}
+}
 
 func privateLeaseDirectory(t *testing.T) string {
 	t.Helper()

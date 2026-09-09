@@ -16,12 +16,13 @@ import (
 
 type rotationJournal interface {
 	Lookup(enrollment.RotationContext) (*enrollmentstore.RotationEntry, error)
-	Begin(enrollment.RotationTask, []byte) (bool, *enrollmentstore.RotationEntry, error)
+	BeginWithBootSession(enrollment.RotationTask, []byte, string) (bool, *enrollmentstore.RotationEntry, error)
 	RecordResult(enrollment.RotationResult) error
 }
 
 type rotationLocalResult interface {
 	Outcome() string
+	ExecutionStopped() bool
 	Key() []byte
 	Close()
 }
@@ -32,18 +33,19 @@ type rotationLeaseFactory func() (io.Closer, rotationRunner, error)
 // The existing recovery goroutine owns both protocols and their shared recipient
 // epoch. Pending holds only signed encrypted material, never an old/new PRK.
 type rotationClient struct {
-	recovery  *recoveryClient
-	journal   rotationJournal
-	lease     rotationLeaseFactory
-	pending   *enrollment.RotationResult
-	persisted bool
+	recovery    *recoveryClient
+	journal     rotationJournal
+	lease       rotationLeaseFactory
+	pending     *enrollment.RotationResult
+	persisted   bool
+	bootSession func() (string, error)
 }
 
 func newRotationClient(recovery *recoveryClient, journal rotationJournal, directory string) (*rotationClient, error) {
 	if recovery == nil || recovery.identity == nil || recovery.identity.Platform != "macos" || recovery.certificate == nil || !recovery.scope.Valid() || journal == nil || !filepath.IsAbs(directory) || filepath.Clean(directory) != directory {
 		return nil, enrollment.ErrRecovery
 	}
-	return &rotationClient{recovery: recovery, journal: journal, lease: func() (io.Closer, rotationRunner, error) {
+	return &rotationClient{recovery: recovery, journal: journal, bootSession: macsecurity.BootSessionID, lease: func() (io.Closer, rotationRunner, error) {
 		lease, err := macsecurity.AcquireFileVaultLease(directory)
 		if err != nil {
 			return nil, nil, err
@@ -144,14 +146,34 @@ func (r *rotationClient) produce(c enrollment.RotationContext, nonce []byte, out
 	return r.persistLocked()
 }
 
+func (r *rotationClient) produceStopped(c enrollment.RotationContext, nonce []byte) error {
+	result, err := enrollment.NewStoppedRotationResult(c, nonce, r.recovery.certificate, r.recovery.identity.Keys.Certificate, time.Now())
+	if err != nil {
+		return enrollment.ErrRecovery
+	}
+	r.pending, r.persisted = result, false
+	return r.persistLocked()
+}
+
 func (r *rotationClient) recoverEntry(c enrollment.RotationContext, entry *enrollmentstore.RotationEntry) error {
 	if entry == nil || entry.Context != c || len(entry.Nonce) != 32 {
 		return enrollment.ErrRecovery
 	}
 	if entry.Result == nil {
-		// Holding the OS lease excludes a still-running owner. No recovery
-		// path may replay the mutation represented by this existing intent.
-		return r.produce(c, entry.Nonce, "uncertain", nil)
+		// The parent lease can be free while an orphaned OS command is alive.
+		// A different kernel boot excludes that process; elapsed wall time or
+		// another agent PID does not. Never replay an existing intent.
+		if r.bootSession == nil || !enrollment.ValidDeviceID(entry.BootSessionID) {
+			return nil
+		}
+		boot, err := r.bootSession()
+		if err != nil || !enrollment.ValidDeviceID(boot) {
+			return enrollment.ErrRecovery
+		}
+		if boot == entry.BootSessionID {
+			return nil
+		}
+		return r.produceStopped(c, entry.Nonce)
 	}
 	if entry.Result.Context != c || !bytes.Equal(entry.Result.Nonce, entry.Nonce) || enrollment.VerifyRotationResult(*entry.Result, r.recovery.certificate, time.Now()) != nil {
 		return enrollment.ErrRecovery
@@ -225,7 +247,14 @@ func (r *rotationClient) cycle(ctx context.Context, registration, exchange recov
 			return enrollment.ErrRecovery
 		}
 		defer secret.Close()
-		admitted, entry, err := r.journal.Begin(*reply.Task, secret.Nonce())
+		if r.bootSession == nil {
+			return enrollment.ErrRecovery
+		}
+		boot, err := r.bootSession()
+		if err != nil || !enrollment.ValidDeviceID(boot) {
+			return enrollment.ErrRecovery
+		}
+		admitted, entry, err := r.journal.BeginWithBootSession(*reply.Task, secret.Nonce(), boot)
 		if err != nil {
 			return enrollment.ErrRecovery
 		}
@@ -244,7 +273,7 @@ func (r *rotationClient) cycle(ctx context.Context, registration, exchange recov
 		defer cancel()
 		local := run(mutation, secret.Key())
 		if local == nil {
-			return r.produce(c, secret.Nonce(), "uncertain", nil)
+			return nil
 		}
 		defer local.Close()
 		outcome, key := local.Outcome(), local.Key()
@@ -260,6 +289,12 @@ func (r *rotationClient) cycle(ctx context.Context, registration, exchange recov
 			default:
 				outcome = "uncertain"
 			}
+		}
+		if outcome == "uncertain" {
+			if !local.ExecutionStopped() {
+				return nil
+			}
+			return r.produceStopped(c, secret.Nonce())
 		}
 		return r.produce(c, secret.Nonce(), outcome, key)
 	}()

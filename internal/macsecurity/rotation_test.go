@@ -157,6 +157,10 @@ func TestFileVaultRotationPreservesKeysAndNeverRetriesMutation(t *testing.T) {
 			if r.Outcome() != tc.outcome || (len(r.Key()) != 0) != tc.wantKey || calls != tc.calls || mutations > 1 {
 				t.Fatal("wrong rotation outcome or repeated mutation", r.Outcome(), calls, mutations)
 			}
+			started := tc.before == "valid" && tc.mutation != "start-failed" && tc.mutation != "nil-command"
+			if r.ExecutionStopped() != started {
+				t.Fatal("stopping evidence does not match reaped mutation process")
+			}
 			if !bytes.Equal(oldKey, []byte(fixtureRecoveryKey)) {
 				t.Fatal("driver modified the caller's old key")
 			}
