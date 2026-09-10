@@ -20,13 +20,14 @@ import (
 // attempts. No slot is deleted or reused; the registry has the same history cap.
 const MaxIdentityRenewalAttempts = 128
 
-var renewalStages = [...]string{"candidate", "issued", "decision", "activated"}
+var renewalStages = [...]string{"candidate", "issued", "decision", "activated", "resolved"}
 
 const (
 	renewalCandidateMagic = "openuem/enrollment/renewal/candidate/v1\x00"
 	renewalIssuedMagic    = "openuem/enrollment/renewal/issued/v1\x00"
 	renewalDecisionMagic  = "openuem/enrollment/renewal/decision/v1\x00"
 	renewalActivatedMagic = "openuem/enrollment/renewal/activated/v1\x00"
+	renewalResolvedMagic  = "openuem/enrollment/renewal/resolved/v1\x00"
 )
 
 // These types are private native-storage codecs, never network or log values.
@@ -48,6 +49,12 @@ type renewalActivation struct {
 	ReceivedAt time.Time                           `json:"received_at"`
 }
 
+type renewalResolution struct {
+	Request    enrollment.RenewalResolution       `json:"request"`
+	Resolved   enrollment.ResolvedIdentityRenewal `json:"resolved"`
+	ReceivedAt time.Time                          `json:"received_at"`
+}
+
 type renewalCertificate struct {
 	certificate *x509.Certificate
 	retiredAt   time.Time
@@ -63,6 +70,23 @@ type renewalAttempt struct {
 	target                                 *enrollment.RenewalConfirmationTarget
 	decision                               *renewalDecision
 	activation                             *renewalActivation
+	resolution                             *renewalResolution
+}
+
+// Concurrent confirmation and resolution may both retain the same activation.
+// Preserve its original server time and earliest local receipt, so a late second
+// acknowledgement never moves a historical transition past the next generation.
+func (a *renewalAttempt) confirmedTimes() (at, received time.Time) {
+	if a.activation != nil {
+		at, received = a.activation.Confirmed.ConfirmedAt, a.activation.ReceivedAt
+	}
+	if a.resolution != nil && a.resolution.Resolved.Outcome == "confirmed" {
+		at = a.resolution.Resolved.ResolvedAt
+		if received.IsZero() || a.resolution.ReceivedAt.Before(received) {
+			received = a.resolution.ReceivedAt
+		}
+	}
+	return
 }
 
 func (*renewalAttempt) String() string               { return "[protected identity renewal attempt]" }
@@ -186,7 +210,7 @@ func renewalTimeOrdered(at, after, now time.Time) bool {
 	return !at.IsZero() && !at.After(now.Add(enrollment.RenewalClockSkew)) && !at.Before(after.Add(-enrollment.RenewalClockSkew))
 }
 
-func (s *Store) decodeRenewalAttempt(p *pending, state *renewalState, ordinal int, records [4][]byte) (*renewalAttempt, error) {
+func (s *Store) decodeRenewalAttempt(p *pending, state *renewalState, ordinal int, records [len(renewalStages)][]byte) (*renewalAttempt, error) {
 	fields, err := decodeFields(records[0], renewalCandidateMagic, 5)
 	if err != nil || !bytes.Equal(fields[0], p.digest[:]) || string(fields[1]) != strconv.Itoa(ordinal) || string(fields[2]) != renewalDigest(state.source.Certificate) {
 		return nil, ErrUnavailable
@@ -261,6 +285,16 @@ func (s *Store) decodeRenewalAttempt(p *pending, state *renewalState, ordinal in
 		}
 		a.activation = &active
 	}
+	if records[4] != nil {
+		var resolution renewalResolution
+		if a.decision == nil || a.decision.Action != "confirm" || decodeRenewalPublic(records[4], renewalResolvedMagic, a.decisionDigest, &resolution) != nil || !validRenewalResolution(resolution, a, state.source, s.renewalTime()) {
+			return nil, ErrUnavailable
+		}
+		if a.activation != nil && (resolution.Resolved.Outcome != "confirmed" || !resolution.Resolved.ResolvedAt.Equal(a.activation.Confirmed.ConfirmedAt)) {
+			return nil, ErrUnavailable
+		}
+		a.resolution = &resolution
+	}
 	valid = true
 	return a, nil
 }
@@ -293,7 +327,7 @@ func (s *Store) loadRenewalState(p *pending) (*renewalState, error) {
 	gap := false
 	seenIDs := make(map[string]struct{})
 	for ordinal := 1; ordinal <= MaxIdentityRenewalAttempts; ordinal++ {
-		var records [4][]byte
+		var records [len(renewalStages)][]byte
 		loadErr := func() error {
 			for n, stage := range renewalStages {
 				data, err := s.backend.Load(renewalRecord(stage, ordinal))
@@ -320,7 +354,10 @@ func (s *Store) loadRenewalState(p *pending) (*renewalState, error) {
 			return nil, loadErr
 		}
 		if records[0] == nil {
-			orphan := records[1] != nil || records[2] != nil || records[3] != nil
+			orphan := false
+			for _, data := range records[1:] {
+				orphan = orphan || data != nil
+			}
 			for _, data := range records {
 				clear(data)
 			}
@@ -350,12 +387,13 @@ func (s *Store) loadRenewalState(p *pending) (*renewalState, error) {
 		seenIDs[a.request.RequestID] = struct{}{}
 		state.lastRequest, state.lastAction = a.request.RequestID, ""
 		state.next = ordinal + 1
-		if a.activation != nil {
+		confirmedAt, receivedAt := a.confirmedTimes()
+		if !confirmedAt.IsZero() {
 			oldHash := renewalDigest(state.source.Certificate)
 			old := i.certificates[oldHash]
-			old.retiredAt = a.activation.Confirmed.ConfirmedAt
+			old.retiredAt = confirmedAt
 			i.certificates[oldHash] = old
-			cert, err := enrollment.ValidateResponse(a.issuance.Prepared.Response, i.Origin, &a.keys.Certificate.PublicKey, a.activation.ReceivedAt)
+			cert, err := enrollment.ValidateResponse(a.issuance.Prepared.Response, i.Origin, &a.keys.Certificate.PublicKey, receivedAt)
 			if err != nil {
 				a.close()
 				return nil, ErrUnavailable
@@ -364,8 +402,11 @@ func (s *Store) loadRenewalState(p *pending) (*renewalState, error) {
 			i.Keys, a.keys, i.Response = a.keys, nil, a.issuance.Prepared.Response
 			i.certificates[renewalDigest(cert.Raw)] = renewalCertificate{certificate: cert}
 			state.source = a.target.Candidate
-			state.transition = a.activation.ReceivedAt
+			state.transition = receivedAt
 			state.lastAction = "activated"
+		} else if a.resolution != nil && a.resolution.Resolved.Outcome == "cancelled" {
+			state.lastAction = "cancelled"
+			state.transition = a.resolution.ReceivedAt
 		} else if a.decision != nil && a.decision.Action == "abandon" {
 			state.lastAction = "abandon"
 			state.transition = a.decision.DecidedAt
@@ -377,4 +418,8 @@ func (s *Store) loadRenewalState(p *pending) (*renewalState, error) {
 	}
 	valid = true
 	return state, nil
+}
+
+func validRenewalResolution(r renewalResolution, a *renewalAttempt, source enrollment.RenewalSource, now time.Time) bool {
+	return a.decision != nil && a.decision.Action == "confirm" && a.issuance != nil && a.target != nil && renewalTimeOrdered(r.ReceivedAt, a.decision.DecidedAt, now) && renewalTimeOrdered(r.Resolved.ResolvedAt, a.decision.DecidedAt, now) && (r.Resolved.Outcome != "confirmed" || r.Resolved.ResolvedAt.Before(a.issuance.Prepared.ExpiresAt)) && enrollment.ValidateResolvedIdentityRenewal(r.Resolved, r.Request, *a.target, source, r.ReceivedAt) == nil
 }

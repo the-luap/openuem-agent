@@ -323,7 +323,7 @@ func (s *Store) loadIdentity(p *pending) (*Identity, error) {
 	if state.pending != nil && state.pending.decision != nil && state.pending.decision.Action == "confirm" {
 		return nil, ErrRenewalHandoff
 	}
-	if _, err := enrollment.ValidateResponse(state.identity.Response, state.identity.Origin, &state.identity.Keys.Certificate.PublicKey, s.renewalTime()); err != nil {
+	if err := validateCurrentIdentity(state.identity, s.renewalTime()); err != nil {
 		return nil, ErrUnavailable
 	}
 	identity := state.identity

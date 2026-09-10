@@ -17,7 +17,7 @@ var (
 )
 
 // RenewalStatus contains public local progress only. Confirmation intent means
-// the server may already have activated the candidate, even after cancellation,
+// the server may already have activated the candidate, even after transport cancellation,
 // an error response or preparation expiry. Never restore old keys in that state.
 type RenewalStatus struct {
 	RequestID string
@@ -223,7 +223,7 @@ func (s *Store) prepareRenewal(ctx context.Context, exchange prepareRenewalFunc)
 // security-task execution before calling. It records an exclusive decision before
 // any confirmation I/O. All failed/ambiguous attempts retain that decision and both
 // generations. Load then refuses old-key fallback until this exact candidate's
-// confirmation is recovered and its activation is durably retained.
+// confirmation or authoritative resolution is durably retained.
 func (s *Store) ConfirmRenewal(ctx context.Context, requestID string, roots *x509.CertPool) (*Identity, error) {
 	return s.confirmRenewal(ctx, requestID, func(ctx context.Context, request enrollment.RenewalConfirmation, target enrollment.RenewalConfirmationTarget) (*enrollment.ConfirmedIdentityRenewal, error) {
 		client, err := enrollment.NewHTTPClient(target.Candidate.Origin, roots)
@@ -347,7 +347,7 @@ func (s *Store) confirmedRenewalIdentity(state *renewalState, requestID string) 
 		return nil, ErrRenewalConflict
 	}
 	i := state.identity
-	if _, err := enrollment.ValidateResponse(i.Response, i.Origin, &i.Keys.Certificate.PublicKey, s.renewalTime()); err != nil {
+	if err := validateCurrentIdentity(i, s.renewalTime()); err != nil {
 		return nil, ErrUnavailable
 	}
 	state.identity = nil

@@ -1,21 +1,23 @@
 # Protected individual identity renewal
 
 The agent pins shared library
-[`06ec5c5`](https://github.com/the-luap/openuem-nats/commit/06ec5c578a4f8682a223fb42bbea10b4febe0a94)
-and implements a persistent candidate/activation journal in `enrollmentstore`.
-The [shared-library CI](https://github.com/the-luap/openuem-nats/actions/runs/34471335722)
+[`07a6ac8`](https://github.com/the-luap/openuem-nats/commit/07a6ac8e2a5e07f63778b2c1f4d75e72ca7e2fa3)
+and implements a persistent candidate, activation and authoritative resolution
+journal in `enrollmentstore`.
+The [shared-library CI](https://github.com/the-luap/openuem-nats/actions/runs/34479270024)
 passes Linux/PostgreSQL/race/fuzz and native Windows checks. Console
 [`3a49b79`](https://github.com/the-luap/openuem-console/commit/3a49b79fc9a2e8ed331da3cd2b0bc8ffd322941b)
-provides the exact HTTPS/gateway routes; its
+provides the preparation/confirmation HTTPS routes; its
 [PR CI](https://github.com/the-luap/openuem-console/actions/runs/34472855743) and
 [push CI](https://github.com/the-luap/openuem-console/actions/runs/34472852010) pass.
 See the [server lifecycle](https://github.com/the-luap/openuem-console/blob/3a49b79fc9a2e8ed331da3cd2b0bc8ffd322941b/docs/desktop-identity-renewal.md)
 for registry authorization, permanent key ownership and FileVault reconciliation.
+`ResolveRenewal` also requires the matching console `/renewal/resolve` route and
+registry migration 010; an older or unavailable route grants no fallback.
 
 This is an implemented storage and transport component. The installed service
 does not schedule or invoke automatic renewal yet. Runtime quiescence, startup
-recovery, broker/recipient reconnect, an authoritative server cancellation path
-for unresolved expired confirmations and release integration remain necessary.
+recovery, broker/recipient reconnect and release integration remain necessary.
 
 ## State transitions and ownership
 
@@ -51,8 +53,9 @@ connection and register the recovery recipient under its new server epoch.
 | Local state | `Load` behavior | Recovery |
 | --- | --- | --- |
 | Candidate or prepared issuance | Returns the current identity only while it remains valid | Retry preparation with the stored candidate |
-| Confirm decision without local activation | Returns `ErrRenewalHandoff`, including after source/preparation expiry | Retry confirmation for the exact retained request ID |
-| Persisted verified activation | Returns the current replacement identity after validating it at the current time | Exact confirmation retries return that same current generation |
+| Confirm decision without a durable outcome | Returns `ErrRenewalHandoff`, including after source/preparation expiry | Retry confirmation or explicitly resolve the exact retained request ID |
+| Persisted verified activation or confirmed resolution | Returns the current replacement identity after validating it at the current time | Exact local retries return that same current generation |
+| Persisted authoritative cancellation | Returns the original identity only while its certificate remains valid | A distinct preparation may follow; the cancelled candidate can never activate |
 | Explicitly abandoned candidate | Preserves the preceding current identity and all records | A later candidate still obeys the server's pending-preparation guard |
 | Corrupt, inconsistent or missing dependent records | Fails without replacing evidence or returning older keys | Investigate and recover the complete protected installation |
 | Exhausted attempt capacity | Still returns a valid current identity; preparation rejects another attempt | Preserve the complete history for an explicit future migration |
@@ -73,10 +76,21 @@ An error or cancellation after confirmation may follow a committed server handof
 The journal never falls back to old credentials or permits abandonment based on
 that error, preparation expiry, a process restart or an expired original leaf.
 Fresh candidate proof can recover a committed result after source expiry while
-the candidate remains valid. A denied, uncommitted confirmation that has passed
-server expiry still needs a separately authenticated server-side cancellation or
-recovery contract; the current journal deliberately retains that unresolved state.
-An earlier confirmation cannot roll back a later generation.
+the candidate remains valid. `Store.ResolveRenewal(ctx, requestID, roots)` explicitly
+asks the server to recover committed activation or permanently cancel an
+unconfirmed candidate while its original identity is still current and authorized.
+The method requires an existing immutable `confirm` decision and quiescent callers.
+It sends a separate candidate-key proof, verifies the exact outcome and retains
+that actual proof, response and receipt time in native storage before returning keys.
+Cancellation works before or after preparation expiry; it cannot revive an expired
+or revoked server identity. A cancellation response received at source expiry is
+retained, but returns no expired keys. Earlier resolution/confirmation requests
+cannot roll back a later generation or interfere with a newer pending attempt.
+
+A timeout, 404, unsupported route or failed local publication preserves handoff
+uncertainty. Retry the same durable target with fresh proof. A lost native commit
+can be recovered by reloading its authenticated outcome. Resolution never invents
+a confirmation proof or rewrites the original decision into abandonment.
 
 ## Immutable native records
 
@@ -94,6 +108,7 @@ renewal-candidate-v1-NNN
 renewal-issued-v1-NNN
 renewal-decision-v1-NNN
 renewal-activated-v1-NNN
+renewal-resolved-v1-NNN
 ```
 
 The bounded binary framing uses separate versioned purposes for each stage:
@@ -106,6 +121,8 @@ The bounded binary framing uses separate versioned purposes for each stage:
   for confirmation only, the exact issuance record digest.
 - Activated: decision record digest, fresh candidate confirmation proof, exact
   public acknowledgement and receipt time.
+- Resolved: decision record digest, actual domain-separated resolution proof,
+  exact `confirmed` or `cancelled` server outcome and receipt time.
 
 Existing DPAPI/System-Keychain protection, record-name binding, exclusive durable
 publication, application/owner access restrictions and 128 KiB plaintext record
@@ -113,18 +130,24 @@ bounds apply. Private material is never serialized to HTTP, configuration or log
 Owned temporary private buffers are cleared; Go can retain internal RSA/runtime
 copies, so this does not promise complete in-memory erasure. Record slots and old
 protected keys are permanent and count toward the 128-attempt cap, including
-abandoned attempts. There is no implicit garbage collection or slot reuse.
+abandoned and cancelled attempts. There is no implicit garbage collection or slot reuse.
 
 Loads inspect all bounded slots, including later fragments after missing records.
 Stage digests, ordinals, proof signatures, candidate private/public keys, scope,
 time ordering and request uniqueness must agree. Missing original anchors with
 surviving renewal records cannot create a fresh enrollment or zero checkpoint.
-Missing final activation preserves confirmation uncertainty; missing earlier
+Missing both final outcome stages preserves confirmation uncertainty; missing earlier
 stages or a gap before a later generation fails closed. Native read failures are
 not treated as absent history. A concurrent publication can require a retry;
 an inconsistent read cannot supply older credentials after observing handoff.
-Complete rollback or loss of all protected evidence still needs an independent
-recovery policy.
+Concurrent confirmation and resolution may both retain the same positive outcome.
+Both must bind the same candidate and original confirmation time. Traversal uses
+the earliest verified local receipt, so a late second acknowledgement cannot move
+that historical transition past a later generation. Activation plus cancellation,
+contradictory times or exchanged proof domains fail closed. An older agent that
+ignores resolution records retains its existing confirmation quarantine; it cannot
+use cancellation to fall back. Complete rollback or loss of all protected evidence
+still needs an independent recovery policy.
 
 ## FileVault continuity
 
@@ -140,8 +163,11 @@ expires. Such a read cannot admit another mutation or produce a new signed resul
 under the retired generation. New intent/result publication checks the currently
 selected protected identity again; confirmation uncertainty and stale journal
 handles fail closed. Reusing an earlier ordinal with another context is rejected.
-The runtime must still hold the established process lease throughout OS execution
-and stop all such work before invoking confirmation.
+A verified cancellation retains the original current certificate and recipient;
+its existing journal can resume exact receipt publication only after that outcome
+is durable. Confirmed resolution retains historical receipt verification just as
+confirmation does. The runtime must still hold the established process lease
+throughout OS execution and stop such work before confirmation or resolution.
 
 The registry independently requires completion/reconciliation of delivered
 security work, including a console acknowledgement after returned FileVault keys
@@ -176,11 +202,27 @@ The final local native macOS race suites pass: protected enrollment store in
 **3.456 seconds**. The native fixture uses a disposable noninteractive keychain;
 the equivalent DPAPI fixture is compiled locally and executed by Windows CI.
 Affected-package Vet, module consistency and complete Linux/Windows/native-macOS
-builds pass. The CI run for this new journal must be checked independently of
-the earlier partial-restore run above.
+builds pass. Agent `4b782a1` passes its
+[Linux, native macOS and Windows CI](https://github.com/the-luap/openuem-agent/actions/runs/34476393712).
+
+The resolution suite adds both outcomes through real SDK HTTP/2 and protected
+Keychain/DPAPI fixtures, lost replies and failures before/after native publication,
+concurrent confirmation/resolution, consistent dual positive evidence, late
+acknowledgement after a subsequent attempt, contradictory/corrupt/removed records,
+unsupported or malformed replies, cancelled contexts after server commit, exact
+source-expiry boundaries and recovery after source expiry. Tests retain original
+FileVault keys/receipts, allow receipt publication after authoritative cancellation,
+and verify historical receipts after activation recovered through resolution.
+
+The final local native macOS race suite passes: enrollment store **44.678 seconds**,
+agent runtime **9.933**, bootstrap installation **1.558**, enrollment command **1.814**,
+activation **4.519**, lifecycle **1.297**, Mac service entry point **3.484** and Mac
+service coordination **2.913**. Vet, tidy consistency, complete Linux/Windows/native
+macOS builds and Windows enrollment-store test compilation pass. Native Windows
+execution remains covered by the branch CI and must be checked for this commit.
 
 These checks use synthetic keys, a local HTTPS issuer and owned native stores.
 They neither install an agent nor run FileVault on a real volume. Automatic
-service scheduling/reconnect, authoritative cancellation, historical server
+service scheduling/reconnect, historical server
 reconciliation, production signing/releases, CA/master-key rotation and physical
 Windows/macOS acceptance remain open parts of the full roadmap.

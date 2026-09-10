@@ -153,6 +153,15 @@ func TestMacKeychainDurableIdentityRenewal(t *testing.T) {
 	runDurableIdentityRenewal(t, f.backend)
 }
 
+func TestMacKeychainDurableIdentityRenewalResolution(t *testing.T) {
+	for _, confirmed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "cancelled", true: "confirmed"}[confirmed], func(t *testing.T) {
+			f := newKeychainFixture(t)
+			runDurableIdentityRenewalResolution(t, f.backend, confirmed)
+		})
+	}
+}
+
 func TestMacLockedKeychainFailsWithoutPromptOrReplacement(t *testing.T) {
 	f := newKeychainFixture(t)
 	if err := f.backend.Create(pendingRecord, []byte("locked fixture")); err != nil {

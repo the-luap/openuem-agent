@@ -54,6 +54,12 @@ func TestWindowsDPAPIDurableIdentityRenewal(t *testing.T) {
 	runDurableIdentityRenewal(t, b)
 }
 
+func TestWindowsDPAPIDurableIdentityRenewalResolution(t *testing.T) {
+	for _, confirmed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "cancelled", true: "confirmed"}[confirmed], func(t *testing.T) { b, _ := windowsFixture(t); runDurableIdentityRenewalResolution(t, b, confirmed) })
+	}
+}
+
 func TestWindowsStateIsEncryptedPrivateImmutableAndRecoverable(t *testing.T) {
 	b, directory := windowsFixture(t)
 	plaintext := []byte("isolated private identity fixture, never a production key")

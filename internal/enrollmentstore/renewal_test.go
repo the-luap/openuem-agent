@@ -35,13 +35,16 @@ type renewalFixture struct {
 	prepared                    map[string]*enrollment.PreparedIdentityRenewal
 	targets                     map[string]*enrollment.RenewalConfirmationTarget
 	confirmed                   map[string]*enrollment.ConfirmedIdentityRenewal
+	resolved                    map[string]*enrollment.ResolvedIdentityRenewal
 	preparations, confirmations int
+	resolutions                 int
 	losePrepare, loseConfirm    atomic.Bool
+	loseResolve                 atomic.Bool
 }
 
 func newRenewalFixture(t *testing.T, backend NativeBackend, platform string) *renewalFixture {
 	t.Helper()
-	f := &renewalFixture{backend: backend, issuer: newFixtureIssuer(t), now: time.Now().UTC(), prepared: make(map[string]*enrollment.PreparedIdentityRenewal), targets: make(map[string]*enrollment.RenewalConfirmationTarget), confirmed: make(map[string]*enrollment.ConfirmedIdentityRenewal)}
+	f := &renewalFixture{backend: backend, issuer: newFixtureIssuer(t), now: time.Now().UTC(), prepared: make(map[string]*enrollment.PreparedIdentityRenewal), targets: make(map[string]*enrollment.RenewalConfirmationTarget), confirmed: make(map[string]*enrollment.ConfirmedIdentityRenewal), resolved: make(map[string]*enrollment.ResolvedIdentityRenewal)}
 	// Extend only the synthetic issuer so historical-generation tests can cross
 	// the original leaf's expiry without expiring their independently owned CA.
 	ca := *f.issuer.ca
@@ -116,6 +119,30 @@ func newRenewalFixture(t *testing.T, backend NativeBackend, platform string) *re
 			if err == nil && f.loseConfirm.Swap(false) {
 				err = enrollment.ErrEnrollmentBusy
 			}
+		case enrollment.IdentityRenewalPath(f.original.Response.DeviceID, "resolve"):
+			request, decodeErr := enrollment.DecodeRenewalResolution(body)
+			if decodeErr != nil {
+				http.Error(w, "invalid", 400)
+				return
+			}
+			p, state, stateErr := f.store.renewalState()
+			if stateErr != nil {
+				t.Error("resolution proof preceded durable native decision")
+				http.Error(w, "invalid state", 503)
+				return
+			}
+			valid := state.pending != nil && state.pending.decision != nil && state.pending.decision.Action == "confirm" && state.pending.target != nil && enrollment.ValidateRenewalResolution(*request, *state.pending.target, f.now) == nil
+			p.close()
+			state.close()
+			if !valid {
+				t.Error("resolution proof did not bind retained confirmation uncertainty")
+				http.Error(w, "invalid state", 503)
+				return
+			}
+			result, err = f.resolve(r.Context(), *request, enrollment.RenewalConfirmationTarget{}, enrollment.RenewalSource{})
+			if err == nil && f.loseResolve.Swap(false) {
+				err = enrollment.ErrEnrollmentBusy
+			}
 		default:
 			http.Error(w, "invalid", 404)
 			return
@@ -168,11 +195,14 @@ func (f *renewalFixture) prepare(ctx context.Context, request enrollment.Renewal
 		return nil, err
 	}
 	if prepared := f.prepared[request.RequestID]; prepared != nil {
+		if result := f.resolved[request.RequestID]; result != nil && result.Outcome == "cancelled" {
+			return nil, enrollment.ErrIdentityRenewalDenied
+		}
 		copy := *prepared
 		return &copy, nil
 	}
 	for id, prepared := range f.prepared {
-		if f.confirmed[id] == nil && prepared.SourceCertificateHash == request.SourceCertificateHash && prepared.ExpiresAt.After(f.now) {
+		if f.confirmed[id] == nil && f.resolved[id] == nil && prepared.SourceCertificateHash == request.SourceCertificateHash && prepared.ExpiresAt.After(f.now) {
 			return nil, enrollment.ErrIdentityRenewalPending
 		}
 	}
@@ -209,6 +239,9 @@ func (f *renewalFixture) confirm(ctx context.Context, request enrollment.Renewal
 	}
 	target := f.targets[request.RequestID]
 	if target == nil || enrollment.ValidateRenewalConfirmation(request, *target, f.now) != nil {
+		return nil, enrollment.ErrIdentityRenewalDenied
+	}
+	if result := f.resolved[request.RequestID]; result != nil && result.Outcome == "cancelled" {
 		return nil, enrollment.ErrIdentityRenewalDenied
 	}
 	if result := f.confirmed[request.RequestID]; result != nil {
@@ -316,7 +349,7 @@ func TestIdentityRenewalNativeTransportRetainsKeysAndAmbiguousDecisions(t *testi
 }
 
 func TestIdentityRenewalPublicationFailureAndLostNativeCommit(t *testing.T) {
-	for _, stage := range renewalStages {
+	for _, stage := range renewalStages[:4] {
 		for _, committed := range []bool{false, true} {
 			t.Run(stage+map[bool]string{false: " before commit", true: " after commit"}[committed], func(t *testing.T) {
 				b := newMemoryBackend(t)

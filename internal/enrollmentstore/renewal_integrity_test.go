@@ -225,7 +225,7 @@ func TestIdentityRenewalCorruptMissingAndOrphanHistoryNeverFallsBack(t *testing.
 		active.Close()
 	}
 	for ordinal := 1; ordinal <= 2; ordinal++ {
-		for _, stage := range renewalStages {
+		for _, stage := range renewalStages[:4] {
 			name := renewalRecord(stage, ordinal)
 			original, err := b.Load(name)
 			if err != nil {
@@ -405,108 +405,122 @@ func TestIdentityRenewalCancelledCommittedConfirmationRetainsCandidate(t *testin
 }
 
 func TestIdentityRenewalPreservesFileVaultRecipientAndHistoricalReceipts(t *testing.T) {
-	b := newMemoryBackend(t)
-	f := newRenewalFixture(t, b, "macos")
-	key, err := f.store.LoadOrCreateRecipient(f.original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer key.Close()
-	console, err := enrollment.NewRecoveryRecipientKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer console.Close()
-	journal, err := f.store.OpenRotationJournal(f.original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	makeTask := func(j *RotationJournal, ordinal int) (*enrollment.RotationTask, []byte) {
-		context := enrollment.RotationContext{Binding: enrollment.RecoveryContext{Version: 1, Identity: j.scope, TaskID: uuid.NewString(), NativeID: uuid.NewString(), KeyID: uuid.NewString(), RecipientID: uuid.NewString(), ExpiresAt: time.Now().Add(time.Minute).Unix()}, Ordinal: ordinal, EscrowID: uuid.NewString(), ReplyKey: hex.EncodeToString(console.PublicKey())}
-		nonce := bytes.Repeat([]byte{8}, 32)
-		task, err := enrollment.EncryptRotationTask(enrollment.RecoveryRecipient{Identity: j.scope, ID: context.Binding.RecipientID, PublicKey: key.PublicKey()}, context, []byte("AAAA-BBBB-CCCC-DDDD-EEEE-FFFF"), nonce, time.Now())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return task, nonce
-	}
-	task, nonce := makeTask(journal, 1)
-	if won, _, err := journal.BeginWithBootSession(*task, nonce, uuid.NewString()); err != nil || !won {
-		t.Fatal(err)
-	}
-	receipt := journalResult(t, journal, f.original, task.Context, nonce, "rotated")
-	if err := journal.RecordResult(*receipt); err != nil {
-		t.Fatal(err)
-	}
-	before := make(map[string][]byte)
-	for _, name := range []string{pendingRecord, identityRecord, recipientRecord, rotationAnchorRecord, rotationRecord(false, 1), rotationRecord(true, 1)} {
-		data, err := b.Load(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		before[name] = data
-		defer clear(data)
-	}
-	prepared, err := f.store.prepareRenewal(t.Context(), f.prepare)
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldTask, oldNonce := makeTask(journal, 2)
-	active, err := f.store.confirmRenewal(t.Context(), prepared.ID, func(ctx context.Context, request enrollment.RenewalConfirmation, target enrollment.RenewalConfirmationTarget) (*enrollment.ConfirmedIdentityRenewal, error) {
-		if won, _, err := journal.BeginWithBootSession(*oldTask, oldNonce, uuid.NewString()); won || !errors.Is(err, ErrUnavailable) {
-			t.Fatal("confirmation intent admitted old-generation mutation", err)
-		}
-		return f.confirm(ctx, request, target)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer active.Close()
-	if err := journal.RecordResult(*receipt); !errors.Is(err, ErrUnavailable) {
-		t.Fatal("retired journal published a result", err)
-	}
-	retained, err := f.store.LoadOrCreateRecipient(active)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer retained.Close()
-	if !bytes.Equal(retained.PublicKey(), key.PublicKey()) {
-		t.Fatal("renewal replaced the protected recipient key")
-	}
-	currentJournal, err := f.store.OpenRotationJournal(active)
-	if err != nil {
-		t.Fatal(err)
-	}
-	conflict, conflictNonce := makeTask(currentJournal, 1)
-	if won, _, err := currentJournal.BeginWithBootSession(*conflict, conflictNonce, uuid.NewString()); won || !errors.Is(err, ErrUnavailable) {
-		t.Fatal("renewal reset a permanent rotation ordinal", err)
-	}
-	next, nextNonce := makeTask(currentJournal, 2)
-	if won, _, err := currentJournal.BeginWithBootSession(*next, nextNonce, uuid.NewString()); err != nil || !won {
-		t.Fatal("current generation could not admit the next ordinal", err)
-	}
-	f.now = f.original.Response.ExpiresAt.Add(time.Hour)
-	loaded, err := f.restarted().Load()
-	if err != nil {
-		t.Fatal("expired anchor prevented current identity load", err)
-	}
-	defer loaded.Close()
-	currentJournal, err = f.restarted().OpenRotationJournal(loaded)
-	if err != nil {
-		t.Fatal(err)
-	}
-	entry, err := currentJournal.Lookup(task.Context)
-	if err != nil || entry == nil || !reflect.DeepEqual(entry.Result, receipt) {
-		t.Fatal("retired certificate could not verify its exact historical receipt", err)
-	}
-	if won, _, err := currentJournal.Begin(*task, nonce); won || !errors.Is(err, ErrUnavailable) {
-		t.Fatal("historical read authorized old-generation execution", err)
-	}
-	for name, original := range before {
-		after, err := b.Load(name)
-		if err != nil || !bytes.Equal(after, original) {
-			t.Fatal("renewal changed FileVault replay evidence", name, err)
-		}
-		clear(after)
+	for _, resolve := range []bool{false, true} {
+		t.Run(map[bool]string{false: "confirmation", true: "confirmed resolution"}[resolve], func(t *testing.T) {
+			b := newMemoryBackend(t)
+			f := newRenewalFixture(t, b, "macos")
+			key, err := f.store.LoadOrCreateRecipient(f.original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer key.Close()
+			console, err := enrollment.NewRecoveryRecipientKey()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer console.Close()
+			journal, err := f.store.OpenRotationJournal(f.original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			makeTask := func(j *RotationJournal, ordinal int) (*enrollment.RotationTask, []byte) {
+				context := enrollment.RotationContext{Binding: enrollment.RecoveryContext{Version: 1, Identity: j.scope, TaskID: uuid.NewString(), NativeID: uuid.NewString(), KeyID: uuid.NewString(), RecipientID: uuid.NewString(), ExpiresAt: time.Now().Add(time.Minute).Unix()}, Ordinal: ordinal, EscrowID: uuid.NewString(), ReplyKey: hex.EncodeToString(console.PublicKey())}
+				nonce := bytes.Repeat([]byte{8}, 32)
+				task, err := enrollment.EncryptRotationTask(enrollment.RecoveryRecipient{Identity: j.scope, ID: context.Binding.RecipientID, PublicKey: key.PublicKey()}, context, []byte("AAAA-BBBB-CCCC-DDDD-EEEE-FFFF"), nonce, time.Now())
+				if err != nil {
+					t.Fatal(err)
+				}
+				return task, nonce
+			}
+			task, nonce := makeTask(journal, 1)
+			if won, _, err := journal.BeginWithBootSession(*task, nonce, uuid.NewString()); err != nil || !won {
+				t.Fatal(err)
+			}
+			receipt := journalResult(t, journal, f.original, task.Context, nonce, "rotated")
+			if err := journal.RecordResult(*receipt); err != nil {
+				t.Fatal(err)
+			}
+			before := make(map[string][]byte)
+			for _, name := range []string{pendingRecord, identityRecord, recipientRecord, rotationAnchorRecord, rotationRecord(false, 1), rotationRecord(true, 1)} {
+				data, err := b.Load(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				before[name] = data
+				defer clear(data)
+			}
+			prepared, err := f.store.prepareRenewal(t.Context(), f.prepare)
+			if err != nil {
+				t.Fatal(err)
+			}
+			oldTask, oldNonce := makeTask(journal, 2)
+			active, err := f.store.confirmRenewal(t.Context(), prepared.ID, func(ctx context.Context, request enrollment.RenewalConfirmation, target enrollment.RenewalConfirmationTarget) (*enrollment.ConfirmedIdentityRenewal, error) {
+				if won, _, err := journal.BeginWithBootSession(*oldTask, oldNonce, uuid.NewString()); won || !errors.Is(err, ErrUnavailable) {
+					t.Fatal("confirmation intent admitted old-generation mutation", err)
+				}
+				result, err := f.confirm(ctx, request, target)
+				if resolve && err == nil {
+					return nil, enrollment.ErrEnrollmentBusy
+				}
+				return result, err
+			})
+			if resolve {
+				if !errors.Is(err, enrollment.ErrEnrollmentBusy) {
+					t.Fatal("fixture lost confirmation was not retained", err)
+				}
+				active, err = f.store.resolveRenewal(t.Context(), prepared.ID, f.resolve)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer active.Close()
+			if err := journal.RecordResult(*receipt); !errors.Is(err, ErrUnavailable) {
+				t.Fatal("retired journal published a result", err)
+			}
+			retained, err := f.store.LoadOrCreateRecipient(active)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer retained.Close()
+			if !bytes.Equal(retained.PublicKey(), key.PublicKey()) {
+				t.Fatal("renewal replaced the protected recipient key")
+			}
+			currentJournal, err := f.store.OpenRotationJournal(active)
+			if err != nil {
+				t.Fatal(err)
+			}
+			conflict, conflictNonce := makeTask(currentJournal, 1)
+			if won, _, err := currentJournal.BeginWithBootSession(*conflict, conflictNonce, uuid.NewString()); won || !errors.Is(err, ErrUnavailable) {
+				t.Fatal("renewal reset a permanent rotation ordinal", err)
+			}
+			next, nextNonce := makeTask(currentJournal, 2)
+			if won, _, err := currentJournal.BeginWithBootSession(*next, nextNonce, uuid.NewString()); err != nil || !won {
+				t.Fatal("current generation could not admit the next ordinal", err)
+			}
+			f.now = f.original.Response.ExpiresAt.Add(time.Hour)
+			loaded, err := f.restarted().Load()
+			if err != nil {
+				t.Fatal("expired anchor prevented current identity load", err)
+			}
+			defer loaded.Close()
+			currentJournal, err = f.restarted().OpenRotationJournal(loaded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry, err := currentJournal.Lookup(task.Context)
+			if err != nil || entry == nil || !reflect.DeepEqual(entry.Result, receipt) {
+				t.Fatal("retired certificate could not verify its exact historical receipt", err)
+			}
+			if won, _, err := currentJournal.Begin(*task, nonce); won || !errors.Is(err, ErrUnavailable) {
+				t.Fatal("historical read authorized old-generation execution", err)
+			}
+			for name, original := range before {
+				after, err := b.Load(name)
+				if err != nil || !bytes.Equal(after, original) {
+					t.Fatal("renewal changed FileVault replay evidence", name, err)
+				}
+				clear(after)
+			}
+		})
 	}
 }
