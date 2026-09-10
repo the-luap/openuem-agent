@@ -20,11 +20,15 @@ import (
 var scmName = flag.String("openuem-lifecycle-fixture-service", "", "Unique isolated lifecycle test service")
 var scmDirectory = flag.String("openuem-lifecycle-fixture-directory", "", "Directory for isolated lifecycle test gates")
 var scmFailure = flag.Bool("openuem-lifecycle-fixture-failure", false, "Return an isolated startup failure")
+var scmRecovery = flag.Bool("openuem-lifecycle-fixture-recovery", false, "Start an isolated controller with agent recovery pending")
 
 func waitSCMGate(ctx context.Context, name string) error {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if _, err := os.Stat(filepath.Join(*scmDirectory, name)); err == nil {
 			return nil
 		}
@@ -41,9 +45,22 @@ func TestNativeSCMLifecycleHelper(t *testing.T) {
 		t.Skip("isolated Local System subprocess only")
 	}
 	s := &OpenUEMService{factory: func(ctx context.Context) (lifecycle.Runtime, error) {
-		return &serviceRuntime{start: func() error {
+		ready, recovered := make(chan struct{}), make(chan struct{})
+		recoveryStarted := false
+		r := &serviceRuntime{start: func() error {
 			if err := os.WriteFile(filepath.Join(*scmDirectory, "initializing"), []byte("fixture"), 0600); err != nil {
 				return err
+			}
+			if *scmRecovery {
+				recoveryStarted = true
+				go func() {
+					defer close(recovered)
+					if waitSCMGate(ctx, "allow-start") == nil {
+						_ = os.WriteFile(filepath.Join(*scmDirectory, "agent-ready"), []byte("fixture"), 0600)
+						close(ready)
+					}
+				}()
+				return nil
 			}
 			if err := waitSCMGate(ctx, "allow-start"); err != nil {
 				return err
@@ -53,12 +70,19 @@ func TestNativeSCMLifecycleHelper(t *testing.T) {
 			}
 			return nil
 		}, stop: func() {
+			if recoveryStarted {
+				<-recovered
+			}
 			_ = os.WriteFile(filepath.Join(*scmDirectory, "cleanup"), []byte("fixture"), 0600)
 			// Cleanup owns its work even though the service lifetime is canceled.
 			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			_ = waitSCMGate(cleanup, "allow-stop")
-		}}, nil
+		}}
+		if *scmRecovery {
+			return &serviceReadyRuntime{serviceRuntime: r, ready: ready}, nil
+		}
+		return r, nil
 	}}
 	if err := svc.Run(*scmName, s); err != nil {
 		t.Fatal(err)
@@ -75,13 +99,17 @@ func TestNativeSCMReportsInitializationAndJoinedCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, failure := range []bool{false, true} {
-		t.Run(map[bool]string{false: "ready", true: "startup-failure"}[failure], func(t *testing.T) {
+	for _, scenario := range []string{"ready", "startup-failure", "recovery"} {
+		t.Run(scenario, func(t *testing.T) {
+			failure, recovering := scenario == "startup-failure", scenario == "recovery"
 			directory := t.TempDir()
 			name := "OpenUEMLifecycleFixture-" + uuid.NewString()
 			args := []string{"-test.run=^TestNativeSCMLifecycleHelper$", "-openuem-lifecycle-fixture-service=" + name, "-openuem-lifecycle-fixture-directory=" + directory}
 			if failure {
 				args = append(args, "-openuem-lifecycle-fixture-failure=true")
+			}
+			if recovering {
+				args = append(args, "-openuem-lifecycle-fixture-recovery=true")
 			}
 			service, err := manager.CreateService(name, executable, mgr.Config{StartType: mgr.StartManual, DisplayName: name}, args...)
 			if err != nil {
@@ -136,21 +164,34 @@ func TestNativeSCMReportsInitializationAndJoinedCleanup(t *testing.T) {
 				t.Fatal("native service did not reach the required state")
 				return svc.Status{}
 			}
-			status := wait(svc.StartPending, "initializing")
-			if status.Accepts != 0 {
-				t.Fatal("native initialization prematurely accepted stop")
+			var status svc.Status
+			if !recovering {
+				status = wait(svc.StartPending, "initializing")
+				if status.Accepts != 0 {
+					t.Fatal("native initialization prematurely accepted stop")
+				}
+				writeGate("allow-start")
 			}
-			writeGate("allow-start")
 			if !failure {
-				status = wait(svc.Running, "")
+				status = wait(svc.Running, "initializing")
 				if status.Accepts != svc.AcceptStop|svc.AcceptShutdown {
 					t.Fatal("native running service cannot stop")
+				}
+				if recovering {
+					if _, err := os.Stat(filepath.Join(directory, "agent-ready")); !errors.Is(err, os.ErrNotExist) {
+						t.Fatal("unresolved recovery announced agent readiness")
+					}
 				}
 				if _, err := service.Control(svc.Stop); err != nil {
 					t.Fatal(err)
 				}
 			}
 			status = wait(svc.StopPending, "cleanup")
+			if recovering {
+				if _, err := os.Stat(filepath.Join(directory, "agent-ready")); !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("SCM stop permitted an unresolved agent to start")
+				}
+			}
 			if status.Accepts != 0 {
 				t.Fatal("native cleanup reported active controls")
 			}

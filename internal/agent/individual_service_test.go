@@ -490,16 +490,17 @@ func TestIndividualServiceStartupRecoveryRemainsPendingAndStopCancelsIt(t *testi
 		return nil, enrollment.ErrEnrollmentBusy
 	}
 	s := f.service()
-	finished := make(chan error, 1)
-	go func() { finished <- s.Start() }()
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
 	for _, delay := range []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute} {
 		w := f.nextWait()
 		if w.delay != delay {
 			t.Fatal("startup recovery did not back off", w.delay)
 		}
 		select {
-		case <-finished:
-			t.Fatal("unresolved startup reported completion")
+		case <-s.Ready():
+			t.Fatal("unresolved startup reported agent readiness")
 		default:
 		}
 		if slices.Contains(f.eventsCopy(), "load") {
@@ -509,8 +510,10 @@ func TestIndividualServiceStartupRecoveryRemainsPendingAndStopCancelsIt(t *testi
 	}
 	_ = f.nextWait()
 	s.Stop()
-	if err := <-finished; !errors.Is(err, context.Canceled) {
-		t.Fatal("startup shutdown did not cancel recovery", err)
+	select {
+	case <-s.Ready():
+		t.Fatal("shutdown granted readiness to unresolved identity")
+	default:
 	}
 	if f.held || !f.closed {
 		t.Fatal("pending startup leaked native resources")
@@ -526,6 +529,11 @@ func TestIndividualServiceStartupRecoversActivatedCandidateAfterSourceExpiry(t *
 		t.Fatal(err)
 	}
 	_ = f.nextWait()
+	select {
+	case <-s.Ready():
+	default:
+		t.Fatal("recovered generation did not announce readiness")
+	}
 	s.Stop()
 	assertServiceOrder(t, f.eventsCopy(), "verify", "exclude", "confirm", "exclude-close", "load", "start-new")
 	if slices.Contains(f.eventsCopy(), "start-old") {

@@ -34,8 +34,8 @@ func (s *OpenUEMService) Execute(args []string, controls <-chan svc.ChangeReques
 	finished := make(chan error, 1)
 	go func() { finished <- lifecycle.Run(ctx, s.factory, func(phase lifecycle.Phase) { phases <- phase }) }()
 	status := svc.Status{State: svc.StartPending, CheckPoint: 1, WaitHint: 30000}
-	// Recovery can remain pending across bounded HTTPS attempts. Report progress
-	// without claiming Running before a usable generation finishes Agent.Start.
+	// Report finite local initialization/cleanup progress. Network recovery uses
+	// an initialized controller that accepts controls, not endless StartPending.
 	heartbeat := time.NewTicker(5 * time.Second)
 	defer heartbeat.Stop()
 	requestStop := func() {
@@ -63,6 +63,16 @@ func (s *OpenUEMService) Execute(args []string, controls <-chan svc.ChangeReques
 				if ctx.Err() != nil {
 					continue
 				}
+				log.Print("[INFO]: agent service initialized")
+				if status.State == svc.Running {
+					continue
+				}
+				status = svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
+			case lifecycle.Recovering:
+				if ctx.Err() != nil {
+					continue
+				}
+				log.Print("[WARN]: service controller is running; agent identity recovery is pending")
 				status = svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 			case lifecycle.Stopping:
 				if status.State == svc.StopPending {

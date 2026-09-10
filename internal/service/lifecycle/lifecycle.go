@@ -12,6 +12,13 @@ type Runtime interface {
 	Stop()
 }
 
+// Readiness separates an initialized, stoppable controller from a usable Agent.
+// A recovering controller owns its cleanup and may accept service controls while
+// withholding agent readiness until a protected identity can start safely.
+type Readiness interface {
+	Ready() <-chan struct{}
+}
+
 type Factory func(context.Context) (Runtime, error)
 
 type Phase uint8
@@ -20,6 +27,7 @@ const (
 	Initializing Phase = iota
 	Ready
 	Stopping
+	Recovering
 )
 
 // Run never calls Stop concurrently with the factory or Start. A stop received
@@ -54,6 +62,25 @@ func Run(ctx context.Context, factory Factory, notify func(Phase)) error {
 	}
 	if err := runtime.Start(); err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if readiness, ok := runtime.(Readiness); ok {
+		ready := readiness.Ready()
+		if ready == nil {
+			return errors.New("service readiness signal is unavailable")
+		}
+		select {
+		case <-ready:
+		default:
+			notify(Recovering)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ready:
+			}
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return err

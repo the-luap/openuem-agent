@@ -34,6 +34,8 @@ func (s *OpenUEMService) Execute() error {
 	defer s.Logger.Close()
 	err := lifecycle.Run(ctx, s.factory, func(phase lifecycle.Phase) {
 		switch phase {
+		case lifecycle.Recovering:
+			log.Print("[WARN]: service controller is running; agent identity recovery is pending")
 		case lifecycle.Ready:
 			log.Print("[INFO]: agent service initialized")
 		case lifecycle.Stopping:

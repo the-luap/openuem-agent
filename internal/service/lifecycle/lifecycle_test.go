@@ -105,3 +105,53 @@ func TestLifecycleRejectsInvalidAndCanceledAdmission(t *testing.T) {
 		t.Fatal("invalid lifecycle performed work")
 	}
 }
+
+type recoveringRuntime struct {
+	*fakeRuntime
+	ready chan struct{}
+}
+
+func (r *recoveringRuntime) Ready() <-chan struct{} { return r.ready }
+
+func TestLifecycleRecoveryDoesNotAnnounceAgentReadyAndOwnsCancellableCleanup(t *testing.T) {
+	for _, result := range []string{"ready", "cancelled", "missing", "already-ready"} {
+		t.Run(result, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var phases []Phase
+			stopped := false
+			r := &recoveringRuntime{fakeRuntime: &fakeRuntime{start: func() error { return nil }, stop: func() { stopped = true }}, ready: make(chan struct{})}
+			if result == "missing" {
+				r.ready = nil
+			}
+			if result == "already-ready" {
+				close(r.ready)
+			}
+			err := Run(ctx, func(context.Context) (Runtime, error) { return r, nil }, func(phase Phase) {
+				phases = append(phases, phase)
+				if phase == Recovering {
+					if result == "ready" {
+						close(r.ready)
+					} else {
+						cancel()
+					}
+				}
+				if phase == Ready {
+					cancel()
+				}
+			})
+			want := []Phase{Initializing, Recovering, Stopping}
+			switch result {
+			case "ready":
+				want = []Phase{Initializing, Recovering, Ready, Stopping}
+			case "already-ready":
+				want = []Phase{Initializing, Ready, Stopping}
+			case "missing":
+				want = []Phase{Initializing, Stopping}
+			}
+			if err == nil || !stopped || !reflect.DeepEqual(phases, want) {
+				t.Fatal("recovery confused controller initialization with agent readiness", phases, err)
+			}
+		})
+	}
+}

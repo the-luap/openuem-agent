@@ -68,11 +68,19 @@ recipient registration. The local recipient and historical receipts remain intac
 
 If both replies remain uncertain, no Agent or readiness endpoint runs. The service
 retains its ownership and exact native decision, and retries with backoff. Startup
-also recovers such a decision before starting any Agent. Windows keeps reporting
-`StartPending` checkpoints; it reports `Running` only after actual Agent startup.
-A quarantine arising later leaves the service controller running with the Agent
-offline. Stop cancels recovery, joins all owned work and only then closes the store
-and service lease. Local initialization failure is reported without claiming ready.
+also recovers such a decision before starting any Agent. The initialized controller
+exposes a separate one-shot `Ready` signal, closed only after actual Agent startup.
+The common lifecycle reports `Recovering` until that signal arrives. Windows reports
+its controller as `Running`, accepting stop/shutdown while explicitly logging that
+the Agent remains offline. SCM cannot deliver normal stop controls during
+`StartPending`, so network recovery must not keep that initialization state open
+indefinitely. See [Microsoft's service control contract](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-controlserviceexw).
+Heartbeat checkpoints cover finite local initialization and joined cleanup.
+macOS likewise distinguishes controller recovery from Agent initialization; its
+signed local readiness endpoint remains unavailable until a usable Agent starts.
+A later quarantine closes that endpoint while the controller stays stoppable.
+Stop cancels recovery, joins all owned work and only then closes the store and
+service lease. Local initialization errors never grant Agent readiness.
 
 `RenewalSchedule` exposes authenticated pending state, current expiry and a restart-
 stable cancellation cooldown. The cooldown derives from the durable resolution
@@ -297,8 +305,11 @@ app bundle **1.716**, readiness **1.551**, Mac service coordination **2.922** an
 hardware **1.330**, and FileVault security **39.286**. The final controller
 cancellation/preflight changes pass an additional focused race run in **1.638
 seconds**. Affected-package Vet, module consistency, complete native macOS/Linux/
-Windows builds and Windows controller/storage/SCM test compilation pass. Branch CI provides the separate native Windows and
-Linux execution evidence for the final commit.
+Windows builds and Windows controller/storage/SCM test compilation pass. The original controller `bf48781` passes
+[Linux, native macOS and Windows CI](https://github.com/the-luap/openuem-agent/actions/runs/34485183033).
+The subsequent stoppable-recovery correction adds distinct controller/Agent
+readiness and an actual SCM stop during unresolved recovery; its final native
+execution is checked independently.
 
 These checks use synthetic keys, a local HTTPS issuer and owned native stores.
 They neither install an agent nor run FileVault on a real volume. The controller
@@ -307,7 +318,9 @@ uncertain replies without fallback, startup recovery after source expiry, durabl
 cooldowns, bounded backoff, shutdown during recovery/initialization, changed local
 bindings, expired source rejection and lease release after all users join. Native
 lease fixtures exercise competing processes, owner exit, protected file validation
-and persistent lock identity. Windows SCM tests cover pending recovery checkpoints
-and cancellable initialization. Historical server reconciliation, production
+and persistent lock identity. Windows SCM tests cover finite initialization checkpoints, distinct controller/Agent
+readiness and an actual Local System service stopped through SCM while recovery is
+still unresolved. File identity tests capture IDs from open handles before and
+after owner exit, avoiding deferred Windows path identity lookup. Historical server reconciliation, production
 signing/releases, CA/master-key rotation and physical Windows/macOS acceptance
 remain open parts of the full roadmap.

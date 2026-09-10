@@ -196,7 +196,7 @@ func TestServiceStopDuringInitializationWaitsWithoutRunning(t *testing.T) {
 	}
 }
 
-func TestServicePendingRecoveryReportsProgressWithoutClaimingRunning(t *testing.T) {
+func TestServiceLocalInitializationReportsProgressWithoutClaimingRunning(t *testing.T) {
 	controls, changes := make(chan svc.ChangeRequest, 4), make(chan svc.Status, 8)
 	done := make(chan serviceResult, 1)
 	var stopped atomic.Bool
@@ -208,15 +208,49 @@ func TestServicePendingRecoveryReportsProgressWithoutClaimingRunning(t *testing.
 	select {
 	case progress := <-changes:
 		if progress.State != svc.StartPending || progress.CheckPoint <= initial.CheckPoint || progress.Accepts != 0 || progress.WaitHint == 0 {
-			t.Fatal("unresolved startup claimed readiness or failed to report progress")
+			t.Fatal("local initialization claimed readiness or failed to report progress")
 		}
 	case <-time.After(8 * time.Second):
-		t.Fatal("pending recovery did not refresh the SCM wait checkpoint")
+		t.Fatal("local initialization did not refresh the SCM wait checkpoint")
 	}
 	controls <- svc.ChangeRequest{Cmd: svc.Stop}
 	receiveStatus(t, changes, svc.StopPending)
 	receiveResult(t, done, false, 0)
 	if !stopped.Load() {
-		t.Fatal("pending recovery did not join shutdown")
+		t.Fatal("local initialization did not join shutdown")
+	}
+}
+
+type serviceReadyRuntime struct {
+	*serviceRuntime
+	ready chan struct{}
+}
+
+func (r *serviceReadyRuntime) Ready() <-chan struct{} { return r.ready }
+
+func TestServiceRecoveryAcceptsStopWhileAgentReadinessIsWithheld(t *testing.T) {
+	controls, changes := make(chan svc.ChangeRequest, 4), make(chan svc.Status, 8)
+	done := make(chan serviceResult, 1)
+	ready := make(chan struct{})
+	var stopped atomic.Bool
+	s := &OpenUEMService{factory: func(context.Context) (lifecycle.Runtime, error) {
+		return &serviceReadyRuntime{serviceRuntime: &serviceRuntime{start: func() error { return nil }, stop: func() { stopped.Store(true) }}, ready: ready}, nil
+	}}
+	go func() { specific, code := s.Execute(nil, controls, changes); done <- serviceResult{specific, code} }()
+	receiveStatus(t, changes, svc.StartPending)
+	status := receiveStatus(t, changes, svc.Running)
+	if status.Accepts != svc.AcceptStop|svc.AcceptShutdown {
+		t.Fatal("recovery controller cannot accept SCM stop")
+	}
+	controls <- svc.ChangeRequest{Cmd: svc.Stop}
+	receiveStatus(t, changes, svc.StopPending)
+	receiveResult(t, done, false, 0)
+	if !stopped.Load() {
+		t.Fatal("recovery did not join cleanup")
+	}
+	select {
+	case <-ready:
+		t.Fatal("stopping recovery granted agent readiness")
+	default:
 	}
 }

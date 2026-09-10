@@ -44,6 +44,12 @@ func TestWindowsServiceLeaseExcludesProcessesAndPinsProtectedDirectory(t *testin
 	if err := lease.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	// Capture the file ID from the live handle now. Path-based Windows Stat
+	// defers ID lookup until SameFile and would compare the new path twice.
+	before, err := lease.file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestWindowsServiceLeaseProcessFixture$")
@@ -59,10 +65,6 @@ func TestWindowsServiceLeaseExcludesProcessesAndPinsProtectedDirectory(t *testin
 	}
 	if err := lease.Validate(); !errors.Is(err, ErrUnavailable) {
 		t.Fatal("closed service lease remained authoritative", err)
-	}
-	before, err := os.Lstat(filepath.Join(directory, serviceLeaseName))
-	if err != nil {
-		t.Fatal(err)
 	}
 	cmd = exec.CommandContext(ctx, os.Args[0], "-test.run=^TestWindowsServiceLeaseProcessFixture$")
 	cmd.Env = append(os.Environ(), "OPENUEM_TEST_SERVICE_LEASE_DIRECTORY="+directory, "OPENUEM_TEST_SERVICE_LEASE_MODE=hold")
@@ -99,12 +101,12 @@ func TestWindowsServiceLeaseExcludesProcessesAndPinsProtectedDirectory(t *testin
 	if err != nil {
 		t.Fatal("kernel ownership survived process exit", err)
 	}
+	after, statErr := again.file.Stat()
 	if err := again.Close(); err != nil {
 		t.Fatal(err)
 	}
-	after, err := os.Lstat(filepath.Join(directory, serviceLeaseName))
-	if err != nil || !os.SameFile(before, after) || after.Size() != 0 {
-		t.Fatal("lease retry replaced persistent file", err)
+	if statErr != nil || !os.SameFile(before, after) || after.Size() != 0 {
+		t.Fatal("lease retry replaced persistent file", statErr)
 	}
 }
 

@@ -136,6 +136,8 @@ type individualService struct {
 	cancel       context.CancelFunc
 	mu           sync.Mutex // serializes Start/Stop; the loop exclusively owns active after Start
 	stopOnce     sync.Once
+	readyOnce    sync.Once
+	ready        chan struct{}
 	started      bool
 	done         chan struct{}
 	directory    string
@@ -155,7 +157,7 @@ func newIndividualService(ctx context.Context, directory string, deps individual
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	s := &individualService{directory: directory, deps: deps}
+	s := &individualService{directory: directory, deps: deps, ready: make(chan struct{})}
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	defer func() {
 		if err != nil {
@@ -208,36 +210,27 @@ func (s *individualService) Start() error {
 		return errIndividualAgent
 	}
 	s.started = true
-	backoff := time.Minute
-	for {
-		if err := s.preflight(); err != nil {
-			return err
-		}
-		schedule, err := s.store.RenewalSchedule()
-		if err != nil || schedule == nil {
-			return errIndividualAgent
-		}
-		if schedule.Pending == nil || schedule.Pending.Stage != "confirming" {
-			break
-		}
-		if err := s.handoff(schedule.Pending.RequestID); err == nil {
-			break
-		}
-		// Startup quarantine has no Agent/readiness endpoint. Keep service startup
-		// pending and retry with bounded requests until recovery or cancellation.
-		log.Print("[WARN]: individual identity recovery is pending")
-		if !s.deps.wait(s.ctx, s.deps.jitter(backoff)) {
-			return s.ctx.Err()
-		}
-		backoff = min(backoff*2, time.Hour)
-	}
-	if err := s.startActive(); err != nil {
+	if err := s.preflight(); err != nil {
 		return err
 	}
+	schedule, err := s.store.RenewalSchedule()
+	if err != nil || schedule == nil {
+		return errIndividualAgent
+	}
+	if schedule.Pending == nil || schedule.Pending.Stage != "confirming" {
+		if err := s.startActive(); err != nil {
+			return err
+		}
+	}
+	// A quarantined installation has a fully initialized controller but no
+	// usable Agent. Recover asynchronously so SCM can accept stop controls;
+	// Ready remains open until an actual generation completes Agent.Start.
 	s.done = make(chan struct{})
 	go func() { defer close(s.done); defer s.stopActive(); s.run() }()
 	return nil
 }
+
+func (s *individualService) Ready() <-chan struct{} { return s.ready }
 
 func (s *individualService) startActive() error {
 	if s.active != nil {
@@ -283,6 +276,7 @@ func (s *individualService) startActive() error {
 		return errIndividualAgent
 	}
 	s.active, s.activeCancel, s.expiresAt = runtime, cancel, expires
+	s.readyOnce.Do(func() { close(s.ready) })
 	return nil
 }
 
