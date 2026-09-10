@@ -1,12 +1,12 @@
 # Native service initialization and cleanup
 
-The Windows service no longer reports `Running` before identity/configuration
-validation or blocks its control loop on the first inventory report. Linux and
+The Windows service keeps its control loop available during initialization and
+identity recovery. Linux and
 macOS install SIGTERM/SIGINT handlers before constructing the agent. These are
 service lifecycle changes. Windows now has a separate
 [activation command](native-windows-activation.md) for configuration, registration
-and startup after completed enrollment. End-user installer integration and macOS
-service registration remain separate work.
+and startup after completed enrollment. macOS has a separate authenticated
+registration/approval flow; end-user signed installer integration remains open.
 The subsequent explicit `serve -identity-directory` selection is described in
 [runtime configuration](individual-agent-runtime.md).
 
@@ -22,9 +22,10 @@ is introduced.
 `Start` returns configuration and job-registration errors. It registers the first
 inventory report as an immediate scheduler task and starts the scheduler only
 after registration succeeds. A temporary broker connection failure can still
-start the existing reconnect job. Thus `Running` means local initialization and
-work scheduling succeeded; it does not prove that the server is reachable or that
-inventory has been received.
+start the existing reconnect job. An Agent readiness proof means local
+initialization and work scheduling succeeded. Server reachability and inventory
+delivery remain separate observations. Native SCM `Running` can also describe an
+initialized controller whose identity recovery has not yet produced an Agent.
 
 The common lifecycle runner serializes construction, start and cleanup. A stop
 received during initialization cancels the context and waits for the initializer
@@ -34,13 +35,20 @@ ownership of a partially returned runtime for cleanup even when they return an
 error.
 
 Windows publishes `StartPending` with no accepted controls and a 30-second wait
-hint. `Running` accepts Stop/Shutdown only after successful local initialization.
-Initialization failure reaches `StopPending` and a service-specific exit code of
-1; it never passes through `Running`. Stop/Shutdown publishes `StopPending`
+hint for finite local initialization. A successfully initialized recovery
+controller reports `Running` and accepts Stop/Shutdown while Agent readiness
+remains unavailable. Local initialization failure reaches `StopPending` and a
+service-specific exit code of 1. Stop/Shutdown publishes `StopPending`
 immediately and keeps Interrogate handling available during cleanup. Interrogate
 returns the service's current state, not a possibly stale status in the request.
-Unsupported controls are ignored. No timer fabricates checkpoint progress.
+Unsupported controls are ignored. Checkpoints cover finite initialization/cleanup;
+network recovery stays in the stoppable controller state.
 `svc.Run` reports `Stopped` after the handler has finished cleanup.
+
+[Windows activation](windows-local-readiness.md) requires an authenticated local
+readiness response from the exact live SCM process. It cannot infer Agent
+initialization from SCM `Running`. macOS uses its authenticated Unix-socket proof.
+Both endpoints close and join before a generation releases its signing key.
 
 These transitions follow Microsoft's [ServiceMain guidance](https://learn.microsoft.com/en-us/windows/win32/services/service-servicemain-function)
 and [service state rules](https://learn.microsoft.com/en-us/windows/win32/services/service-status-transitions).

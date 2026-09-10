@@ -79,6 +79,11 @@ Heartbeat checkpoints cover finite local initialization and joined cleanup.
 macOS likewise distinguishes controller recovery from Agent initialization; its
 signed local readiness endpoint remains unavailable until a usable Agent starts.
 A later quarantine closes that endpoint while the controller stays stoppable.
+Windows now also exposes [authenticated local readiness](windows-local-readiness.md)
+through a private named pipe. Its activation command requires a signed ready proof
+from the exact live SCM process, so controller `Running` during recovery cannot
+be mistaken for a usable Agent. Each generation joins its proof endpoint before
+releasing its signing key.
 Stop cancels recovery, joins all owned work and only then closes the store and
 service lease. Local initialization errors never grant Agent readiness.
 
@@ -321,6 +326,9 @@ lease fixtures exercise competing processes, owner exit, protected file validati
 and persistent lock identity. Windows SCM tests cover finite initialization checkpoints, distinct controller/Agent
 readiness and an actual Local System service stopped through SCM while recovery is
 still unresolved. File identity tests capture IDs from open handles before and
-after owner exit, avoiding deferred Windows path identity lookup. Historical server reconciliation, production
-signing/releases, CA/master-key rotation and physical Windows/macOS acceptance
+after owner exit, avoiding deferred Windows path identity lookup. The console's
+[historical reconciliation](https://github.com/the-luap/openuem-console/blob/55222817efee656f38faf8f850b2da456690068e/docs/desktop-identity-renewal.md)
+now binds a fresh signed current-key check to each old completed rotation. Registry
+`2840163` passes [Linux/PostgreSQL and Windows CI](https://github.com/the-luap/openuem-nats/actions/runs/34490994897).
+Production signing/releases, CA/master-key rotation and physical Windows/macOS acceptance
 remain open parts of the full roadmap.
