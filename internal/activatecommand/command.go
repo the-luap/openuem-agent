@@ -23,7 +23,9 @@ override or service-name override is accepted.
 Windows: the executable and installation directory must be owned by Local System
 or Administrators and must not allow other accounts to write. Private configuration
 and log directories are created under the installed executable's directory. The
-command registers an automatic Local System service and waits for initialization.
+command registers an automatic Local System service and waits for authenticated
+local readiness from that exact service process. SCM Running alone is insufficient
+while the controller is recovering its identity. Cancellation leaves it stoppable.
 
 macOS 13+: use /Applications/OpenUEM Agent.app/Contents/MacOS/openuem-agent and
 -identity-directory /Library/OpenUEMAgent/identity. The final app must be root-owned,

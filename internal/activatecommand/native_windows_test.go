@@ -33,6 +33,7 @@ import (
 	"github.com/open-uem/nats/enrollment"
 	"github.com/open-uem/openuem-agent/internal/agent"
 	"github.com/open-uem/openuem-agent/internal/enrollmentstore"
+	"github.com/open-uem/openuem-agent/internal/localready"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -93,6 +94,29 @@ func (s *activationFixtureService) Execute(_ []string, controls <-chan svc.Chang
 	if runtime.Config.UUID != fixtureDeviceID || runtime.Config.TenantID != "3" || runtime.Config.SiteID != "4" || !runtime.Config.SFTPDisabled || !runtime.Config.RemoteAssistanceDisabled {
 		return true, 5
 	}
+	store, err := enrollmentstore.Open(s.directory)
+	if err != nil {
+		return true, 6
+	}
+	defer store.Close()
+	i, err := store.Load()
+	if err != nil {
+		return true, 7
+	}
+	defer i.Close()
+	identity := localready.Identity{DeviceID: i.Response.DeviceID, TenantID: i.Response.TenantID, SiteID: i.Response.SiteID, ReleaseDigest: i.ReleaseDigest, AgentSize: i.AgentSize, AgentSHA256: i.AgentSHA256, ExpiresAt: i.Response.ExpiresAt}
+	endpoint, err := localready.Listen(ctx, s.directory, identity, i.Keys.Broker)
+	if err != nil {
+		return true, 8
+	}
+	defer endpoint.Close()
+	// The fixture publishes actual signed readiness only after its isolated
+	// initialization. It never starts inventory or broker/host management work.
+	if _, err := os.Stat(filepath.Join(s.directory, "fixture-not-ready")); errors.Is(err, os.ErrNotExist) {
+		if endpoint.MarkReady() != nil {
+			return true, 9
+		}
+	}
 	status := svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	statuses <- status
 	for control := range controls {
@@ -106,6 +130,92 @@ func (s *activationFixtureService) Execute(_ []string, controls <-chan svc.Chang
 		}
 	}
 	return false, 0
+}
+
+func TestNativeWindowsActivationRequiresSignedReadinessFromTheSCMProcess(t *testing.T) {
+	f := newWindowsActivationFixture(t, false)
+	before := f.protectedSnapshot(t)
+	writePrivateFixture(t, filepath.Join(f.directory, "fixture-not-ready"), []byte("isolated initialized controller without an agent"))
+	store, err := enrollmentstore.Open(f.directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	i, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer i.Close()
+	plan, err := prepareWindows(t.Context(), f.executable, f.directory, i, f.name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Close()
+	if err = plan.PrepareConfiguration(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err = plan.Register(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err = plan.service.Start(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	var state svc.Status
+	for time.Now().Before(deadline) {
+		state, err = plan.service.Query()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state.State == svc.Running {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if state.State != svc.Running {
+		t.Fatal("fixture controller did not start", state)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 350*time.Millisecond)
+	err = plan.Start(ctx)
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("SCM Running without signed readiness was accepted", err)
+	}
+	public, _ := i.Keys.Broker.PublicKey()
+	identity := localready.Identity{DeviceID: i.Response.DeviceID, TenantID: i.Response.TenantID, SiteID: i.Response.SiteID, ReleaseDigest: i.ReleaseDigest, AgentSize: i.AgentSize, AgentSHA256: i.AgentSHA256, ExpiresAt: i.Response.ExpiresAt}
+	if err = localready.ProbeProcess(t.Context(), f.directory, identity, public, state.ProcessId+1); !errors.Is(err, localready.ErrConflict) {
+		t.Fatal("readiness ignored a different SCM process", err)
+	}
+	if _, err = plan.service.Control(svc.Stop); err != nil {
+		t.Fatal("recovering controller was not stoppable", err)
+	}
+	deadline = time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		state, err = plan.service.Query()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state.State == svc.Stopped {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if state.State != svc.Stopped {
+		t.Fatal("fixture failed to stop")
+	}
+	if err = os.Remove(filepath.Join(f.directory, "fixture-not-ready")); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel = context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	if err = plan.Start(ctx); err != nil {
+		t.Fatal("same identity could not recover signed readiness", err)
+	}
+	for path, hash := range f.protectedSnapshot(t) {
+		if hash != before[path] {
+			t.Fatal("readiness recovery changed protected identity")
+		}
+	}
 }
 
 type windowsActivationFixture struct {

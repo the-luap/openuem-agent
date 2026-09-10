@@ -4,6 +4,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
@@ -23,12 +24,14 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/nats-io/nkeys"
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
+	"github.com/open-uem/openuem-agent/internal/localready"
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/open-uem/wingetcfg/wingetcfg"
 	"gopkg.in/yaml.v3"
@@ -48,8 +51,9 @@ func (a *Agent) Start() (err error) {
 			err = a.ctx.Err()
 		}
 		if err == nil {
-			a.TaskScheduler.Start()
-			log.Println("[INFO]: agent scheduler has started")
+			err = a.startInitializedScheduler(func(ctx context.Context, directory string, identity localready.Identity, signer nkeys.KeyPair) (readinessEndpoint, error) {
+				return localready.Listen(ctx, directory, identity, signer)
+			})
 		}
 	}()
 

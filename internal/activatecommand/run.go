@@ -22,7 +22,7 @@ var (
 	ErrConflict      = errors.New("an existing service or configuration belongs to another installation; no replacement was authorized")
 	ErrConfiguration = errors.New("the protected operational configuration could not be prepared")
 	ErrRegistration  = errors.New("the native agent service could not be registered")
-	ErrStart         = errors.New("the registered agent service did not reach its running state; retain the identity and retry after correcting the service error")
+	ErrStart         = errors.New("the registered agent did not prove local readiness; retain the identity and retry after correcting the service error")
 	ErrCleanup       = errors.New("activation finished, but local activation resources could not be closed")
 	ErrSignature     = errors.New("the installed app requires a valid notarized Developer ID Application signature")
 	ErrApproval      = errors.New("the macOS daemon is registered but requires administrator approval in System Settings > General > Login Items; allow OpenUEM Agent, then retry activation")
@@ -30,7 +30,8 @@ var (
 
 type Options struct{ IdentityDirectory string }
 
-// Running describes the native service state, never remote inventory delivery.
+// Running requires authenticated local initialization, never just the native
+// controller state or a claim of remote inventory delivery.
 type Result struct {
 	Registered       bool   `json:"registered"`
 	Running          bool   `json:"running"`

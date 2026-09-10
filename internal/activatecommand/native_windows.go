@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/open-uem/openuem-agent/internal/enrollmentstore"
+	"github.com/open-uem/openuem-agent/internal/localready"
 	"github.com/open-uem/openuem-agent/internal/nativepath"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
@@ -203,6 +204,12 @@ func (p *windowsInstallation) Start(ctx context.Context) error {
 	if err := p.verifyConfiguration(); err != nil {
 		return err
 	}
+	i := p.identity
+	public, err := i.Keys.Broker.PublicKey()
+	if err != nil {
+		return ErrIdentity
+	}
+	identity := localready.Identity{DeviceID: i.Response.DeviceID, TenantID: i.Response.TenantID, SiteID: i.Response.SiteID, ReleaseDigest: i.ReleaseDigest, AgentSize: i.AgentSize, AgentSHA256: i.AgentSHA256, ExpiresAt: i.Response.ExpiresAt}
 	state, err := p.service.Query()
 	if err != nil {
 		return ErrStart
@@ -227,8 +234,28 @@ func (p *windowsInstallation) Start(ctx context.Context) error {
 		if err != nil || state.State == svc.Stopped || state.State == svc.StopPending {
 			return ErrStart
 		}
-		if state.State == svc.Running {
-			return nil
+		if state.State == svc.Running && state.ProcessId != 0 {
+			pid := state.ProcessId
+			err = localready.ProbeProcess(ctx, p.identityDirectory, identity, public, pid)
+			if errors.Is(err, localready.ErrConflict) {
+				return ErrConflict
+			}
+			if err == nil {
+				// Running also describes a stoppable recovery controller. Require
+				// a signed ready proof from this exact live SCM process, then
+				// recheck service/configuration before reporting initialization.
+				after, queryErr := p.service.Query()
+				if queryErr != nil || after.State != svc.Running || after.ProcessId != pid {
+					return ErrStart
+				}
+				if err = p.matchesService(); err != nil {
+					return err
+				}
+				if err = p.checkRoot(ctx); err != nil {
+					return err
+				}
+				return p.verifyConfiguration()
+			}
 		}
 		select {
 		case <-ctx.Done():

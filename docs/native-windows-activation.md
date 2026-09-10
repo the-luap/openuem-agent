@@ -2,7 +2,9 @@
 
 The installed Windows agent now handles `activate` before logging or service
 startup. It prepares operational configuration, registers the `openuem-agent`
-automatic Local System service and waits up to two minutes for local `Running`.
+automatic Local System service and waits up to two minutes for authenticated local
+readiness from that exact service process. SCM `Running` alone is insufficient:
+the controller also uses that state while identity recovery remains incomplete.
 It loads the completed protected identity and never sends an invitation claim.
 Run from an elevated administrator terminal:
 
@@ -58,8 +60,9 @@ dependency.
 ## Results and recovery
 
 Successful registration writes public JSON containing `registered`, `running`,
-`device_id`, `tenant_id` and `site_id`. `running` means the native service completed
-local initialization; it does not prove broker connectivity or inventory delivery.
+`device_id`, `tenant_id` and `site_id`. `running` means a fresh signed local proof
+confirms agent initialization and the same process is still running in SCM. It
+does not prove broker connectivity or inventory delivery.
 Verify those in the management console. Startup failure returns nonzero with
 `registered: true, running: false` after a confirmed compatible registration.
 Diagnostics omit raw native errors and invalid argument values.
@@ -78,8 +81,10 @@ existing explicitly configured runtime, but `activate` rejects them. Retrying
 replace its keys. An authorized migration is still required. Changing a bound
 executable also prevents subsequent service startup until a separately authorized
 release/binding update is implemented. Do not delete state or weaken verification
-to work around either case. Certificate renewal and signed update recovery remain
-outstanding.
+to work around either case. [Automatic certificate renewal](individual-identity-renewal.md)
+and stoppable startup recovery are implemented; signed executable updates remain
+outstanding. The [Windows readiness transport](windows-local-readiness.md) closes
+and joins each generation's proof endpoint before its signing key is released.
 
 ## Verification scope
 

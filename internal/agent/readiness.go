@@ -16,7 +16,7 @@ type readinessEndpoint interface {
 
 type readinessListener func(context.Context, string, localready.Identity, nkeys.KeyPair) (readinessEndpoint, error)
 
-// startInitializedScheduler is called by the macOS runtime only after all
+// startInitializedScheduler is called by native desktop runtimes only after all
 // initialization and initial job registration succeeded. Readiness attests to
 // local initialization, including an initialized offline reconnect schedule.
 // Inventory delivery and broker connectivity remain separate server observations.
