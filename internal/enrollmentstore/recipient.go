@@ -36,7 +36,7 @@ func (s *Store) LoadOrCreateRecipient(expected *Identity) (*enrollment.RecoveryR
 		!current.Keys.Certificate.PublicKey.Equal(&expected.Keys.Certificate.PublicKey) {
 		return nil, ErrUnavailable
 	}
-	// Do not bind to certificate DER: a future authenticated renewal can retain
+	// Do not bind to certificate DER: authenticated renewal retains
 	// this recipient while still requiring a new server registration epoch.
 	binding, err := json.Marshal(struct {
 		Origin   string `json:"origin"`

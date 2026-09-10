@@ -47,5 +47,11 @@ func validRecord(record string) bool {
 			return err == nil && n >= 1 && n <= enrollment.MaxRotationAttempts && suffix == fmt.Sprintf("%03d", n)
 		}
 	}
+	for _, stage := range renewalStages {
+		if suffix, ok := strings.CutPrefix(record, "renewal-"+stage+"-v1-"); ok {
+			n, err := strconv.Atoi(suffix)
+			return err == nil && n >= 1 && n <= MaxIdentityRenewalAttempts && suffix == fmt.Sprintf("%03d", n)
+		}
+	}
 	return false
 }

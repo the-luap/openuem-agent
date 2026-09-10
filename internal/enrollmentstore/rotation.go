@@ -24,10 +24,11 @@ const (
 // open until all journal users have stopped. The immutable backend, rather than
 // a process-local mutex, arbitrates admission across concurrent processes.
 type RotationJournal struct {
-	store       *Store
-	binding     []byte
-	scope       enrollment.RecoveryIdentity
-	certificate *x509.Certificate
+	store        *Store
+	binding      []byte
+	scope        enrollment.RecoveryIdentity
+	certificate  *x509.Certificate
+	certificates map[string]renewalCertificate
 }
 
 type RotationEntry struct {
@@ -73,14 +74,14 @@ func (s *Store) OpenRotationJournal(expected *Identity) (*RotationJournal, error
 	if current.Response != expected.Response || current.Origin != expected.Origin || current.Platform != expected.Platform || !current.Keys.Certificate.PublicKey.Equal(&expected.Keys.Certificate.PublicKey) {
 		return nil, ErrUnavailable
 	}
-	cert, err := enrollment.ValidateResponse(current.Response, current.Origin, &current.Keys.Certificate.PublicKey, time.Now())
+	cert, err := enrollment.ValidateResponse(current.Response, current.Origin, &current.Keys.Certificate.PublicKey, s.renewalTime())
 	if err != nil {
 		return nil, ErrUnavailable
 	}
 	hash := sha256.Sum256(cert.Raw)
 	scope := enrollment.RecoveryIdentity{AgentID: current.Response.DeviceID, TenantID: current.Response.TenantID, SiteID: current.Response.SiteID, CertificateHash: hex.EncodeToString(hash[:])}
-	// The installation anchor excludes certificate DER so a future explicit
-	// renewal can retain permanent replay evidence under this same identity.
+	// The installation anchor excludes certificate DER so authenticated renewal
+	// retains permanent replay evidence under this same identity.
 	bound, _ := json.Marshal(struct {
 		Origin   string `json:"origin"`
 		DeviceID string `json:"device_id"`
@@ -114,12 +115,54 @@ func (s *Store) OpenRotationJournal(expected *Identity) (*RotationJournal, error
 	if err != nil || !bytes.Equal(anchor, binding) {
 		return nil, ErrUnavailable
 	}
-	return &RotationJournal{store: s, binding: binding, scope: scope, certificate: cert}, nil
+	return &RotationJournal{store: s, binding: binding, scope: scope, certificate: cert, certificates: current.certificates}, nil
 }
 
 func (j *RotationJournal) active(c enrollment.RotationContext) bool {
-	return j != nil && j.store != nil && j.store.backend != nil && c.ValidReceipt() && c.Binding.Identity == j.scope &&
-		time.Now().Before(j.certificate.NotAfter) && !time.Now().Before(j.certificate.NotBefore)
+	if j == nil || j.store == nil || j.store.backend == nil || !c.ValidReceipt() || c.Binding.Identity != j.scope ||
+		!j.store.renewalTime().Before(j.certificate.NotAfter) || j.store.renewalTime().Before(j.certificate.NotBefore) {
+		return false
+	}
+	// Recheck durable selection before any new intent/result publication. A
+	// journal opened under an older generation cannot authorize new work after a
+	// handoff decision, even while its old certificate has not yet expired.
+	p, err := j.store.loadPending()
+	if err != nil {
+		return false
+	}
+	defer p.close()
+	current, err := j.store.loadIdentity(p)
+	if err != nil {
+		return false
+	}
+	defer current.Close()
+	return current.Response.DeviceID == j.scope.AgentID && current.Response.TenantID == j.scope.TenantID && current.Response.SiteID == j.scope.SiteID && current.Keys.Certificate.PublicKey.Equal(j.certificate.PublicKey) && renewalDigest(j.certificate.Raw) == currentCertificateHash(current)
+}
+
+func currentCertificateHash(i *Identity) string {
+	cert, err := historicalResponse(i.Response, i.Origin, &i.Keys.Certificate.PublicKey)
+	if err != nil {
+		return ""
+	}
+	return renewalDigest(cert.Raw)
+}
+
+// Historical reads use the exact certificate and authenticated retirement time
+// retained by the renewal chain. They never admit a mutation or sign a new result
+// under the retired generation.
+func (j *RotationJournal) receiptCertificate(c enrollment.RotationContext) (*x509.Certificate, time.Time, bool) {
+	if j == nil || j.store == nil || j.store.backend == nil || !c.ValidReceipt() || c.Binding.Identity.AgentID != j.scope.AgentID || c.Binding.Identity.TenantID != j.scope.TenantID || c.Binding.Identity.SiteID != j.scope.SiteID {
+		return nil, time.Time{}, false
+	}
+	history, ok := j.certificates[c.Binding.Identity.CertificateHash]
+	if !ok || history.certificate == nil {
+		return nil, time.Time{}, false
+	}
+	at := history.retiredAt
+	if at.IsZero() {
+		at = j.store.renewalTime()
+	}
+	return history.certificate, at, !at.Before(history.certificate.NotBefore) && at.Before(history.certificate.NotAfter)
 }
 
 func canonicalRotationJSON(data []byte, value any) bool {
@@ -138,7 +181,7 @@ func (j *RotationJournal) Lookup(c enrollment.RotationContext) (*RotationEntry, 
 	}
 	j.store.mu.RLock()
 	defer j.store.mu.RUnlock()
-	if !j.active(c) {
+	if _, _, ok := j.receiptCertificate(c); !ok {
 		return nil, ErrUnavailable
 	}
 	return j.lookup(c)
@@ -187,7 +230,8 @@ func (j *RotationJournal) lookup(c enrollment.RotationContext) (*RotationEntry, 
 		return nil, ErrUnavailable
 	}
 	var receipt enrollment.RotationResult
-	if !canonicalRotationJSON(fields[1], &receipt) || receipt.Context != c || !bytes.Equal(receipt.Nonce, entry.Nonce) || enrollment.VerifyRotationResult(receipt, j.certificate, time.Now()) != nil {
+	certificate, at, ok := j.receiptCertificate(c)
+	if !ok || !canonicalRotationJSON(fields[1], &receipt) || receipt.Context != c || !bytes.Equal(receipt.Nonce, entry.Nonce) || enrollment.VerifyRotationResult(receipt, certificate, at) != nil {
 		return nil, ErrUnavailable
 	}
 	entry.Result = &receipt

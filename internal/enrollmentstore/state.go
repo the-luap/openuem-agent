@@ -74,6 +74,7 @@ type Identity struct {
 	Architecture  string
 	AgentSize     int64
 	AgentSHA256   string
+	certificates  map[string]renewalCertificate
 }
 
 func (Identity) String() string               { return "[protected individual agent identity]" }
@@ -104,8 +105,9 @@ func releaseKeys(keys *enrollment.Keys) {
 // Store owns a native backend. Close waits for active operations; callers must
 // cancel enrollment contexts before shutdown if they need to interrupt HTTP.
 type Store struct {
-	mu      sync.RWMutex
-	backend NativeBackend
+	mu           sync.RWMutex
+	backend      NativeBackend
+	renewalClock func() time.Time
 }
 
 func Open(directory string) (*Store, error) {
@@ -129,7 +131,7 @@ func (s *Store) Close() error {
 
 // Load distinguishes an empty installation from a recoverable pending claim.
 // Missing/corrupt pieces of an existing identity never become an empty store.
-// Expired certificates fail validation and cannot trigger legacy fallback.
+// Expired current certificates fail validation and cannot trigger legacy fallback.
 func (s *Store) Load() (*Identity, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -313,6 +315,23 @@ func (s *Store) loadPending() (*pending, error) {
 }
 
 func (s *Store) loadIdentity(p *pending) (*Identity, error) {
+	state, err := s.loadRenewalState(p)
+	if err != nil {
+		return nil, err
+	}
+	defer state.close()
+	if state.pending != nil && state.pending.decision != nil && state.pending.decision.Action == "confirm" {
+		return nil, ErrRenewalHandoff
+	}
+	if _, err := enrollment.ValidateResponse(state.identity.Response, state.identity.Origin, &state.identity.Keys.Certificate.PublicKey, s.renewalTime()); err != nil {
+		return nil, ErrUnavailable
+	}
+	identity := state.identity
+	state.identity = nil
+	return identity, nil
+}
+
+func (s *Store) loadOriginalIdentity(p *pending) (*Identity, error) {
 	data, err := s.backend.Load(identityRecord)
 	if errors.Is(err, ErrMissing) {
 		if !s.securityRecordsAbsent() {
@@ -328,7 +347,7 @@ func (s *Store) loadIdentity(p *pending) (*Identity, error) {
 	if err != nil || !p.bootstrap.matchesScope(response) {
 		return nil, ErrUnavailable
 	}
-	if _, err = enrollment.ValidateResponse(response, p.bootstrap.Origin, &p.keys.Certificate.PublicKey, time.Now()); err != nil {
+	if _, err = historicalResponse(response, p.bootstrap.Origin, &p.keys.Certificate.PublicKey); err != nil {
 		return nil, ErrUnavailable
 	}
 	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest, Platform: p.bootstrap.Platform, Architecture: p.bootstrap.Architecture, AgentSize: p.bootstrap.AgentSize, AgentSHA256: p.bootstrap.AgentSHA256}
@@ -352,6 +371,15 @@ func (s *Store) securityRecordsAbsent() bool {
 	for ordinal := 1; ordinal <= enrollment.MaxRotationAttempts; ordinal++ {
 		for _, result := range []bool{false, true} {
 			data, err := s.backend.Load(rotationRecord(result, ordinal))
+			clear(data)
+			if !errors.Is(err, ErrMissing) {
+				return false
+			}
+		}
+	}
+	for ordinal := 1; ordinal <= MaxIdentityRenewalAttempts; ordinal++ {
+		for _, stage := range renewalStages {
+			data, err := s.backend.Load(renewalRecord(stage, ordinal))
 			clear(data)
 			if !errors.Is(err, ErrMissing) {
 				return false

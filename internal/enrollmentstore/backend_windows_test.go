@@ -49,6 +49,11 @@ func TestWindowsDPAPIPartialRestoreCannotReplaceLaterJournalEvidence(t *testing.
 	runRetainedSecurityPreventsEnrollment(t, b, rotationRecord(true, enrollment.MaxRotationAttempts), restorePendingFixture(t))
 }
 
+func TestWindowsDPAPIDurableIdentityRenewal(t *testing.T) {
+	b, _ := windowsFixture(t)
+	runDurableIdentityRenewal(t, b)
+}
+
 func TestWindowsStateIsEncryptedPrivateImmutableAndRecoverable(t *testing.T) {
 	b, directory := windowsFixture(t)
 	plaintext := []byte("isolated private identity fixture, never a production key")

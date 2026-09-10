@@ -148,6 +148,11 @@ func TestMacKeychainPartialRestoreCannotReplaceLaterJournalEvidence(t *testing.T
 	runRetainedSecurityPreventsEnrollment(t, f.backend, rotationRecord(true, enrollment.MaxRotationAttempts), restorePendingFixture(t))
 }
 
+func TestMacKeychainDurableIdentityRenewal(t *testing.T) {
+	f := newKeychainFixture(t)
+	runDurableIdentityRenewal(t, f.backend)
+}
+
 func TestMacLockedKeychainFailsWithoutPromptOrReplacement(t *testing.T) {
 	f := newKeychainFixture(t)
 	if err := f.backend.Create(pendingRecord, []byte("locked fixture")); err != nil {

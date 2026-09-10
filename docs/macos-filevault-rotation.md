@@ -75,7 +75,10 @@ and encrypted signed receipt, and refuse accidental JSON serialization.
    identical saved receipt is accepted; a conflicting result cannot replace it.
 
 `Lookup` and `RecordResult` allow receipts after the execution deadline, while
-still requiring the active signing certificate and exact scope, context and nonce.
+requiring the exact scope, context and nonce. New result publication requires
+the currently selected signing certificate. After [identity renewal](individual-identity-renewal.md),
+historical reads use the original certificate and its authenticated retirement
+time. They preserve old receipts without authorizing new work under retired keys.
 `BeginWithBootSession` rejects missing boot identity and expired execution. An orphan result, malformed framed record,
 noncanonical JSON, changed signature or foreign installation binding fails closed.
 
