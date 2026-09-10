@@ -23,17 +23,7 @@ type OpenUEMService struct {
 
 func NewService(l *logger.OpenUEMLogger, options runtimeoptions.Options) *OpenUEMService {
 	return &OpenUEMService{Logger: l, factory: func(ctx context.Context) (lifecycle.Runtime, error) {
-		var a *agent.Agent
-		var err error
-		if options.IdentityDirectory != "" {
-			a, err = agent.NewIndividual(ctx, options.IdentityDirectory)
-		} else {
-			a, err = agent.New(ctx)
-		}
-		if err != nil {
-			return nil, err
-		}
-		return a, nil
+		return agent.NewServiceRuntime(ctx, options.IdentityDirectory)
 	}}
 }
 

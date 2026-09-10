@@ -66,15 +66,16 @@ func (b Bootstrap) matchesScope(response enrollment.Response) bool {
 // shared with another Identity or serialized into configuration, logs or HTTP.
 // Each successful Load/Enroll returns independent key material.
 type Identity struct {
-	Keys          *enrollment.Keys
-	Response      enrollment.Response
-	Origin        string
-	ReleaseDigest string
-	Platform      string
-	Architecture  string
-	AgentSize     int64
-	AgentSHA256   string
-	certificates  map[string]renewalCertificate
+	Keys            *enrollment.Keys
+	Response        enrollment.Response
+	Origin          string
+	ReleaseDigest   string
+	ReleaseSequence uint64
+	Platform        string
+	Architecture    string
+	AgentSize       int64
+	AgentSHA256     string
+	certificates    map[string]renewalCertificate
 }
 
 func (Identity) String() string               { return "[protected individual agent identity]" }
@@ -350,7 +351,7 @@ func (s *Store) loadOriginalIdentity(p *pending) (*Identity, error) {
 	if _, err = historicalResponse(response, p.bootstrap.Origin, &p.keys.Certificate.PublicKey); err != nil {
 		return nil, ErrUnavailable
 	}
-	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest, Platform: p.bootstrap.Platform, Architecture: p.bootstrap.Architecture, AgentSize: p.bootstrap.AgentSize, AgentSHA256: p.bootstrap.AgentSHA256}
+	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest, ReleaseSequence: p.bootstrap.ReleaseSequence, Platform: p.bootstrap.Platform, Architecture: p.bootstrap.Architecture, AgentSize: p.bootstrap.AgentSize, AgentSHA256: p.bootstrap.AgentSHA256}
 	p.keys = nil // transfer ownership, including when returning a competing result
 	return identity, nil
 }

@@ -65,9 +65,23 @@ func individualDirectory(mode, directory string) (string, error) {
 }
 
 func (a *Agent) configureIndividual(mode, directory string) error {
+	return a.configureIndividualWithLease(mode, directory, nil)
+}
+
+func (a *Agent) configureIndividualWithLease(mode, directory string, lease individualServiceLease) error {
 	directory, err := individualDirectory(mode, directory)
 	if err != nil || directory == "" {
 		return err
+	}
+	if lease == nil {
+		lease, err = enrollmentstore.AcquireServiceLease(directory)
+		if err != nil {
+			return errIndividualAgent
+		}
+		a.ownedServiceLease = lease
+	}
+	if lease.ValidateDirectory(directory) != nil {
+		return errIndividualAgent
 	}
 	store, err := enrollmentstore.Open(directory)
 	if err != nil {
@@ -79,42 +93,28 @@ func (a *Agent) configureIndividual(mode, directory string) error {
 			store.Close()
 		}
 	}()
-	identity, err := store.Load()
+	binding, err := store.InstallationBinding()
 	if err != nil {
 		return errIndividualAgent
-	}
-	platform := runtime.GOOS
-	if platform == "darwin" {
-		platform = "macos"
-	}
-	if identity.Platform != platform || identity.Architecture != runtime.GOARCH {
-		identity.Close()
-		return errIndividualAgent
-	}
-	if identity.AgentSize > 0 || identity.AgentSHA256 != "" {
-		image, err := bootstrapinstall.OpenRunningAgent()
-		if err != nil {
-			identity.Close()
-			return errIndividualAgent
-		}
-		ctx := a.ctx
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		err = image.VerifyStoredBinding(ctx, identity.AgentSize, identity.AgentSHA256)
-		closeErr := image.Close()
-		if err != nil || closeErr != nil {
-			identity.Close()
-			return errIndividualAgent
-		}
 	}
 	parent := a.ctx
 	if parent == nil {
 		parent = context.Background()
 	}
+	if verifyIndividualInstallation(parent, *binding) != nil {
+		return errIndividualAgent
+	}
+	identity, err := store.Load()
+	if err != nil {
+		return errIndividualAgent
+	}
+	if !binding.Matches(identity) {
+		identity.Close()
+		return errIndividualAgent
+	}
 	ctx, cancel := context.WithCancel(parent)
 	a.individual = &individualRuntime{identity: identity, directory: directory, ctx: ctx, cancel: cancel}
-	if platform == "macos" {
+	if binding.Platform == "macos" {
 		key, err := store.LoadOrCreateRecipient(identity)
 		if err == nil {
 			a.individual.recovery, err = newRecoveryClient(identity, key)
@@ -137,6 +137,29 @@ func (a *Agent) configureIndividual(mode, directory string) error {
 		}
 	}
 	a.applyIndividualConfig()
+	return nil
+}
+
+func verifyIndividualInstallation(ctx context.Context, binding enrollmentstore.InstallationBinding) error {
+	platform := runtime.GOOS
+	if platform == "darwin" {
+		platform = "macos"
+	}
+	if ctx == nil || ctx.Err() != nil || binding.Platform != platform || binding.Architecture != runtime.GOARCH {
+		return errIndividualAgent
+	}
+	if binding.AgentSize == 0 && binding.AgentSHA256 == "" {
+		return nil
+	}
+	image, err := bootstrapinstall.OpenRunningAgent()
+	if err != nil {
+		return errIndividualAgent
+	}
+	err = image.VerifyStoredBinding(ctx, binding.AgentSize, binding.AgentSHA256)
+	closeErr := image.Close()
+	if err != nil || closeErr != nil {
+		return errIndividualAgent
+	}
 	return nil
 }
 

@@ -39,6 +39,7 @@ type Agent struct {
 	stopOnce               sync.Once
 	tasks                  taskGroup
 	individual             *individualRuntime
+	ownedServiceLease      individualServiceLease
 	Config                 Config
 	TaskScheduler          gocron.Scheduler
 	ReportJob              gocron.Job
@@ -77,6 +78,10 @@ func NewIndividual(ctx context.Context, directory string) (*Agent, error) {
 }
 
 func newAgent(ctx context.Context, mode, directory string) (result *Agent, err error) {
+	return newAgentWithLease(ctx, mode, directory, nil)
+}
+
+func newAgentWithLease(ctx context.Context, mode, directory string, lease individualServiceLease) (result *Agent, err error) {
 	if ctx == nil {
 		return nil, errors.New("agent context is required")
 	}
@@ -90,7 +95,7 @@ func newAgent(ctx context.Context, mode, directory string) (result *Agent, err e
 			a.Stop()
 		}
 	}()
-	if err = a.configureIndividual(mode, directory); err != nil {
+	if err = a.configureIndividualWithLease(mode, directory, lease); err != nil {
 		return nil, errIndividualAgent
 	}
 	a.TaskScheduler, err = gocron.NewScheduler()
@@ -179,6 +184,9 @@ func (a *Agent) stop() {
 			<-a.individual.brokerClosed
 		}
 		a.individual.identity.Close()
+	}
+	if a.ownedServiceLease != nil {
+		_ = a.ownedServiceLease.Close()
 	}
 	log.Println("[INFO]: agent has been stopped!")
 }

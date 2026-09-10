@@ -65,6 +65,14 @@ func TestStopJoinsSchedulerWorkAfterItsOwnTimeout(t *testing.T) {
 	identity := &enrollmentstore.Identity{Keys: &enrollment.Keys{}}
 	observed := &observedScheduler{Scheduler: scheduler, returned: make(chan error, 1)}
 	a := &Agent{ctx: ctx, cancel: cancel, TaskScheduler: observed, individual: &individualRuntime{ctx: ctx, cancel: cancel, identity: identity}}
+	var leaseClosed atomic.Bool
+	a.ownedServiceLease = &serviceLeaseFixture{close: func() error {
+		if identity.Keys != nil {
+			t.Error("standalone service lease closed before identity users were released")
+		}
+		leaseClosed.Store(true)
+		return nil
+	}}
 	started, release, taskExited := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	_, err = scheduler.NewJob(gocron.DurationJob(time.Hour), gocron.NewTask(a.tasks.wrap(func() {
 		close(started)
@@ -111,6 +119,9 @@ func TestStopJoinsSchedulerWorkAfterItsOwnTimeout(t *testing.T) {
 	if identity.Keys == nil {
 		t.Error("identity was released while owned work remained")
 	}
+	if leaseClosed.Load() {
+		t.Error("service ownership ended before scheduler work joined")
+	}
 	var called atomic.Bool
 	a.tasks.wrap(func() { called.Store(true) })()
 	if called.Load() {
@@ -126,5 +137,8 @@ func TestStopJoinsSchedulerWorkAfterItsOwnTimeout(t *testing.T) {
 	}
 	if identity.Keys != nil {
 		t.Fatal("completed cleanup retained identity keys")
+	}
+	if !leaseClosed.Load() {
+		t.Fatal("standalone agent leaked service ownership after joined stop")
 	}
 }

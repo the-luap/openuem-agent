@@ -195,3 +195,28 @@ func TestServiceStopDuringInitializationWaitsWithoutRunning(t *testing.T) {
 		t.Fatal("canceled initialization leaked ownership or reported running")
 	}
 }
+
+func TestServicePendingRecoveryReportsProgressWithoutClaimingRunning(t *testing.T) {
+	controls, changes := make(chan svc.ChangeRequest, 4), make(chan svc.Status, 8)
+	done := make(chan serviceResult, 1)
+	var stopped atomic.Bool
+	s := &OpenUEMService{factory: func(ctx context.Context) (lifecycle.Runtime, error) {
+		return &serviceRuntime{start: func() error { <-ctx.Done(); return ctx.Err() }, stop: func() { stopped.Store(true) }}, nil
+	}}
+	go func() { specific, code := s.Execute(nil, controls, changes); done <- serviceResult{specific, code} }()
+	initial := receiveStatus(t, changes, svc.StartPending)
+	select {
+	case progress := <-changes:
+		if progress.State != svc.StartPending || progress.CheckPoint <= initial.CheckPoint || progress.Accepts != 0 || progress.WaitHint == 0 {
+			t.Fatal("unresolved startup claimed readiness or failed to report progress")
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("pending recovery did not refresh the SCM wait checkpoint")
+	}
+	controls <- svc.ChangeRequest{Cmd: svc.Stop}
+	receiveStatus(t, changes, svc.StopPending)
+	receiveResult(t, done, false, 0)
+	if !stopped.Load() {
+		t.Fatal("pending recovery did not join shutdown")
+	}
+}

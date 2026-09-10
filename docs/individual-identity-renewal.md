@@ -6,18 +6,84 @@ and implements a persistent candidate, activation and authoritative resolution
 journal in `enrollmentstore`.
 The [shared-library CI](https://github.com/the-luap/openuem-nats/actions/runs/34479270024)
 passes Linux/PostgreSQL/race/fuzz and native Windows checks. Console
-[`3a49b79`](https://github.com/the-luap/openuem-console/commit/3a49b79fc9a2e8ed331da3cd2b0bc8ffd322941b)
-provides the preparation/confirmation HTTPS routes; its
-[PR CI](https://github.com/the-luap/openuem-console/actions/runs/34472855743) and
-[push CI](https://github.com/the-luap/openuem-console/actions/runs/34472852010) pass.
-See the [server lifecycle](https://github.com/the-luap/openuem-console/blob/3a49b79fc9a2e8ed331da3cd2b0bc8ffd322941b/docs/desktop-identity-renewal.md)
-for registry authorization, permanent key ownership and FileVault reconciliation.
-`ResolveRenewal` also requires the matching console `/renewal/resolve` route and
-registry migration 010; an older or unavailable route grants no fallback.
+[`da07f38`](https://github.com/the-luap/openuem-console/commit/da07f386fff1770e641ae656b24806df589d4778)
+provides preparation, confirmation and authoritative resolution through its pinned
+HTTPS gateway; its [push CI](https://github.com/the-luap/openuem-console/actions/runs/34480897518)
+and [PR CI](https://github.com/the-luap/openuem-console/actions/runs/34480901938) pass.
+See the [server lifecycle](https://github.com/the-luap/openuem-console/blob/da07f386fff1770e641ae656b24806df589d4778/docs/desktop-identity-renewal.md)
+for authorization, permanent key ownership and FileVault reconciliation. Automatic
+recovery requires those routes and registry migrations 007–010; an older or
+unavailable route grants no fallback.
 
-This is an implemented storage and transport component. The installed service
-does not schedule or invoke automatic renewal yet. Runtime quiescence, startup
-recovery, broker/recipient reconnect and release integration remain necessary.
+The installed Windows/macOS service now owns automatic renewal, joined credential
+handoff and startup recovery. Explicit protected service configuration takes
+precedence over environment selection. Legacy mode retains its existing lifecycle;
+individual service initialization never falls back to shared credentials.
+Production signing, release distribution and physical-device acceptance remain
+separate roadmap work.
+
+## Automatic service ownership and scheduling
+
+`agent.NewServiceRuntime` creates a controller that owns one native store and one
+cross-process `ServiceLease` for the complete service lifetime. Each Agent borrows
+that lease. Standalone `NewIndividual` acquires its own lease and releases it only
+after joined shutdown. `.openuem-service.lock` is a permanent empty file, never
+truncated or unlinked: macOS uses a nonblocking kernel flock under the existing
+root-owned private directory; Windows pins the protected directory and holds an
+exclusive, non-inheritable file handle. Native identity, owner/access rules,
+regular-file type, zero size and single-link checks reject substituted locks.
+Kernel ownership ends on close or process exit. Administrator-controlled ancestors
+and cooperating service versions are required; the lock does not establish
+attestation or prove that an orphaned FileVault child stopped.
+
+`InstallationBinding` authenticates the completed original enrollment and bounded
+renewal history without returning keys. It remains readable during handoff
+quarantine and certificate expiry. Before recovery I/O or generation creation,
+the controller validates its lease, unchanged installation/scope/checkpoint,
+platform/architecture and protected executable size/hash. Existing installations
+without an executable hash retain the earlier compatibility behavior. A separate
+`Load` still gates actual key use, and the loaded identity must match the checked
+installation. Corruption, a changed binding or an invalid lease stops the active
+generation before further renewal traffic.
+
+After initial Agent startup, the controller checks immediately, then every hour
+with up to 25 percent additional jitter. Preparation starts within the existing
+30-day due window and preserves the running source generation. Every HTTPS attempt
+has a 20-second deadline and uses OS HTTPS trust. Preparation also respects the
+active certificate deadline. Retry delay doubles from one minute to one hour,
+with jitter; the same retained candidate is reused. Active task and transport
+contexts end at the current certificate's expiry, and the controller joins that
+runtime instead of starting expired credentials.
+
+A verified preparation is followed by complete `Agent.Stop`: scheduler tasks,
+OS work, broker callbacks, readiness proofs, FileVault recovery/rotation users,
+SFTP and private identity owners must all join. The controller then obtains the
+separate FileVault execution lease on macOS, revalidates the installation, and
+confirms the candidate. A failed confirmation is followed by explicit resolution
+unless the service context was cancelled. Server reconciliation guards continue
+to decide whether delivered security work allows activation. Only a durable
+verified activation or cancellation can select credentials. A replacement Agent
+loads independent keys and reconstructs its broker, readiness endpoint and recovery
+recipient registration. The local recipient and historical receipts remain intact.
+
+If both replies remain uncertain, no Agent or readiness endpoint runs. The service
+retains its ownership and exact native decision, and retries with backoff. Startup
+also recovers such a decision before starting any Agent. Windows keeps reporting
+`StartPending` checkpoints; it reports `Running` only after actual Agent startup.
+A quarantine arising later leaves the service controller running with the Agent
+offline. Stop cancels recovery, joins all owned work and only then closes the store
+and service lease. Local initialization failure is reported without claiming ready.
+
+`RenewalSchedule` exposes authenticated pending state, current expiry and a restart-
+stable cancellation cooldown. The cooldown derives from the durable resolution
+receipt: seven days, shortened to half the remaining source lifetime with a
+one-hour minimum. This leaves the restored source time to reconcile FileVault work
+and limits repeated candidate consumption. A prepared attempt whose local issuance
+expired, or an unconfirmed candidate older than seven days, may be explicitly
+abandoned by the controller. The latter recovers a permanently lost preparation
+reply. Both cases retain every native record and obey the server's surviving
+reservation guard. Confirmation intent is never abandoned, including after expiry.
+All attempts still count toward the existing 128-slot bound.
 
 ## State transitions and ownership
 
@@ -61,7 +127,8 @@ connection and register the recovery recipient under its new server epoch.
 | Exhausted attempt capacity | Still returns a valid current identity; preparation rejects another attempt | Preserve the complete history for an explicit future migration |
 
 `Store.RenewalStatus()` returns only the pending request ID, `candidate`, `prepared`
-or `confirming` stage, and preparation expiry when known. It holds no private key.
+or `confirming` stage, original candidate creation time and preparation expiry
+when known. It holds no private key.
 A nil status means there is no unresolved local attempt; use `Load` to check that
 the selected identity is currently usable.
 
@@ -69,8 +136,9 @@ the selected identity is currently usable.
 win only before any `confirm` decision. Confirmation and abandonment contend for
 the same immutable record, so both cannot be authorized. Abandonment never deletes
 keys or cancels a server reservation. A subsequent candidate may receive the
-server's `pending` conflict until the earlier preparation expires. No method
-automatically abandons a candidate or retries network requests.
+server's `pending` conflict until the earlier preparation expires. The storage methods do not
+automatically abandon candidates or retry network requests; the service controller
+implements the explicit bounded policy described above.
 
 An error or cancellation after confirmation may follow a committed server handoff.
 The journal never falls back to old credentials or permits abandonment based on
@@ -218,11 +286,28 @@ The final local native macOS race suite passes: enrollment store **44.678 second
 agent runtime **9.933**, bootstrap installation **1.558**, enrollment command **1.814**,
 activation **4.519**, lifecycle **1.297**, Mac service entry point **3.484** and Mac
 service coordination **2.913**. Vet, tidy consistency, complete Linux/Windows/native
-macOS builds and Windows enrollment-store test compilation pass. Native Windows
-execution remains covered by the branch CI and must be checked for this commit.
+macOS builds and Windows enrollment-store test compilation pass. The resolution commit `e12bc24` also passes
+[Linux, native macOS and Windows CI](https://github.com/the-luap/openuem-agent/actions/runs/34480704684).
+
+The complete local native macOS race suite also passes with the service
+controller: protected store **52.333 seconds**, agent **8.472**, package signature
+**3.627**, bootstrap **1.507**, enrollment command **1.822**, activation **4.471**,
+lifecycle **1.299**, Mac service **3.478**, SFTP **2.064**, runtime options **1.306**,
+app bundle **1.716**, readiness **1.551**, Mac service coordination **2.922** and
+hardware **1.330**, and FileVault security **39.286**. The final controller
+cancellation/preflight changes pass an additional focused race run in **1.638
+seconds**. Affected-package Vet, module consistency, complete native macOS/Linux/
+Windows builds and Windows controller/storage/SCM test compilation pass. Branch CI provides the separate native Windows and
+Linux execution evidence for the final commit.
 
 These checks use synthetic keys, a local HTTPS issuer and owned native stores.
-They neither install an agent nor run FileVault on a real volume. Automatic
-service scheduling/reconnect, historical server
-reconciliation, production signing/releases, CA/master-key rotation and physical
-Windows/macOS acceptance remain open parts of the full roadmap.
+They neither install an agent nor run FileVault on a real volume. The controller
+suite additionally checks full old-user quiescence, replacement generation ordering,
+uncertain replies without fallback, startup recovery after source expiry, durable
+cooldowns, bounded backoff, shutdown during recovery/initialization, changed local
+bindings, expired source rejection and lease release after all users join. Native
+lease fixtures exercise competing processes, owner exit, protected file validation
+and persistent lock identity. Windows SCM tests cover pending recovery checkpoints
+and cancellable initialization. Historical server reconciliation, production
+signing/releases, CA/master-key rotation and physical Windows/macOS acceptance
+remain open parts of the full roadmap.

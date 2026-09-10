@@ -23,6 +23,7 @@ type RenewalStatus struct {
 	RequestID string
 	Stage     string
 	ExpiresAt time.Time
+	CreatedAt time.Time
 }
 
 func (s *Store) RenewalStatus() (*RenewalStatus, error) {
@@ -37,18 +38,52 @@ func (s *Store) RenewalStatus() (*RenewalStatus, error) {
 	}
 	defer p.close()
 	defer state.close()
+	return renewalStatus(state), nil
+}
+
+func renewalStatus(state *renewalState) *RenewalStatus {
 	a := state.pending
 	if a == nil {
-		return nil, nil
+		return nil
 	}
-	status := &RenewalStatus{RequestID: a.request.RequestID, Stage: "candidate"}
+	status := &RenewalStatus{RequestID: a.request.RequestID, Stage: "candidate", CreatedAt: time.Unix(a.request.IssuedAt, 0)}
 	if a.issuance != nil {
 		status.Stage, status.ExpiresAt = "prepared", a.issuance.Prepared.ExpiresAt
 	}
 	if a.decision != nil {
 		status.Stage = "confirming"
 	}
-	return status, nil
+	return status
+}
+
+// RenewalSchedule exposes authenticated public timing, including during a
+// confirmation quarantine. It never grants permission to use expired/source keys.
+// Cancellation cooldown survives restarts because it derives from retained
+// resolution evidence, without mutable scheduler state or another secret record.
+type RenewalSchedule struct {
+	Pending    *RenewalStatus
+	ExpiresAt  time.Time
+	RetryAfter time.Time
+}
+
+func (s *Store) RenewalSchedule() (*RenewalSchedule, error) {
+	if s == nil {
+		return nil, ErrUnavailable
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, state, err := s.renewalState()
+	if err != nil {
+		return nil, err
+	}
+	defer p.close()
+	defer state.close()
+	result := &RenewalSchedule{Pending: renewalStatus(state), ExpiresAt: state.identity.Response.ExpiresAt}
+	if state.pending == nil && state.lastAction == "cancelled" {
+		delay := min(7*24*time.Hour, max(time.Hour, result.ExpiresAt.Sub(state.transition)/2))
+		result.RetryAfter = state.transition.Add(delay)
+	}
+	return result, nil
 }
 
 func (s *Store) renewalState() (*pending, *renewalState, error) {

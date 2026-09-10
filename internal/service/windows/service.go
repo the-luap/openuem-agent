@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/open-uem/openuem-agent/internal/agent"
 	"github.com/open-uem/openuem-agent/internal/logger"
@@ -21,17 +22,7 @@ type OpenUEMService struct {
 
 func NewService(l *logger.OpenUEMLogger, options runtimeoptions.Options) *OpenUEMService {
 	return &OpenUEMService{Logger: l, factory: func(ctx context.Context) (lifecycle.Runtime, error) {
-		var a *agent.Agent
-		var err error
-		if options.IdentityDirectory != "" {
-			a, err = agent.NewIndividual(ctx, options.IdentityDirectory)
-		} else {
-			a, err = agent.New(ctx)
-		}
-		if err != nil {
-			return nil, err
-		}
-		return a, nil
+		return agent.NewServiceRuntime(ctx, options.IdentityDirectory)
 	}}
 }
 
@@ -43,6 +34,10 @@ func (s *OpenUEMService) Execute(args []string, controls <-chan svc.ChangeReques
 	finished := make(chan error, 1)
 	go func() { finished <- lifecycle.Run(ctx, s.factory, func(phase lifecycle.Phase) { phases <- phase }) }()
 	status := svc.Status{State: svc.StartPending, CheckPoint: 1, WaitHint: 30000}
+	// Recovery can remain pending across bounded HTTPS attempts. Report progress
+	// without claiming Running before a usable generation finishes Agent.Start.
+	heartbeat := time.NewTicker(5 * time.Second)
+	defer heartbeat.Stop()
 	requestStop := func() {
 		cancel()
 		if status.State != svc.StopPending {
@@ -52,6 +47,11 @@ func (s *OpenUEMService) Execute(args []string, controls <-chan svc.ChangeReques
 	}
 	for {
 		select {
+		case <-heartbeat.C:
+			if status.State == svc.StartPending || status.State == svc.StopPending {
+				status.CheckPoint++
+				changes <- status
+			}
 		case phase := <-phases:
 			switch phase {
 			case lifecycle.Initializing:
