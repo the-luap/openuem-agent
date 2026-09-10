@@ -300,16 +300,8 @@ func (s *Store) loadPending() (*pending, error) {
 	if errors.Is(err, ErrMissing) {
 		other, otherErr := s.backend.Load(identityRecord)
 		clear(other)
-		if errors.Is(otherErr, ErrMissing) {
-			recipient, recipientErr := s.backend.Load(recipientRecord)
-			clear(recipient)
-			if errors.Is(recipientErr, ErrMissing) {
-				anchor, anchorErr := s.backend.Load(rotationAnchorRecord)
-				clear(anchor)
-				if errors.Is(anchorErr, ErrMissing) {
-					return nil, ErrMissing
-				}
-			}
+		if errors.Is(otherErr, ErrMissing) && s.securityRecordsAbsent() {
+			return nil, ErrMissing
 		}
 		return nil, ErrUnavailable
 	}
@@ -323,6 +315,9 @@ func (s *Store) loadPending() (*pending, error) {
 func (s *Store) loadIdentity(p *pending) (*Identity, error) {
 	data, err := s.backend.Load(identityRecord)
 	if errors.Is(err, ErrMissing) {
+		if !s.securityRecordsAbsent() {
+			return nil, ErrUnavailable
+		}
 		return nil, ErrPending
 	}
 	if err != nil {
@@ -339,4 +334,29 @@ func (s *Store) loadIdentity(p *pending) (*Identity, error) {
 	identity := &Identity{Keys: p.keys, Response: response, Origin: p.bootstrap.Origin, ReleaseDigest: p.bootstrap.ReleaseDigest, Platform: p.bootstrap.Platform, Architecture: p.bootstrap.Architecture, AgentSize: p.bootstrap.AgentSize, AgentSHA256: p.bootstrap.AgentSHA256}
 	p.keys = nil // transfer ownership, including when returning a competing result
 	return identity, nil
+}
+
+// A partial restore can lose both enrollment records and the journal anchor
+// while retaining a later irreversible attempt. Inspect every bounded slot before
+// treating missing enrollment state as empty or as a safely retryable claim.
+// Native read errors also fail closed; no surviving data is rewritten or removed.
+// Extend this inventory whenever another protected lifecycle record is introduced.
+func (s *Store) securityRecordsAbsent() bool {
+	for _, name := range []string{recipientRecord, rotationAnchorRecord} {
+		data, err := s.backend.Load(name)
+		clear(data)
+		if !errors.Is(err, ErrMissing) {
+			return false
+		}
+	}
+	for ordinal := 1; ordinal <= enrollment.MaxRotationAttempts; ordinal++ {
+		for _, result := range []bool{false, true} {
+			data, err := s.backend.Load(rotationRecord(result, ordinal))
+			clear(data)
+			if !errors.Is(err, ErrMissing) {
+				return false
+			}
+		}
+	}
+	return true
 }

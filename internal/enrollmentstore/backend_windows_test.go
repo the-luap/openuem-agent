@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/open-uem/nats/enrollment"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -41,6 +42,11 @@ func TestWindowsDPAPIDurableRecoveryRecipient(t *testing.T) {
 func TestWindowsDPAPIDurableRotationJournal(t *testing.T) {
 	b, _ := windowsFixture(t)
 	runDurableRotationJournal(t, b)
+}
+
+func TestWindowsDPAPIPartialRestoreCannotReplaceLaterJournalEvidence(t *testing.T) {
+	b, _ := windowsFixture(t)
+	runRetainedSecurityPreventsEnrollment(t, b, rotationRecord(true, enrollment.MaxRotationAttempts), restorePendingFixture(t))
 }
 
 func TestWindowsStateIsEncryptedPrivateImmutableAndRecoverable(t *testing.T) {

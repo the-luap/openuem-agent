@@ -16,6 +16,16 @@ organization/site. It preserves existing pending, identity and recipient records
 A missing anchor with surviving attempts fails closed. An orphan anchor prevents
 the installation from being mistaken for an empty enrollment store.
 
+When pending enrollment keys or the committed identity are missing, the store also
+checks every start/result slot, including later ordinals with gaps and no journal
+anchor. Any surviving recipient, anchor, attempt or result, or a failed native
+read, returns an unavailable-state error before generating keys or transmitting a
+claim. A partial restore cannot recreate enrollment around retained irreversible
+work. Existing records remain untouched, and lost pending keys cannot reset the
+release checkpoint to zero. Ordinary pending-claim recovery remains available
+when no dependent security records exist. Complete loss or rollback of all local
+evidence still requires an independent recovery policy.
+
 For each ordinal from 1 through 128, only these record names are accepted:
 
 ```text
@@ -181,3 +191,15 @@ decoding. Runtime tests use a real isolated TLS WebSocket broker, generated HPKE
 keys, an injected journal and driver, and verify durable publication before network
 transmission, restart, cancelled shutdown, storage failures, capability gates,
 certificate reserve, conflicting scope and recipient replacement.
+
+Partial-restore tests remove enrollment/journal anchors while retaining first,
+middle or final attempt/result slots. They verify rejection before any claim or
+new key publication, unchanged original fragments, retained pending-key bytes and
+no zero-checkpoint fallback. An unreadable final slot also prevents enrollment.
+Native fixtures exercise the final result slot through isolated macOS Keychain
+and Windows DPAPI storage. The focused local macOS race checks pass in 2.197
+seconds; the complete protected-store suite passes in 13.961 seconds and agent
+runtime in 11.219 seconds. Bootstrap installation, enrollment/activation commands
+and Mac service/lifecycle race tests also pass. Vet, Linux/Windows/native-macOS
+builds and Windows test compilation pass; native Windows execution is checked
+separately by CI.

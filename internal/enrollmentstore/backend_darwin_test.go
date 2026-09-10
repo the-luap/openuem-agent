@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/open-uem/nats/enrollment"
 )
 
 type keychainFixture struct {
@@ -140,6 +141,11 @@ func TestMacKeychainStorageIsPrivateImmutableAndRecoverable(t *testing.T) {
 		}
 		clear(data)
 	}
+}
+
+func TestMacKeychainPartialRestoreCannotReplaceLaterJournalEvidence(t *testing.T) {
+	f := newKeychainFixture(t)
+	runRetainedSecurityPreventsEnrollment(t, f.backend, rotationRecord(true, enrollment.MaxRotationAttempts), restorePendingFixture(t))
 }
 
 func TestMacLockedKeychainFailsWithoutPromptOrReplacement(t *testing.T) {
