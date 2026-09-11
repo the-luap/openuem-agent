@@ -81,7 +81,7 @@ fixture authoring accepts no caller-supplied family identifier and adds no files
 services, custom actions or external sources.
 
 The test requires exact native old/new registration before and after each staged
-execution, complete old-product removal, an already-current no-op, harmless
+execution, complete old-product and registry-payload removal, an already-current no-op, harmless
 removal of the now-absent old product and final successor removal without fetching
 another artifact. Existing MSI property and read-only preflight checks also run
 natively on ARM64. Cross-compilation passes for both Windows architectures;

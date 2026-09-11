@@ -14,6 +14,8 @@ import (
 
 	"github.com/open-uem/nats/enrollment"
 	"github.com/open-uem/openuem-agent/internal/windowstest"
+	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 func TestNativeWindowsSoftwareOwnedMSIMajorUpgrade(t *testing.T) {
@@ -73,6 +75,28 @@ func TestNativeWindowsSoftwareOwnedMSIMajorUpgrade(t *testing.T) {
 			t.Fatal("native upgrade registration differs from exact expected state", o, err)
 		}
 	}
+	payload := func(msi windowstest.MSI, present bool) {
+		t.Helper()
+		key, err := registry.OpenKey(registry.LOCAL_MACHINE, msi.RegistryPath, registry.QUERY_VALUE|registry.WOW64_64KEY)
+		if !present {
+			if err == nil {
+				key.Close()
+				t.Fatal("replaced MSI left its owned registry payload behind")
+			}
+			if err != windows.ERROR_FILE_NOT_FOUND {
+				t.Fatal("owned upgrade payload absence was not established", err)
+			}
+			return
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer key.Close()
+		value, kind, err := key.GetStringValue("Marker")
+		if err != nil || kind != registry.SZ || value != "owned" {
+			t.Fatal("installed MSI registration lacked its owned payload", err)
+		}
+	}
 	for index, msi := range []windowstest.MSI{first, second} {
 		plan := []enrollment.SoftwarePlan{firstPlan, secondPlan}[index]
 		observe(plan, Absent)
@@ -87,10 +111,13 @@ func TestNativeWindowsSoftwareOwnedMSIMajorUpgrade(t *testing.T) {
 			t.Fatal("major upgrade did not preserve exact staged execution evidence", index, out)
 		}
 		observe(plan, Present)
+		payload(msi, true)
 		assertStageEmpty(t, f.root)
 	}
 	observe(firstPlan, Absent)
 	observe(secondPlan, Present)
+	payload(first, false)
+	payload(second, true)
 	before := f.requests.Load()
 	out := executeInstaller(ctx, secondPlan, f.root, live, ops)
 	if !out.ValidFor(secondPlan) || out.State != "observed" || out.Execution != "not_started" || f.requests.Load() != before {
@@ -102,6 +129,7 @@ func TestNativeWindowsSoftwareOwnedMSIMajorUpgrade(t *testing.T) {
 		t.Fatal("removing the replaced revision acted on its successor", out)
 	}
 	observe(secondPlan, Present)
+	payload(second, true)
 	newRemoval := removeFor(secondPlan)
 	out = executeInstaller(ctx, newRemoval, f.root, live, ops)
 	if !out.ValidFor(newRemoval) || out.State != "observed" || out.Execution != "started" || out.After.State != Absent || f.requests.Load() != before {
@@ -109,5 +137,7 @@ func TestNativeWindowsSoftwareOwnedMSIMajorUpgrade(t *testing.T) {
 	}
 	observe(firstPlan, Absent)
 	observe(secondPlan, Absent)
+	payload(first, false)
+	payload(second, false)
 	assertStageEmpty(t, f.root)
 }
