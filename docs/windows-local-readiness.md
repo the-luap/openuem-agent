@@ -15,7 +15,9 @@ A recovering controller, a different process or an old identity cannot satisfy i
 
 ## Local transport and authority
 
-`internal/localready` uses Microsoft's pinned `go-winio` 0.6.2 named-pipe transport.
+`internal/localready` uses Microsoft's pinned `go-winio` 0.6.2 for namespace
+reservation, connected I/O and client dialing, with an owned native connection
+acceptance loop and a persistent shutdown event.
 The public listener requires Local System; the probe permits Local System or an
 elevated administrator. A protected installation directory contains an immutable
 random pipe address, retained across ordinary restarts and process crashes. Final
@@ -56,6 +58,23 @@ the listener and accepted connections. Joined shutdown waits for every handler
 before releasing the borrowed signing key and native directory handles. It does
 not promise to interrupt an uncooperative signing implementation.
 
+Native CI at `f3f1325798db896357e973f0b684633f68d19300` captured an intermittent
+shutdown hang: `win32PipeListener.Close` waited on `doneCh` while its listener
+routine had returned to the outer accept/close select. In the pinned dependency,
+an unexpected connect error can override the close notification that was already
+consumed. This trace has no pending native connect operation; it is distinct from
+the proposed stalled-I/O explanation in [upstream issue 357](https://github.com/microsoft/go-winio/issues/357).
+
+The readiness listener now keeps the exclusive disconnected namespace instance
+idle and owns only pending `ConnectNamedPipe` operations. A manual-reset stop
+event remains signaled regardless of the connect result. Shutdown cancels and
+drains the exact outstanding operation, joins acceptance, and then closes the
+namespace anchor and event. Accepted connections retain the same private
+descriptor, remote-client rejection and connected I/O behavior. No timeout
+abandons a listener or borrowed signer. The implementation follows Microsoft's
+[overlapped pipe contract](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-server-using-overlapped-i-o)
+and [cancellation lifetime requirements](https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex).
+
 The pipe disappears when its owning handles close, including on process exit;
 the address record remains. Partial/invalid address publication fails closed and
 is retained for inspection. No automatic address deletion, identity replacement
@@ -71,6 +90,13 @@ tests exercise private pipe/file permissions, singleton ownership, changed scope
 or signing key, wrong PID, partial address retention, competing writes, idle
 clients, held signing operations and process-crash recovery. The public listener
 rejects ordinary non-System test processes.
+
+A separate native race job requires all readiness fixtures without skips. The
+shutdown regression performs 96 owned namespace cycles across idle listeners,
+pending connections and immediately disconnected clients, including concurrent
+and repeated close and reopening the same namespace after every joined stop.
+Windows AMD64/ARM64 compilation and Windows vet pass; portable protocol race
+tests pass in 1.673 seconds. Native evidence for the new loop is pending.
 
 Owned, uniquely named Local System SCM fixtures additionally load actual DPAPI
 identities and publish production readiness proofs. They verify that SCM `Running`

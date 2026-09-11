@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  windows-readiness:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Join native named-pipe shutdown after disconnected clients without skips
+        shell: pwsh
+        run: scripts/check-windows-readiness.ps1
+
   windows-burn-execution:
     runs-on: windows-latest
     timeout-minutes: 10
@@ -201,6 +214,7 @@ jobs:
             'TestNativeWindowsReadinessShutdownJoinsBorrowedSignerAndIdleClients',
             'TestNativeWindowsReadinessRejectsChangedPermissionsAndPartialAddress',
             'TestNativeWindowsReadinessRecoversAfterProcessExit',
+            'TestNativeWindowsReadinessListenerShutdownSurvivesDisconnectedClients',
             'TestNativeWindowsActivationRequiresSignedReadinessFromTheSCMProcess'
           )
           foreach ($test in $required) {

@@ -85,9 +85,9 @@ func listenWindows(ctx context.Context, directory string, identity Identity, sig
 	if allowAdminServer {
 		descriptor = "O:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)"
 	}
-	// go-winio reserves the first instance exclusively and rejects remote
-	// clients. No existing endpoint is reclaimed or disconnected by admission.
-	s.listener, err = winio.ListenPipe(name, &winio.PipeConfig{SecurityDescriptor: descriptor, InputBufferSize: 128, OutputBufferSize: maxResponse + 68})
+	// Reserve the first instance exclusively and reject remote clients. No
+	// existing endpoint is reclaimed or disconnected by admission.
+	s.listener, err = listenReadinessPipe(name, descriptor)
 	if err != nil {
 		return nil, ErrConflict
 	}
