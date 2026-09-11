@@ -39,8 +39,11 @@ An orphaned installer or Windows service might still be working. Neither a free
 agent process lease nor elapsed time proves termination or rollback. The server
 keeps uncertain/restart-required work reserved. New attempts now retain native
 boot evidence before execution; legacy attempts cannot acquire it retroactively.
-An explicit reconciliation protocol still needs to join a later kernel session
-to fresh exact software observations without repeating the installer.
+The [signed reconciliation journal](windows-software-reconciliation.md) now retains
+separate observations and acknowledgements, recovering pending evidence after
+task expiry and renewal. Only a verified acknowledged definite observation can
+release the exact local reservation. The individual observation consumer and
+explicit console action still need integration.
 
 The client owns one cycle at a time under the installation service lease. It
 limits RPCs to five seconds, bounds native work by task expiry and leaves thirty

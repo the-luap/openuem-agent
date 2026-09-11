@@ -41,7 +41,7 @@ func validRecord(record string) bool {
 	if record == pendingRecord || record == identityRecord || record == recipientRecord || record == rotationAnchorRecord {
 		return true
 	}
-	for _, prefix := range []string{"software-start-v1-", "software-result-v1-", "software-recipient-v1-"} {
+	for _, prefix := range []string{"software-start-v1-", "software-result-v1-", "software-recipient-v1-", "software-reconciliation-v1-", "software-reconciliation-ack-v1-"} {
 		if suffix, ok := strings.CutPrefix(record, prefix); ok {
 			limit := MaxSoftwareAttempts
 			if prefix == "software-recipient-v1-" {

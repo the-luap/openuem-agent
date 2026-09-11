@@ -35,7 +35,7 @@ func (s *Store) softwareRecordsAbsent() bool {
 		present, err := inventory.hasSoftwareRecords()
 		return err == nil && !present
 	}
-	for _, stage := range []string{"recipient", "start", "result"} {
+	for _, stage := range []string{"recipient", "start", "result", "reconciliation", "reconciliation-ack"} {
 		limit := MaxSoftwareAttempts
 		if stage == "recipient" {
 			limit = MaxIdentityRenewalAttempts + 1
@@ -167,6 +167,8 @@ type SoftwareJournal struct {
 	certificates           map[string]renewalCertificate
 	index                  map[string]int
 	next                   int
+	reconciliations        map[string]int
+	nextReconciliation     int
 }
 
 type SoftwareEntry struct {
@@ -215,6 +217,12 @@ func (s *Store) OpenSoftwareJournal(expected *Identity) (*SoftwareJournal, error
 	}
 	j := &SoftwareJournal{store: s, binding: binding, scope: enrollment.SoftwareIdentity{AgentID: current.Response.DeviceID, TenantID: current.Response.TenantID, SiteID: current.Response.SiteID, CertificateHash: renewalDigest(cert.Raw)}, certificate: cert, authority: root, certificates: current.certificates}
 	if err = j.scan(); err != nil {
+		return nil, err
+	}
+	if err = j.scanReconciliations(); err != nil {
+		return nil, err
+	}
+	if err = j.validateSoftwareSequence(); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -435,12 +443,23 @@ func (j *SoftwareJournal) begin(task enrollment.SoftwareTask, secret *enrollment
 		if j.next > MaxSoftwareAttempts {
 			return false, nil, ErrUnavailable
 		}
+		if j.validateSoftwareSequence() != nil {
+			return false, nil, ErrUnavailable
+		}
 		if j.next > 1 {
 			prior, err := j.read(j.next - 1)
 			if err != nil || prior == nil {
 				return false, nil, ErrUnavailable
 			}
 			blocked := prior.Result == nil || prior.Result.Outcome.State == "uncertain" || prior.Result.Outcome.State == "restart_required"
+			if blocked {
+				released, err := j.softwareReconciled(prior.Task)
+				if err != nil {
+					prior.Close()
+					return false, nil, ErrUnavailable
+				}
+				blocked = !released
+			}
 			prior.Close()
 			if blocked {
 				return false, nil, ErrUnavailable

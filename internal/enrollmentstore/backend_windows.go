@@ -85,6 +85,14 @@ func (b *windowsBackend) hasSoftwareRecords() (bool, error) {
 // protected directory. Every software filename must be canonical; a result-only
 // slot is included so the journal can reject partial restores.
 func (b *windowsBackend) softwareRecordOrdinals() ([]int, error) {
+	return b.softwareOrdinals("start", "result")
+}
+
+func (b *windowsBackend) softwareReconciliationOrdinals() ([]int, error) {
+	return b.softwareOrdinals("reconciliation", "reconciliation-ack")
+}
+
+func (b *windowsBackend) softwareOrdinals(stages ...string) ([]int, error) {
 	if b.closed.Load() || checkSystemDirectory(b.directory) != nil {
 		return nil, ErrUnavailable
 	}
@@ -109,7 +117,7 @@ func (b *windowsBackend) softwareRecordOrdinals() ([]int, error) {
 			if !ok || !validRecord(record) {
 				return nil, ErrUnavailable
 			}
-			for _, stage := range []string{"start", "result"} {
+			for _, stage := range stages {
 				if suffix, ok := strings.CutPrefix(record, "software-"+stage+"-v1-"); ok {
 					n, parseErr := strconv.Atoi(suffix)
 					if parseErr != nil {

@@ -32,9 +32,11 @@ This is an inference from the loader sequence and the lifetime of the original
 System process. It is intended to exclude previous-session delegated installers
 before a separately authorized read-only reconciliation. It neither verifies an
 application nor proves successful installation, rollback or completed updates.
-The signed reconciliation protocol and console action still need to connect this
-retained evidence to fresh exact software observations. The current service keeps
-uncertain/restart-required outcomes reserved.
+The signed reconciliation protocol and [protected observation
+journal](windows-software-reconciliation.md) now bind later-session evidence to
+the original admission. The individual observation consumer and console action
+still need integration. The current service keeps uncertain/restart-required
+outcomes reserved.
 
 ## Durable format and compatibility
 
@@ -46,6 +48,9 @@ cannot replace the original session or upgrade a legacy record. Result records,
 private task envelopes and historical certificate validation retain their
 existing contract. No software wire-version change is required for this local
 admission format.
+
+The native `BootSession` type aliases the shared signed protocol's evidence type,
+so local admission and remote result validation use identical comparison rules.
 
 The service's journal interface requires `BeginWithBootSession`. The legacy
 `Begin` method remains solely for retained-format compatibility and fixtures;

@@ -3,6 +3,8 @@ package windowssoftware
 import (
 	"encoding/binary"
 	"errors"
+
+	"github.com/open-uem/nats/enrollment"
 )
 
 var ErrBootEvidence = errors.New("Windows kernel boot evidence is unavailable")
@@ -10,17 +12,7 @@ var ErrBootEvidence = errors.New("Windows kernel boot evidence is unavailable")
 // BootSession joins the loader's boot sequence with the original System process
 // creation value. A service restart, clock correction, or resumed System process
 // cannot establish a later kernel session. It is not a wall-clock deadline.
-type BootSession struct {
-	Sequence             uint32 `json:"sequence"`
-	SystemProcessCreated uint64 `json:"system_process_created"`
-}
-
-func (b BootSession) Valid() bool {
-	return b.SystemProcessCreated > 0 && b.SystemProcessCreated < 1<<63
-}
-func (b BootSession) After(original BootSession) bool {
-	return original.Valid() && b.Valid() && b.Sequence > original.Sequence && b.SystemProcessCreated != original.SystemProcessCreated
-}
+type BootSession = enrollment.SoftwareBootSession
 
 const (
 	systemProcessHeaderSize    = 256

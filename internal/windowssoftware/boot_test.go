@@ -13,12 +13,12 @@ func TestBootSessionRequiresLaterSequenceAndDifferentSystemProcess(t *testing.T)
 		later   bool
 	}{
 		{"same_kernel", original, false}, {"service_restart", original, false},
-		{"resume_or_sequence_only", BootSession{42, original.SystemProcessCreated}, false},
-		{"clock_or_process_only", BootSession{41, original.SystemProcessCreated + 1}, false},
-		{"later_kernel", BootSession{42, original.SystemProcessCreated + 1}, true},
-		{"clock_moved_back_across_boot", BootSession{42, original.SystemProcessCreated - 1}, true},
-		{"restored_counter", BootSession{40, original.SystemProcessCreated + 1}, false},
-		{"missing_process", BootSession{42, 0}, false}, {"invalid_process_time", BootSession{42, 1 << 63}, false},
+		{"resume_or_sequence_only", BootSession{Sequence: 42, SystemProcessCreated: original.SystemProcessCreated}, false},
+		{"clock_or_process_only", BootSession{Sequence: 41, SystemProcessCreated: original.SystemProcessCreated + 1}, false},
+		{"later_kernel", BootSession{Sequence: 42, SystemProcessCreated: original.SystemProcessCreated + 1}, true},
+		{"clock_moved_back_across_boot", BootSession{Sequence: 42, SystemProcessCreated: original.SystemProcessCreated - 1}, true},
+		{"restored_counter", BootSession{Sequence: 40, SystemProcessCreated: original.SystemProcessCreated + 1}, false},
+		{"missing_process", BootSession{Sequence: 42}, false}, {"invalid_process_time", BootSession{Sequence: 42, SystemProcessCreated: 1 << 63}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if test.current.After(original) != test.later {
@@ -26,7 +26,7 @@ func TestBootSessionRequiresLaterSequenceAndDifferentSystemProcess(t *testing.T)
 			}
 		})
 	}
-	if original.After(BootSession{}) || (BootSession{0, original.SystemProcessCreated + 1}).After(BootSession{^uint32(0), original.SystemProcessCreated}) {
+	if original.After(BootSession{}) || (BootSession{SystemProcessCreated: original.SystemProcessCreated + 1}).After(BootSession{Sequence: ^uint32(0), SystemProcessCreated: original.SystemProcessCreated}) {
 		t.Fatal("missing or wrapped evidence became a later boot")
 	}
 }
