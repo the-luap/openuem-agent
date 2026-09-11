@@ -175,6 +175,7 @@ func TestNativeWindowsActivationRequiresSignedReadinessFromTheSCMProcess(t *test
 	if state.State != svc.Running {
 		t.Fatal("fixture controller did not start", state)
 	}
+	before = f.initializedSnapshot(t, before)
 	ctx, cancel := context.WithTimeout(t.Context(), 350*time.Millisecond)
 	err = plan.Start(ctx)
 	cancel()
@@ -211,11 +212,7 @@ func TestNativeWindowsActivationRequiresSignedReadinessFromTheSCMProcess(t *test
 	if err = plan.Start(ctx); err != nil {
 		t.Fatal("same identity could not recover signed readiness", err)
 	}
-	for path, hash := range f.protectedSnapshot(t) {
-		if hash != before[path] {
-			t.Fatal("readiness recovery changed protected identity")
-		}
-	}
+	f.initializedSnapshot(t, before)
 }
 
 type windowsActivationFixture struct {
@@ -385,18 +382,65 @@ func (f *windowsActivationFixture) activate(t *testing.T) (Result, []byte, error
 func (f *windowsActivationFixture) protectedSnapshot(t *testing.T) map[string][32]byte {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join(f.directory, "*.dpapi"))
-	if err != nil || len(paths) != 2 {
+	if err != nil || len(paths) < 2 || len(paths) > 3 {
 		t.Fatal("incomplete native identity", err)
 	}
 	result := make(map[string][32]byte)
 	for _, path := range paths {
+		switch filepath.Base(path) {
+		case "pending.dpapi", "identity.dpapi", "software-recipient-v1-0001.dpapi":
+		default:
+			t.Fatal("unexpected protected fixture record")
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		result[path] = sha256.Sum256(data)
 	}
+	for _, name := range []string{"pending.dpapi", "identity.dpapi"} {
+		if _, ok := result[filepath.Join(f.directory, name)]; !ok {
+			t.Fatal("original protected identity record missing")
+		}
+	}
 	return result
+}
+
+func (f *windowsActivationFixture) initializedSnapshot(t *testing.T, before map[string][32]byte) map[string][32]byte {
+	t.Helper()
+	after := f.protectedSnapshot(t)
+	if len(after) != 3 {
+		t.Fatal("initialized Windows service did not create its protected software recipient")
+	}
+	for path, hash := range before {
+		if after[path] != hash {
+			t.Fatal("service replaced immutable protected identity/recipient")
+		}
+	}
+	store, err := enrollmentstore.Open(f.directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	identity, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer identity.Close()
+	key, err := store.LoadOrCreateSoftwareRecipient(identity)
+	if err != nil {
+		t.Fatal("initialized software recipient could not be reopened", err)
+	}
+	defer key.Close()
+	if !enrollment.ValidRecoveryPublicKey(key.PublicKey()) {
+		t.Fatal("invalid initialized software recipient")
+	}
+	for path, hash := range f.protectedSnapshot(t) {
+		if after[path] != hash {
+			t.Fatal("software recipient reopen changed protected records")
+		}
+	}
+	return after
 }
 
 func TestNativeWindowsActivationAndRecoveryUseTheCompletedProtectedIdentity(t *testing.T) {
@@ -411,6 +455,9 @@ func TestNativeWindowsActivationAndRecoveryUseTheCompletedProtectedIdentity(t *t
 			result, diagnostics, err := f.activate(t)
 			if !result.Registered || result.Running == failedStart || (err != nil) != failedStart || result.DeviceID != fixtureDeviceID || result.TenantID != 3 || result.SiteID != 4 {
 				t.Fatalf("unexpected native activation result: %+v, %v, %s", result, err, diagnostics)
+			}
+			if !failedStart {
+				before = f.initializedSnapshot(t, before)
 			}
 			service, err := f.manager.OpenService(f.name)
 			if err != nil {
@@ -447,11 +494,7 @@ func TestNativeWindowsActivationAndRecoveryUseTheCompletedProtectedIdentity(t *t
 			if err != nil || !bytes.Equal(actual, changed) {
 				t.Fatal("activation overwrote operational changes", err)
 			}
-			for path, sum := range f.protectedSnapshot(t) {
-				if sum != before[path] {
-					t.Fatal("activation replaced protected identity state")
-				}
-			}
+			f.initializedSnapshot(t, before)
 			status, err := service.Query()
 			if err != nil || status.State != svc.Running {
 				t.Fatal("reported success without a running native service", err)
@@ -518,7 +561,11 @@ func TestNativeWindowsActivationRejectsForeignServiceConfigurationAndBinary(t *t
 					t.Fatal(err)
 				}
 			}
-			for path, sum := range f.protectedSnapshot(t) {
+			after := f.protectedSnapshot(t)
+			if len(after) != len(before) {
+				t.Fatal("rejected activation created protected records")
+			}
+			for path, sum := range after {
 				if sum != before[path] {
 					t.Fatal("rejected activation altered identity")
 				}
