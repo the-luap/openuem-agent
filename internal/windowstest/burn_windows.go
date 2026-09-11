@@ -42,8 +42,13 @@ func NewBurn(t *testing.T, architecture, scope string) Burn {
 	if err := os.WriteFile(filepath.Join(root, "bundle.wxs"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
+	return buildBurnFixture(t, root, wix, architecture, scope, perMachine)
+}
+
+func buildBurnFixture(t *testing.T, root, wix, architecture, scope, perMachine string) Burn {
+	t.Helper()
 	bundle := filepath.Join(root, "bundle.exe")
-	runBurnTool(t, root, nil, wix, "build", "bundle.wxs", "-arch", wixArch, "-ext", "WixToolset.Bal.wixext/4.0.6", "-o", bundle)
+	runBurnTool(t, root, nil, wix, "build", "bundle.wxs", "-arch", map[string]string{"386": "x86", "amd64": "x64", "arm64": "arm64"}[architecture], "-ext", "WixToolset.Bal.wixext/4.0.6", "-o", bundle)
 	ux := filepath.Join(root, "ux")
 	runBurnTool(t, root, nil, wix, "burn", "extract", bundle, "-outba", ux, "-intermediateFolder", root)
 	manifest, err := os.ReadFile(filepath.Join(ux, "manifest.xml"))

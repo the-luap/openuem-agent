@@ -149,6 +149,23 @@ evidence, followed by source approval/provenance integration. Physical endpoint
 acceptance remains separate.
 The full roadmap remains in progress.
 
+## Owned execution fixture
+
+A separate Windows CI job now builds a uniquely identified Burn bundle containing
+only the existing generated registry-only MSI fixture. It checks actual bundle
+and MSI installation, the already-installed no-op, refusal to remove a different
+version, fetching the same pinned bundle for removal, native absence and stage
+cleanup. The generated MSI has no files, scripts, custom actions or services.
+Both the MSI product and bundle upgrade identities are unique to the owned test.
+The fixture has an explicit environment opt-in and must pass without skipping.
+
+Only this test seam accepts the generated unsigned artifact and routes its exact
+quiet arguments through the existing EXE process boundary after required Burn
+preflight. Production capability advertisement, new-task admission and direct
+Burn process dispatch stay disabled. The new execution fixture has not yet run
+on Windows; cancellation, child lifetime and post-boot recovery remain separate
+checks before enabling the complete delivery path.
+
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)
 and the pinned WiX
