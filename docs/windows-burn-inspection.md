@@ -179,8 +179,12 @@ uncertain outcome without an exit code, and removes its own bundle registration.
 The native lifecycle fixture passes with race detection at
 `e8d0e91856d41aeb8263eba81c51fa3a73f82d48`: cancellation in 11.91 seconds and the
 unfinished child in 10.59 seconds, alongside installation/removal in 20.30 seconds.
-Those runs used the generic EXE process seam. The fixture now exercises the
-explicit Burn command branch directly; its new native CI evidence is pending.
+Those runs used the generic EXE process seam. The explicit Burn command branch
+now passes the same native race fixtures at
+`39eb6c94d3436f00a24069dc2572be003284910f`: installation/removal in 21.26 seconds,
+cancellation in 12.88 seconds and the unfinished child in 11.27 seconds. The
+subsequent native execution job also passes at
+`589bf1b7e872984896307ccd185d57601c49b0b5`.
 
 Portable agent race tests additionally preserve an interrupted historical Burn
 attempt, retry a lost receipt without execution, retain a signed restart result

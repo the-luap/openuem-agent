@@ -96,7 +96,12 @@ shutdown regression performs 96 owned namespace cycles across idle listeners,
 pending connections and immediately disconnected clients, including concurrent
 and repeated close and reopening the same namespace after every joined stop.
 Windows AMD64/ARM64 compilation and Windows vet pass; portable protocol race
-tests pass in 1.673 seconds. Native evidence for the new loop is pending.
+tests pass in 1.673 seconds. The native race job passes at
+`589bf1b7e872984896307ccd185d57601c49b0b5`: all 96 shutdown cycles finish in
+0.34 seconds, alongside the existing identity/PID, permission, held-signer and
+crash-recovery checks. The separate full storage/SCM run failed before tests when
+the Go module proxy interrupted a dependency download; its integration rerun
+remains outstanding.
 
 Owned, uniquely named Local System SCM fixtures additionally load actual DPAPI
 identities and publish production readiness proofs. They verify that SCM `Running`
