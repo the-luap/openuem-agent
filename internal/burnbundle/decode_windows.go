@@ -318,7 +318,9 @@ func cabinetNotify(kind uintptr, n *fdiNotification) uintptr {
 			return ^uintptr(0)
 		}
 		s.writing, s.complete = false, true
-		return 0
+		// FALSE means target-file failure in FDI. The explicit -1 notification
+		// result identifies our intentional USER_ABORT after complete output.
+		return ^uintptr(0)
 	case 5: // fdintENUMERATE
 		return 0
 	default:
