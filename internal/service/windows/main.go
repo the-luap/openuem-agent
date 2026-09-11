@@ -13,10 +13,14 @@ import (
 	"github.com/open-uem/openuem-agent/internal/logger"
 	"github.com/open-uem/openuem-agent/internal/packagesignature"
 	"github.com/open-uem/openuem-agent/internal/runtimeoptions"
+	"github.com/open-uem/openuem-agent/internal/windowssoftware"
 	"golang.org/x/sys/windows/svc"
 )
 
 func main() {
+	if handled, code := windowssoftware.HandleHelper(os.Args[1:]); handled {
+		os.Exit(code)
+	}
 	if handled, code := packagesignature.HandleHelper(os.Args[1:]); handled {
 		os.Exit(code)
 	}

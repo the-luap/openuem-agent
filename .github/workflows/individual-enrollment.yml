@@ -19,7 +19,7 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Durable enrollment state and bounded HTTPS recovery
-        run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity
+        run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware
       - name: Build the agent
         run: go build ./...
 
@@ -40,7 +40,7 @@ jobs:
       - name: Isolated noninteractive keychain and separate process recovery
         env:
           CGO_ENABLED: '1'
-        run: go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity
+        run: go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware
       - name: Root-only readiness over isolated native Unix sockets
         run: scripts/check-macos-readiness.sh
       - name: Root filesystem and read-only native activation fixtures
@@ -68,11 +68,11 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Native DPAPI, private publication and Local System recovery
-        run: go test -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity
-      - name: Owned Windows package processes and shutdown execute without skips
+        run: go test -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware
+      - name: Owned Windows package processes and observations execute without skips
         shell: pwsh
         run: |
-          $events = go test -json -count=1 -run 'TestNativeWindowsWinGet|TestNativeWindowsPackage(Shutdown|Profile)' ./internal/commands/deploy ./internal/agent
+          $events = go test -json -count=1 -run 'TestNativeWindowsWinGet|TestNativeWindowsPackage(Shutdown|Profile)|TestNativeWindowsSoftware' ./internal/commands/deploy ./internal/agent ./internal/windowssoftware
           $result = $LASTEXITCODE
           $events | Write-Output
           if ($result -ne 0) { exit $result }
@@ -84,7 +84,10 @@ jobs:
             'TestNativeWindowsWinGetRejectsUnfinishedChildWithClosedOutput',
             'TestNativeWindowsWinGetOwnerExitTerminatesOwnedTree',
             'TestNativeWindowsPackageShutdownJoinsResultAndClosesAdmission',
-            'TestNativeWindowsPackageProfileRejectsInvalidDataBeforeExecution'
+            'TestNativeWindowsPackageProfileRejectsInvalidDataBeforeExecution',
+            'TestNativeWindowsSoftwareRegistrationIsExactAndViewBound',
+            'TestNativeWindowsSoftwareMSIAbsenceAndStrictHelper',
+            'TestNativeWindowsSoftwareRejectsMalformedUTF16'
           )
           foreach ($test in $required) {
             if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {

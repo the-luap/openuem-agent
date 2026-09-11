@@ -4,7 +4,10 @@ The legacy Windows install, update and uninstall commands now invoke WinGet
 directly with separate arguments. They no longer interpolate package identifiers
 or versions into PowerShell or infer the WinGet exit status from a shell pipeline.
 This hardens the existing execution foundation; it does not complete the approved
-standard/custom software catalog or establish installed-state detection.
+standard/custom software catalog or establish installed-state detection. The
+separate [exact Windows observation helper](windows-software-observation.md)
+now reads approved machine detection rules; authenticated operation integration
+and fresh result binding remain required.
 
 ## Command boundary
 
@@ -97,7 +100,7 @@ a skipped test does not satisfy the check. Cross-compilation alone is not native
 execution evidence.
 
 Actual WinGet package installation/removal on supported Windows versions,
-independent post-install detection, reboot requirements, restart recovery,
+integration of independent post-install detection, reboot requirements, restart recovery,
 durable command admission and idempotent retries remain open. The inherited
 pending-ack JSON file is not a transactional outbox or a crash recovery guarantee.
 The legacy list helper, custom MSI/PowerShell tasks, and Brew/Flatpak process
