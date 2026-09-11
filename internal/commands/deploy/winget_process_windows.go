@@ -20,6 +20,12 @@ import (
 // Work delegated to independent Windows services can still outlive the command;
 // interruption therefore cannot establish the installed state or a rollback.
 func runWinGetProcess(ctx context.Context, executable string, args []string) (result winGetProcessResult, resultErr error) {
+	return runWindowsProcess(ctx, executable, windows.ComposeCommandLine(append([]string{executable}, args...)))
+}
+
+// Command construction remains in the adapter: MSI has property-value quoting
+// rules in addition to Windows argv rules. Ownership and cancellation are shared.
+func runWindowsProcess(ctx context.Context, executable, commandLine string) (result winGetProcessResult, resultErr error) {
 	if ctx == nil {
 		return result, errors.New("execution context required")
 	}
@@ -33,7 +39,7 @@ func runWinGetProcess(ctx context.Context, executable string, args []string) (re
 	if err != nil {
 		return result, err
 	}
-	command, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{executable}, args...)))
+	command, err := windows.UTF16PtrFromString(commandLine)
 	if err != nil {
 		return result, err
 	}
