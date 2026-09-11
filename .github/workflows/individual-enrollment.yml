@@ -72,7 +72,7 @@ jobs:
       - name: Owned Windows package processes and shutdown execute without skips
         shell: pwsh
         run: |
-          $events = go test -json -count=1 -run 'TestNativeWindowsWinGet|TestNativeWindowsPackageShutdown' ./internal/commands/deploy ./internal/agent
+          $events = go test -json -count=1 -run 'TestNativeWindowsWinGet|TestNativeWindowsPackage(Shutdown|Profile)' ./internal/commands/deploy ./internal/agent
           $result = $LASTEXITCODE
           $events | Write-Output
           if ($result -ne 0) { exit $result }
@@ -83,7 +83,8 @@ jobs:
             'TestNativeWindowsWinGetCancellationJoinsOwnedTree',
             'TestNativeWindowsWinGetRejectsUnfinishedChildWithClosedOutput',
             'TestNativeWindowsWinGetOwnerExitTerminatesOwnedTree',
-            'TestNativeWindowsPackageShutdownJoinsResultAndClosesAdmission'
+            'TestNativeWindowsPackageShutdownJoinsResultAndClosesAdmission',
+            'TestNativeWindowsPackageProfileRejectsInvalidDataBeforeExecution'
           )
           foreach ($test in $required) {
             if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {

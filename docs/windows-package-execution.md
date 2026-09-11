@@ -38,6 +38,13 @@ Managed WinGet mutations are serialized within the agent process. Their
 tasks and direct package callbacks also inherit the agent's service context.
 Compatibility callers such as NetBird retain the same finite execution deadline.
 
+Windows package profile fields are type-checked before execution. Missing required
+identifiers, non-string versions, non-boolean update flags, a foreign source,
+conflicting pinned/latest intent, nil resources and missing task control return
+errors. Shared profile field readers also reject incorrect types instead of
+panicking. This input validation does not add cancellation or command escaping to
+the separate inherited MSI, registry, account or PowerShell executors.
+
 The native runner creates the process suspended, assigns it to a private
 kill-on-close Windows job and only then resumes its primary thread. Only the
 three explicit standard-stream handles are inherited from the agent. It retains
@@ -97,7 +104,9 @@ The legacy list helper, custom MSI/PowerShell tasks, and Brew/Flatpak process
 lifetime handling are outside this execution change. No physical or enrolled
 endpoint is used by these tests.
 
-Commit `81ed1be` passed the
-[native Windows CI job](https://github.com/the-luap/openuem-agent/actions/runs/34566414541/job/103159346316),
-including all five required execution/shutdown tests. The subsequent owner-crash
-and supplementary Unicode cases require their own updated native CI result.
+Commit `62561fb` passed
+[all three native CI jobs](https://github.com/the-luap/openuem-agent/actions/runs/34566688069),
+including all six required Windows execution/shutdown tests, the owner-crash
+fixture and supplementary Unicode arguments. Profile input validation has
+additional portable tests and a required native pre-execution rejection fixture
+in the same workflow.

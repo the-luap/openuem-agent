@@ -11,6 +11,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	openuem "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/dsc"
+	"github.com/open-uem/wingetcfg/wingetcfg"
 )
 
 func TestNativeWindowsPackageShutdownJoinsResultAndClosesAdmission(t *testing.T) {
@@ -62,5 +64,27 @@ func TestNativeWindowsPackageShutdownJoinsResultAndClosesAdmission(t *testing.T)
 	<-done
 	if executions.Load() != 1 || persisted.Load() != 1 {
 		t.Fatalf("executions %d, persisted %d", executions.Load(), persisted.Load())
+	}
+}
+
+func TestNativeWindowsPackageProfileRejectsInvalidDataBeforeExecution(t *testing.T) {
+	a := &Agent{}
+	for _, resource := range []*wingetcfg.WinGetResource{nil,
+		{Settings: map[string]any{"Ensure": "Present", "id": 42}},
+		{Settings: map[string]any{"Ensure": "Absent", "id": "Vendor.Product", "uselatest": "false"}},
+		{Settings: map[string]any{"Ensure": "Absent", "id": "Vendor.Product", "version": true}},
+		{Settings: map[string]any{"Ensure": "Present", "id": "Vendor.Product", "source": "foreign"}},
+	} {
+		if report, err := a.PackageManagementTask(resource, "", &dsc.TaskControl{}, false); err == nil || report != nil {
+			t.Fatalf("invalid profile result: %+v, %v", report, err)
+		}
+	}
+	resource := &wingetcfg.WinGetResource{Settings: map[string]any{"Ensure": "Present", "id": "Vendor.Product"}}
+	if report, err := a.PackageManagementTask(resource, "", nil, false); err == nil || report != nil {
+		t.Fatalf("nil task control: %+v, %v", report, err)
+	}
+	cfg := wingetcfg.WinGetCfg{Properties: wingetcfg.WinGetProperties{Resources: []*wingetcfg.WinGetResource{nil}}}
+	if reports, err := a.RunTasks(cfg, 1, "", &dsc.TaskControl{}, false); err == nil || reports != nil {
+		t.Fatalf("nil resource list: %+v, %v", reports, err)
 	}
 }

@@ -780,6 +780,9 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, profileID int, taskControlPath
 	taskReports := []openuem_nats.TaskReport{}
 
 	for _, resource := range cfg.Properties.Resources {
+		if resource == nil {
+			return nil, errors.New("profile resource is required")
+		}
 		switch resource.Resource {
 		case wingetcfg.OpenUEMPowershell:
 			taskReport, err := a.PowershellTask(resource, taskControlPath, taskControl, force)
@@ -841,35 +844,16 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, profileID int, taskControlPath
 }
 
 func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
-	packageName := r.Directives.Description
-
-	ensure, err := getEnsureKey(r)
+	settings, err := readWinGetProfileSettings(r)
 	if err != nil {
 		return nil, err
 	}
-
-	key, ok := r.Settings["id"]
-	if !ok {
-		return nil, errors.New("could not find the id key for a package management task")
+	if t == nil {
+		return nil, errors.New("package task control is required")
 	}
-	packageID := key.(string)
-
-	version := ""
-	key, ok = r.Settings["version"]
-	if ok {
-		version = key.(string)
-	}
-
-	keepUpdated := false
-	key, ok = r.Settings["uselatest"]
-	if ok {
-		keepUpdated = key.(bool)
-	}
-
-	action := openuem_nats.DeployAction{
-		PackageId:      packageID,
-		PackageVersion: version,
-	}
+	packageName := r.Directives.Description
+	action, ensure, keepUpdated := settings.Action, settings.Ensure, settings.KeepUpdated
+	packageID := action.PackageId
 
 	if ensure == "Present" {
 		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
@@ -1604,72 +1588,6 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 	}
 
 	return nil, nil
-}
-
-func getEnsureKey(r *wingetcfg.WinGetResource) (string, error) {
-	value, ok := r.Settings["Ensure"].(string)
-	if !ok {
-		return "", errors.New("could not find the Ensure key")
-	}
-	if value != "Present" && value != "Absent" {
-		return "", errors.New("unexpected Ensure key: " + value)
-	}
-
-	return value, nil
-}
-
-func getStringKey(r *wingetcfg.WinGetResource, key string, maxLength int, required bool) (string, error) {
-	v, ok := r.Settings[key]
-	if !ok {
-		if required {
-			return "", fmt.Errorf("%s is empty and is required", key)
-		}
-		return "", nil
-	}
-
-	value := v.(string)
-
-	if maxLength > 0 && len(value) > maxLength {
-		return "", fmt.Errorf("%s exceeds the %d character limit", key, maxLength)
-	}
-
-	return value, nil
-}
-
-func getBoolKey(r *wingetcfg.WinGetResource, key string, required bool) (bool, error) {
-	v, ok := r.Settings[key]
-	if !ok {
-		if required {
-			return false, fmt.Errorf("%s is empty and is required", key)
-		}
-		return false, nil
-	}
-
-	value := v.(bool)
-	if !ok {
-		return false, fmt.Errorf("could not find the %s key", key)
-	}
-
-	return value, nil
-}
-
-func getCommaSeparatedStringKey(r *wingetcfg.WinGetResource, key string, required bool) (string, error) {
-	v, ok := r.Settings[key]
-	if !ok {
-		if required {
-			return "", fmt.Errorf("%s is empty and is required", key)
-		}
-		return "", nil
-	}
-
-	values := strings.Split(v.(string), ";")
-
-	csValues := []string{}
-	for _, v := range values {
-		csValues = append(csValues, fmt.Sprintf("'%s'", v))
-	}
-
-	return strings.Join(csValues, ", "), nil
 }
 
 func ReadDeploymentNotACK() ([]openuem_nats.DeployAction, error) {
