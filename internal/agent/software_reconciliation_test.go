@@ -473,20 +473,20 @@ func TestSoftwareReconciliationCapabilityIsIndependentAndWindowsOnly(t *testing.
 	r.software = f.client
 	r.cancel()
 	for _, versions := range [][2]int{{0, 1}, {1, 0}, {1, 2}, {0, -1}, {1, 1}, {0, 0}} {
-		f.agent.setSoftwareCapabilities(versions[0], versions[1])
+		f.agent.setSoftwareCapabilities(versions[0], versions[1], 0)
 		r.work.Wait()
 		if (r.softwareVersion.Load() == 1) != (versions[0] == 1) || (r.softwareReconciliationVersion.Load() == 1) != (versions[1] == 1) {
 			t.Fatal("capabilities were conflated")
 		}
 	}
 	r.identity.Platform = "macos"
-	f.agent.setSoftwareCapabilities(1, 1)
+	f.agent.setSoftwareCapabilities(1, 1, 0)
 	if r.softwareVersion.Load() != 0 || r.softwareReconciliationVersion.Load() != 0 {
 		t.Fatal("Mac enabled Windows software")
 	}
 	r.identity.Platform = "windows"
 	f.client.journal = f.softwareRuntimeFixture.journal
-	f.agent.setSoftwareCapabilities(0, 1)
+	f.agent.setSoftwareCapabilities(0, 1, 0)
 	if r.softwareReconciliationVersion.Load() != 0 {
 		t.Fatal("missing protected reconciliation journal enabled")
 	}

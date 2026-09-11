@@ -4,7 +4,9 @@ The software client verifies the command signature against the independently
 pinned enrollment CA, decrypts the exact current-generation plan, and records a
 durable attempt before calling its native executor. The individual Windows service
 now connects the protected recipient/journal, exact server capability and native
-MSI/EXE adapter through one joined consumer. Existing console preparations do not
+MSI/EXE/Burn adapter through one joined consumer. Burn additionally requires the
+exact private profile hint and device-signed recipient version; a legacy profile
+keeps it disabled. Capability changes cannot discard retained execution results. Existing console preparations do not
 start installers. The console now has a [separate explicit dispatch and verified
 result history](https://github.com/the-luap/openuem-console/blob/3834fa9331f4a118504563126bb06937e1e798d9/docs/windows-software-requests.md).
 The individual read-only reconciliation consumer and durable evidence are now

@@ -186,7 +186,7 @@ func TestSoftwareClientRequiresNativeBootBeforeAdmission(t *testing.T) {
 	}
 }
 
-func TestSoftwareClientDoesNotAdvertiseOrAdmitUnverifiedBurnExecution(t *testing.T) {
+func TestSoftwareClientRejectsBurnWithoutProfilePermission(t *testing.T) {
 	f := newSoftwareRuntimeFixture(t)
 	for _, mode := range []string{"challenge", "recipient"} {
 		calls := 0
@@ -262,7 +262,7 @@ func (f *softwareRuntimeFixture) exchange(t *testing.T) recoveryExchange {
 		reply := enrollment.SoftwareReply{Version: 1, Protocol: enrollment.SoftwareProtocol, OK: true}
 		switch request.Action {
 		case "challenge":
-			reply.Registration = &enrollment.SoftwareRegistration{Version: 1, Protocol: enrollment.SoftwareProtocol, Identity: f.client.scope, ID: f.recipient.ID, PublicKey: f.recipient.PublicKey, Nonce: bytes.Repeat([]byte{2}, 32), ExpiresAt: time.Now().Add(time.Minute).Unix()}
+			reply.Registration = &enrollment.SoftwareRegistration{Version: 1, Protocol: enrollment.SoftwareProtocol, Identity: f.client.scope, ID: f.recipient.ID, PublicKey: f.recipient.PublicKey, Nonce: bytes.Repeat([]byte{2}, 32), ExpiresAt: time.Now().Add(time.Minute).Unix(), BurnVersion: f.recipient.BurnVersion}
 		case "register":
 			if enrollment.VerifySoftwareRegistration(*request.Registration, request.Signature, f.client.certificate, time.Now()) != nil {
 				t.Error("invalid registration proof")

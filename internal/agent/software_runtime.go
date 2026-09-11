@@ -10,10 +10,10 @@ import (
 )
 
 func (a *Agent) setSoftwareCapability(version int) {
-	a.setSoftwareCapabilities(version, 0)
+	a.setSoftwareCapabilities(version, 0, 0)
 }
 
-func (a *Agent) setSoftwareCapabilities(version, reconciliationVersion int) {
+func (a *Agent) setSoftwareCapabilities(version, reconciliationVersion, burnVersion int) {
 	r := a.individual
 	if r == nil {
 		return
@@ -21,6 +21,13 @@ func (a *Agent) setSoftwareCapabilities(version, reconciliationVersion int) {
 	accepted := int32(0)
 	if version == enrollment.SoftwareVersion && r.software != nil && r.identity != nil && r.identity.Platform == "windows" {
 		accepted = int32(version)
+	}
+	if r.software != nil {
+		burn := int32(0)
+		if accepted != 0 && burnVersion == enrollment.SoftwareBurnVersion && (r.identity.Architecture == "amd64" || r.identity.Architecture == "arm64") {
+			burn = enrollment.SoftwareBurnVersion
+		}
+		r.software.burnVersion.Store(burn)
 	}
 	r.softwareVersion.Store(accepted)
 	reconciliation := int32(0)
@@ -33,7 +40,7 @@ func (a *Agent) setSoftwareCapabilities(version, reconciliationVersion int) {
 	}
 	a.startSoftwareConsumer(func(ctx context.Context, plan enrollment.SoftwarePlan) enrollment.SoftwareOutcome {
 		return windowssoftware.Execute(ctx, plan, r.directory, func() error {
-			if r.softwareVersion.Load() != enrollment.SoftwareVersion {
+			if r.softwareVersion.Load() != enrollment.SoftwareVersion || !r.software.admitsPlan(plan) {
 				return enrollment.ErrSoftware
 			}
 			return r.software.live()

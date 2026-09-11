@@ -2,8 +2,8 @@
 
 `internal/burnbundle.Inspect` locates the UX cabinet and section-declared bundle
 code in a version-2 `.wixburn` PE image. Together with `ReadRegistration`, it now
-supplies the bounded helper for explicit Burn plans. Burn execution admission
-and capability advertisement remain disabled pending native lifecycle evidence.
+supplies the bounded helper for explicit Burn plans. New execution requires
+both the private profile hint and a matching device-signed recipient capability.
 The generic EXE preflight checks native PE architecture, while
 protected staging separately enforces the approved digest and Authenticode policy.
 
@@ -102,7 +102,8 @@ concurrent reuse. The complete registration reader passes against all three
 generated WiX architectures in 15.10 seconds, including rejection of a changed PE
 bundle code. All Linux, macOS, Windows and generated-format CI jobs pass at agent
 commit `bf1f80adf9960387f82e414d60263b7054816c23`. These runtime checks use an AMD64
-Windows runner; native ARM64 process and physical endpoint acceptance remain open.
+Windows runner; subsequent native ARM64 evidence is recorded below. Physical
+endpoint acceptance remains open.
 
 The decoder uses the explicit `-1` notification result to stop after complete
 manifest output. FDI reports this as `FDIERROR_USER_ABORT`; returning `FALSE` from
@@ -144,12 +145,24 @@ passes at `68876c30fd6301327b5d3f2e45c82a54c5ce0311`. A per-package test timeout
 preserves diagnostic stacks if an intermittent hang returns; production
 timeouts and assertions remain unchanged.
 
-The agent currently requests no Burn capability and rejects unsolicited capability
-replies and new Burn work before durable attempt admission. The process builder
-now maps the explicit Burn kind to its retained EXE and fixed quiet arguments for
-both installation and removal; unsupported kinds cannot fall through to MSI.
-Capability advertisement and source approval/provenance integration remain
-outstanding. Physical endpoint acceptance remains separate.
+The agent requests Burn version 1 only when a successful private server profile
+advertises that exact version alongside Windows software support and a protected
+native AMD64/ARM64 identity. The challenge, device signature and returned recipient
+must retain the requested version. A profile change is checked before signing,
+after registration, before durable admission and before native execution. The
+live native boundary checks permission again during staging and before starting.
+The process builder maps the explicit Burn kind to its retained EXE and fixed
+quiet arguments for both operations; unsupported kinds cannot fall through to MSI.
+
+Changes in profile capability renegotiate the recipient before another poll.
+Pending signed outcomes are persisted and delivered before renegotiation;
+historical journal recovery and later-boot observation do not require new Burn
+admission. Old profiles omit the hint and retain version zero. Mismatched server
+replies cannot introduce support. Focused portable race tests cover upgrade,
+downgrade, withdrawn/mismatched grants, withdrawal before/after durable admission,
+unchanged lost-receipt retries and protected platform gating in 8.521 seconds.
+Source approval/provenance integration and physical endpoint acceptance remain
+outstanding.
 The full roadmap remains in progress.
 
 ## Owned execution fixture
@@ -163,8 +176,8 @@ Both the MSI product and bundle upgrade identities are unique to the owned test.
 The fixture has an explicit environment opt-in and must pass without skipping.
 
 Only this test seam accepts the generated unsigned artifact. It uses the real
-Burn preflight and direct process builder. Production capability advertisement
-and new-task admission stay disabled. The first native run exposed WiX's
+Burn preflight and direct process builder. Production execution still requires
+an approved signed plan and the negotiated capability. The first native run exposed WiX's
 unconditional file-size query while binding the registry-only MSI. The fixture
 now includes the standard empty [File table](https://learn.microsoft.com/en-us/windows/win32/msi/file-table)
 without adding any installed files. The complete native installation/removal
@@ -202,24 +215,30 @@ plus private readiness shutdown. The generated MSI uses the native
 and both the bundle and owned process payload use the same native architecture.
 Go 1.26.8 supports its Windows race detector only on AMD64; that existing required
 job retains race detection, while the ARM64 job runs native assertions without
-it. ARM64 tagged compilation and vet pass. The first ARM64 run passes all three
-generated layouts in 21.09 seconds, native preflight in 8.95 seconds, cancellation
-in 8.17 seconds and the unfinished child in 6.62 seconds. MSI installation retains
-an uncertain process result and remains unresolved. A tagged fixture-only entry
-point now exposes the native runner error while retaining the exact production
-builder and runner; release builds never include it, and it exposes no process
-output or arguments. Native ARM64 installation/removal acceptance remains pending.
-The next diagnostic confirms the generated MSI is present at version `1.2.3`
-while two job processes remain active and both output streams are drained.
-An aligned native process list is being checked to identify that remaining work.
+it. ARM64 tagged compilation and vet pass.
 
-The owned execution fixtures now explicitly set the authored
+The default-restore fixture installed its MSI successfully, but retained an
+uncertain result because `SrTasks.exe` and `conhost.exe` remained in the owned job
+after both output streams drained. A fixture-only diagnostic uses an aligned
+native process list to identify owned job members without exposing arguments or
+output; release builds do not include this entry point.
+
+The owned execution fixtures explicitly set the authored
 [`Chain.DisableSystemRestore`](https://docs.firegiant.com/wix/schema/wxs/chain/)
 option so their bootstrapper does not request host restore points in addition to
-the intended synthetic payload. This changes only the generated test bundles,
-not approved plans, process timeouts, child joining or production arguments.
-The preceding default-restore fixture remains in native diagnostic CI for
-comparison; the effect on the ARM64 completion failure is not yet established.
+the intended synthetic payload. This changes only generated bundles. Approved
+plans, process timeouts, child joining and production arguments are unchanged.
+Bundles that leave child work active continue to report uncertainty.
+
+All seven jobs pass at `a1096ed17e13691f8784c4a1b788cd2398a0fc84`
+([CI run](https://github.com/the-luap/openuem-agent/actions/runs/34628087765)).
+Native ARM64 installation/removal passes in 7.66 seconds, cancellation in 6.81
+seconds and the deliberately unfinished child in 6.66 seconds. All three generated
+layouts pass in 22.60 seconds and native preflight in 9.06 seconds. Private
+readiness passes its 96 shutdown cycles in 0.41 seconds alongside identity, PID,
+permission, borrowed-signer and crash recovery checks. The AMD64 race jobs and
+full Windows storage/LocalSystem service integration also pass. These are owned
+CI fixtures, not physical endpoint or provider acceptance.
 
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)

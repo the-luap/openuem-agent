@@ -786,7 +786,7 @@ func (a *Agent) GetRemoteConfig() error {
 	if config.Ok {
 		a.setHardwareCapability(config.HardwareInventoryVersion)
 		a.setRecoveryCapabilities(config.RecoveryTaskVersion, config.RotationTaskVersion)
-		a.setSoftwareCapabilities(config.SoftwareTaskVersion, config.SoftwareReconciliationVersion)
+		a.setSoftwareCapabilities(config.SoftwareTaskVersion, config.SoftwareReconciliationVersion, config.SoftwareBurnVersion)
 	} else {
 		a.setHardwareCapability(0)
 		a.setRecoveryCapabilities(0, 0)

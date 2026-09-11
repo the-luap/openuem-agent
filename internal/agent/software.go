@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"sync/atomic"
 	"time"
 
 	"github.com/open-uem/nats/enrollment"
@@ -33,6 +34,8 @@ type softwareClient struct {
 	live                    func() error
 	bootSession             func() (windowssoftware.BootSession, error)
 	recipientID             string
+	recipientBurnVersion    int
+	burnVersion             atomic.Int32
 	pending                 *enrollment.SoftwareResult
 	persisted               bool
 	reconciliationPending   *enrollmentstore.SoftwareReconciliationEntry
@@ -104,19 +107,31 @@ func (r *softwareClient) request(ctx context.Context, exchange recoveryExchange,
 	defer clear(data)
 	return enrollment.DecodeSoftwareReply(data, time.Now())
 }
+func (r *softwareClient) requestedBurnVersion() int {
+	if r.burnVersion.Load() == enrollment.SoftwareBurnVersion {
+		return enrollment.SoftwareBurnVersion
+	}
+	return 0
+}
+
+func (r *softwareClient) admitsPlan(plan enrollment.SoftwarePlan) bool {
+	return plan.Kind != "windows-burn" || r.requestedBurnVersion() == enrollment.SoftwareBurnVersion && r.recipientBurnVersion == enrollment.SoftwareBurnVersion
+}
+
 func (r *softwareClient) register(ctx context.Context, exchange recoveryExchange) error {
 	public := r.key.PublicKey()
-	reply, err := r.request(ctx, exchange, enrollment.SoftwareRequest{Action: "challenge", PublicKey: public})
+	burnVersion := r.requestedBurnVersion()
+	reply, err := r.request(ctx, exchange, enrollment.SoftwareRequest{Action: "challenge", PublicKey: public, BurnVersion: burnVersion})
 	if err != nil {
 		return err
 	}
 	if reply.Registration != nil {
 		c := reply.Registration
-		if !c.Valid(time.Now()) || c.BurnVersion != 0 || c.Identity != r.scope || !bytes.Equal(c.PublicKey, public) {
+		if !c.Valid(time.Now()) || c.BurnVersion != burnVersion || r.requestedBurnVersion() != burnVersion || c.Identity != r.scope || !bytes.Equal(c.PublicKey, public) {
 			return enrollment.ErrSoftware
 		}
 		signature, err := enrollment.SignSoftwareRegistration(*c, r.certificate, r.identity.Keys.Certificate, time.Now())
-		if err != nil {
+		if err != nil || r.requestedBurnVersion() != burnVersion {
 			return enrollment.ErrSoftware
 		}
 		reply, err = r.request(ctx, exchange, enrollment.SoftwareRequest{Action: "register", Registration: c, Signature: signature})
@@ -124,10 +139,10 @@ func (r *softwareClient) register(ctx context.Context, exchange recoveryExchange
 			return enrollment.ErrSoftware
 		}
 	}
-	if reply.Recipient == nil || reply.Recipient.BurnVersion != 0 || reply.Recipient.Identity != r.scope || !bytes.Equal(reply.Recipient.PublicKey, public) {
+	if reply.Recipient == nil || reply.Recipient.BurnVersion != burnVersion || r.requestedBurnVersion() != burnVersion || reply.Recipient.Identity != r.scope || !bytes.Equal(reply.Recipient.PublicKey, public) {
 		return enrollment.ErrSoftware
 	}
-	r.recipientID = reply.Recipient.ID
+	r.recipientID, r.recipientBurnVersion = reply.Recipient.ID, burnVersion
 	return nil
 }
 func (r *softwareClient) deliver(ctx context.Context, exchange recoveryExchange) error {
@@ -205,7 +220,7 @@ func (r *softwareClient) cycle(ctx context.Context, exchange recoveryExchange, e
 	if r.pending != nil {
 		return r.deliver(ctx, exchange)
 	}
-	if r.recipientID == "" {
+	if r.recipientID == "" || r.recipientBurnVersion != r.requestedBurnVersion() {
 		if err := r.register(ctx, exchange); err != nil {
 			return err
 		}
@@ -241,16 +256,16 @@ func (r *softwareClient) cycle(ctx context.Context, exchange recoveryExchange, e
 		return enrollment.ErrSoftware
 	}
 	defer secret.Close()
-	// Parsing the new contract is not execution support. Keep the capability
-	// unadvertised and reject new Burn work before durable attempt admission.
-	if secret.Plan.Kind == "windows-burn" {
+	// A profile hint is not a signed recipient grant. Historical recovery above
+	// remains available when either permission for new work has been withdrawn.
+	if !r.admitsPlan(secret.Plan) {
 		return enrollment.ErrSoftware
 	}
 	if r.bootSession == nil {
 		return enrollment.ErrSoftware
 	}
 	boot, err := r.bootSession()
-	if err != nil || !boot.Valid() {
+	if err != nil || !boot.Valid() || !r.admitsPlan(secret.Plan) {
 		return enrollment.ErrSoftware
 	}
 	won, entry, err := r.journal.BeginWithBootSession(task, secret, boot)
@@ -277,7 +292,7 @@ func (r *softwareClient) cycle(ctx context.Context, exchange recoveryExchange, e
 	work, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	outcome := enrollment.SoftwareOutcome{State: "not_started", Execution: "not_started", Before: enrollment.SoftwareObservation{State: "unknown"}, After: enrollment.SoftwareObservation{State: "unknown"}, Error: "unavailable"}
-	if work.Err() == nil && r.live() == nil {
+	if work.Err() == nil && r.live() == nil && r.admitsPlan(secret.Plan) {
 		outcome = execute(work, secret.Plan)
 		if !outcome.ValidFor(secret.Plan) || work.Err() != nil && outcome.Execution != "not_started" {
 			outcome = softwareInterrupted()
