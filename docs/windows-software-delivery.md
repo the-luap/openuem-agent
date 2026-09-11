@@ -18,6 +18,8 @@ separate HTTPS, hash, private-file and native-signature boundary.
 [Native installer execution](windows-installer-processes.md) adds bounded read-only
 host/package preflight, exact before/after observations, owned processes and
 conservative success/reboot/failure/interruption outcomes.
+The [compatibility matrix](windows-software-compatibility.md) distinguishes exact
+host admission rules from observed Windows client/Server CI coverage.
 
 The protected journal uses immutable numbered start/result records. Native
 Windows storage uses DPAPI and System/Administrator-only publication. A start
@@ -84,6 +86,10 @@ The test requires exact native old/new registration before and after each staged
 execution, complete old-product and registry-payload removal, an already-current no-op, harmless
 removal of the now-absent old product and final successor removal without fetching
 another artifact. Existing MSI property and read-only preflight checks also run
-natively on ARM64. Cross-compilation passes for both Windows architectures;
-native replacement evidence is pending CI. These fixtures do not change production
+natively on ARM64. At `9f2a102`, the complete major-upgrade fixture passes on
+[AMD64 in 2.01 seconds](https://github.com/the-luap/openuem-agent/actions/runs/34633746056/job/103376551731)
+and [ARM64 in 2.19 seconds](https://github.com/the-luap/openuem-agent/actions/runs/34633746056/job/103376552000).
+All seven agent CI jobs pass, including the corrected
+[protected staging](windows-installer-staging.md) and three repetitions of each
+owned Burn execution scenario. These fixtures do not change production
 upgrade policy or establish physical offline/restart/hibernate acceptance.
