@@ -174,6 +174,10 @@ func (a *Agent) stop() {
 	}
 	if a.individual != nil {
 		a.individual.work.Wait()
+		a.individual.software.close()
+		if a.individual.softwareStore != nil {
+			_ = a.individual.softwareStore.Close()
+		}
 		a.individual.rotation.clearPending()
 		if a.individual.recoveryStore != nil {
 			_ = a.individual.recoveryStore.Close()
@@ -776,14 +780,17 @@ func (a *Agent) GetRemoteConfig() error {
 	if err := json.Unmarshal(msg.Data, &config); err != nil {
 		a.setHardwareCapability(0)
 		a.setRecoveryCapabilities(0, 0)
+		a.setSoftwareCapability(0)
 		return err
 	}
 	if config.Ok {
 		a.setHardwareCapability(config.HardwareInventoryVersion)
 		a.setRecoveryCapabilities(config.RecoveryTaskVersion, config.RotationTaskVersion)
+		a.setSoftwareCapability(config.SoftwareTaskVersion)
 	} else {
 		a.setHardwareCapability(0)
 		a.setRecoveryCapabilities(0, 0)
+		a.setSoftwareCapability(0)
 	}
 
 	if config.Ok {

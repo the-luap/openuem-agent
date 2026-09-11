@@ -104,12 +104,12 @@ jobs:
         env:
           OPENUEM_WINDOWS_MSI_FIXTURE: '1'
         run: |
-          $events = go test -json -count=1 -timeout 3m -tags openuem_msi_test -run '^TestNativeWindowsSoftwareOwnedMSI' ./internal/commands/deploy ./internal/windowssoftware
+          $events = go test -json -p 1 -count=1 -timeout 3m -tags openuem_msi_test -run '^TestNativeWindowsSoftwareOwnedMSI' ./internal/commands/deploy ./internal/windowssoftware
           $result = $LASTEXITCODE
           $events | Write-Output
           if ($result -ne 0) { exit $result }
           $records = $events | ForEach-Object { $_ | ConvertFrom-Json }
-          foreach ($test in @('TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove', 'TestNativeWindowsSoftwareOwnedMSIReadOnlyCompatibility')) {
+          foreach ($test in @('TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove', 'TestNativeWindowsSoftwareOwnedMSIReadOnlyCompatibility', 'TestNativeWindowsSoftwareOwnedMSIExecutorInstallAndRemove')) {
             if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {
               throw "The required generated MSI fixture did not pass: $test"
             }

@@ -5,7 +5,27 @@ existing suspended-process and kill-on-close Windows Job boundary. This helper
 does not authenticate a task, authorize an attempt, inspect compatibility, verify
 an artifact, or establish installed state. Its caller must complete those steps
 and retain the protected artifact and installation service lease through execution.
-The individual software client is not yet connected to this adapter.
+The individual Windows service connects this adapter through
+`windowssoftware.Execute` only after authenticated, exclusive durable admission.
+An exact server software capability, a protected recipient for the current
+certificate generation, an intact journal and the held service lease are required.
+The joined software consumer retains its store and identity until native work and
+result persistence finish, including shutdown and identity renewal handoff.
+
+The executor observes exact machine software state before admission to the
+native process. An already observed target does not execute again; a different
+installed version cannot become an implicit upgrade or removal. Compatibility,
+download, hash, native trust and metadata checks precede a fresh observation and
+final lease checks. A retained installer stays protected through process completion.
+MSI removal uses the approved product code without downloading another installer.
+
+After started execution, an approved success code requires the exact observed
+target. A reboot exit remains `restart_required`, even when the target already
+appears installed. An unapproved exit is `failed`. Interrupted, incomplete or
+unobservable work remains `uncertain`. None of these paths retries an installer
+or proves rollback. The signed result is durably recorded before network delivery.
+Console preparations still require a separate explicit dispatch implementation;
+this service does not turn stored preparations into executable tasks.
 
 `windowssoftware.CheckHost` uses a bounded read-only child of the installed
 agent to read the native machine architecture and Windows version. Emulation is
@@ -53,3 +73,10 @@ It cannot bypass production staging or signature verification because it does
 not invoke either. Separate staging tests exercise actual Authenticode with an
 existing signed fixture without executing it. These are CI tests, not acceptance
 on an enrolled Windows device or proof of the complete task delivery lifecycle.
+
+A combined native executor fixture stages the generated MSI through owned HTTPS,
+checks its retained file and native metadata, installs with the real process
+adapter, and observes the exact machine product through the read-only helper.
+It verifies idempotent observation, refusal to remove a different version and
+observed removal. Only that private test seam accepts an unsigned generated
+fixture. Production `Execute` has no signature-verifier override.

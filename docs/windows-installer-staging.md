@@ -1,9 +1,9 @@
 # Protected Windows installer staging
 
 `windowssoftware.Stage` prepares an artifact from an already authenticated MSI/EXE
-plan. It does not execute the artifact. The software client, explicit console
-dispatch and native executor still need to be connected before this is an
-installation workflow.
+plan. It does not execute the artifact. The individual Windows service now uses
+it through the [native executor](windows-installer-processes.md) after exclusive
+durable task admission. Explicit console dispatch and reconciliation remain open.
 
 The downloader uses a separate HTTPS transport with system server trust, no
 enrollment client certificate, cookie jar, environment proxy or redirects. A

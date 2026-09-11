@@ -2,13 +2,16 @@
 
 The software client verifies the command signature against the independently
 pinned enrollment CA, decrypts the exact current-generation plan, and records a
-durable attempt before calling its native executor. The client is implemented and
-tested through private WSS subjects, but is not yet wired into service startup or
-the native MSI/EXE adapter. Existing console preparations do not start installers.
+durable attempt before calling its native executor. The individual Windows service
+now connects the protected recipient/journal, exact server capability and native
+MSI/EXE adapter through one joined consumer. Existing console preparations do not
+start installers; explicit console dispatch/reconciliation remains to be implemented.
 
 [Protected installer staging](windows-installer-staging.md) now implements the
-separate HTTPS, hash, private-file and native-signature boundary. The native
-execution adapter and service integration remain open.
+separate HTTPS, hash, private-file and native-signature boundary.
+[Native installer execution](windows-installer-processes.md) adds bounded read-only
+host/package preflight, exact before/after observations, owned processes and
+conservative success/reboot/failure/interruption outcomes.
 
 The protected journal uses immutable numbered start/result records. Native
 Windows storage uses DPAPI and System/Administrator-only publication. A start
@@ -44,5 +47,9 @@ joined shutdown. Raw native diagnostics never form a software result.
 Verification includes competing Store/journal instances, lost intent/result commit
 responses, corrupt/foreign/partial records, generation-specific recipients,
 historical results after renewal, and private WSS receipt retries. Native DPAPI
-journal coverage is part of the Windows test suite. Native package execution and
-physical endpoint acceptance must not be inferred from injected executor tests.
+journal coverage is part of the Windows test suite. Joined service tests exercise
+private WSS delivery and cancellation with a controlled executor, including signed
+receipt persistence before key release. Separately opted-in native fixtures create,
+install, observe and remove only uniquely identified synthetic MSI products on the
+ephemeral CI runner. They are not physical endpoint acceptance or a released,
+signed package lifecycle through the full console/worker/agent installation.

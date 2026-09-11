@@ -45,6 +45,10 @@ type individualRuntime struct {
 	recovery        *recoveryClient
 	rotation        *rotationClient
 	recoveryStore   *enrollmentstore.Store
+	softwareVersion atomic.Int32
+	softwareStarted bool
+	software        *softwareClient
+	softwareStore   *enrollmentstore.Store
 }
 
 func individualDirectory(mode, directory string) (string, error) {
@@ -134,6 +138,24 @@ func (a *Agent) configureIndividualWithLease(mode, directory string, lease indiv
 			} else {
 				a.individual.recoveryStore, keepStore = store, true
 			}
+		}
+	}
+	if binding.Platform == "windows" {
+		key, softwareErr := store.LoadOrCreateSoftwareRecipient(identity)
+		if softwareErr == nil {
+			journal, journalErr := store.OpenSoftwareJournal(identity)
+			softwareErr = journalErr
+			if softwareErr == nil {
+				a.individual.software, softwareErr = newSoftwareClient(identity, key, journal, func() error { return lease.ValidateDirectory(directory) })
+			}
+			if softwareErr != nil {
+				key.Close()
+			}
+		}
+		if softwareErr != nil {
+			log.Print("[ERROR]: protected Windows software journal is unavailable")
+		} else {
+			a.individual.softwareStore, keepStore = store, true
 		}
 	}
 	a.applyIndividualConfig()
