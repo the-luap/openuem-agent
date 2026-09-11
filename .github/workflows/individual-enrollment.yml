@@ -25,7 +25,7 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Read only bounded native cabinet data with isolated callbacks
         run: go test -race -count=1 ./internal/burnbundle
-      - name: Build and inspect owned Burn bundles without executing them
+      - name: Inspect owned Burn bundles and require bounded native preflight without execution
         shell: pwsh
         run: scripts/check-windows-burn-format.ps1
 

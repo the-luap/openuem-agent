@@ -112,7 +112,7 @@ func (r *softwareClient) register(ctx context.Context, exchange recoveryExchange
 	}
 	if reply.Registration != nil {
 		c := reply.Registration
-		if !c.Valid(time.Now()) || c.Identity != r.scope || !bytes.Equal(c.PublicKey, public) {
+		if !c.Valid(time.Now()) || c.BurnVersion != 0 || c.Identity != r.scope || !bytes.Equal(c.PublicKey, public) {
 			return enrollment.ErrSoftware
 		}
 		signature, err := enrollment.SignSoftwareRegistration(*c, r.certificate, r.identity.Keys.Certificate, time.Now())
@@ -124,7 +124,7 @@ func (r *softwareClient) register(ctx context.Context, exchange recoveryExchange
 			return enrollment.ErrSoftware
 		}
 	}
-	if reply.Recipient == nil || reply.Recipient.Identity != r.scope || !bytes.Equal(reply.Recipient.PublicKey, public) {
+	if reply.Recipient == nil || reply.Recipient.BurnVersion != 0 || reply.Recipient.Identity != r.scope || !bytes.Equal(reply.Recipient.PublicKey, public) {
 		return enrollment.ErrSoftware
 	}
 	r.recipientID = reply.Recipient.ID
@@ -241,6 +241,11 @@ func (r *softwareClient) cycle(ctx context.Context, exchange recoveryExchange, e
 		return enrollment.ErrSoftware
 	}
 	defer secret.Close()
+	// Parsing the new contract is not execution support. Keep the capability
+	// unadvertised and reject new Burn work before durable attempt admission.
+	if secret.Plan.Kind == "windows-burn" {
+		return enrollment.ErrSoftware
+	}
 	if r.bootSession == nil {
 		return enrollment.ErrSoftware
 	}

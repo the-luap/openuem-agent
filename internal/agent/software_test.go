@@ -185,6 +185,62 @@ func TestSoftwareClientRequiresNativeBootBeforeAdmission(t *testing.T) {
 		})
 	}
 }
+
+func TestSoftwareClientDoesNotAdvertiseOrAdmitUnverifiedBurnExecution(t *testing.T) {
+	f := newSoftwareRuntimeFixture(t)
+	for _, mode := range []string{"challenge", "recipient"} {
+		calls := 0
+		exchange := func(_ context.Context, data []byte) ([]byte, error) {
+			calls++
+			request, err := enrollment.DecodeSoftwareRequest(data, time.Now())
+			if err != nil || request.Action != "challenge" || request.BurnVersion != 0 {
+				t.Fatal("unverified capability advertised or signed", err)
+			}
+			reply := enrollment.SoftwareReply{Version: 1, Protocol: enrollment.SoftwareProtocol, OK: true}
+			if mode == "challenge" {
+				reply.Registration = &enrollment.SoftwareRegistration{Version: 1, Protocol: enrollment.SoftwareProtocol, Identity: f.client.scope, ID: f.recipient.ID, PublicKey: f.recipient.PublicKey, Nonce: bytes.Repeat([]byte{2}, 32), ExpiresAt: time.Now().Add(time.Minute).Unix(), BurnVersion: 1}
+			} else {
+				r := f.recipient
+				r.BurnVersion = 1
+				reply.Recipient = &r
+			}
+			return json.Marshal(reply)
+		}
+		if f.client.register(t.Context(), exchange) == nil || calls != 1 || f.client.recipientID != "" {
+			t.Fatal("server introduced unrequested Burn support")
+		}
+	}
+	secret, err := f.client.key.Open(*f.task, f.client.authority, f.client.scope, f.recipient.ID, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := secret.Plan
+	secret.Close()
+	p.Kind, p.Artifact.Format, p.MSIProperties = "windows-burn", "exe", nil
+	p.Artifact.URL = "https://example.invalid/fixture.exe"
+	p.Arguments = []string{"/quiet", "/norestart"}
+	p.Detection = enrollment.SoftwareDetection{Kind: "uninstall-key", UninstallKey: p.Detection.ProductCode, RegistryView: "64", Version: "1.2.3"}
+	capable := f.recipient
+	capable.BurnVersion = 1
+	c := f.task.Context
+	c.PlanHash, _ = p.Digest()
+	c.Expectation = p.Expectation()
+	f.task, err = enrollment.SealSoftwareTask(capable, c, p, bytes.Repeat([]byte{7}, 32), f.client.authority, f.issuer, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	boots := 0
+	f.client.bootSession = func() (windowssoftware.BootSession, error) {
+		boots++
+		return windowssoftware.BootSession{}, nil
+	}
+	if err := f.client.cycle(t.Context(), f.exchange(t), func(context.Context, enrollment.SoftwarePlan) enrollment.SoftwareOutcome {
+		t.Fatal("Burn reached native execution before capability acceptance")
+		return softwareInterrupted()
+	}); err == nil || f.journal.entry != nil || boots != 0 {
+		t.Fatal("unverified Burn execution acquired durable admission", err)
+	}
+}
 func (f *softwareRuntimeFixture) exchange(t *testing.T) recoveryExchange {
 	t.Helper()
 	subject, err := enrollment.RequestSubject(f.client.scope.AgentID, "software")

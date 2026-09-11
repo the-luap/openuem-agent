@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/open-uem/nats/enrollment"
 )
 
@@ -41,13 +42,28 @@ func (r preflightRequest) valid() bool {
 	if r.Path == "" {
 		return r.Format == "" && r.Detection == nil
 	}
-	if !filepath.IsAbs(r.Path) || filepath.Clean(r.Path) != r.Path || strings.ContainsAny(r.Path, "\x00\r\n\"") || !strings.EqualFold(filepath.Ext(r.Path), "."+r.Format) {
+	extension := r.Format
+	if r.Format == "burn" {
+		extension = "exe"
+	}
+	if !filepath.IsAbs(r.Path) || filepath.Clean(r.Path) != r.Path || strings.ContainsAny(r.Path, "\x00\r\n\"") || !strings.EqualFold(filepath.Ext(r.Path), "."+extension) {
 		return false
 	}
 	if r.Format == "exe" {
 		return r.Detection == nil
 	}
+	if r.Format == "burn" {
+		return r.Detection != nil && validBurnRule(*r.Detection)
+	}
 	return r.Format == "msi" && r.Detection != nil && r.Detection.Kind == "msi-product" && r.Detection.Validate() == nil
+}
+
+func validBurnRule(r Rule) bool {
+	if r.Validate() != nil || r.Kind != "uninstall-key" || r.RegistryView != "64" {
+		return false
+	}
+	id, err := uuid.Parse(r.UninstallKey)
+	return err == nil && id != uuid.Nil && r.UninstallKey == "{"+strings.ToUpper(id.String())+"}"
 }
 
 func parseOSVersion(text string) ([4]uint32, bool) {
@@ -89,14 +105,20 @@ func CheckHost(ctx context.Context, plan enrollment.SoftwarePlan) error {
 }
 
 // CheckInstaller requires a retained, verified stage. MSI metadata is queried
-// read-only; EXE architecture comes from its PE header. Neither path runs code.
+// read-only; EXE architecture comes from its PE header. Explicit Burn plans also
+// require matching embedded machine registration inside the bounded helper.
+// No inspection path runs installer code.
 func CheckInstaller(ctx context.Context, plan enrollment.SoftwarePlan, stage *StagedArtifact) error {
-	if !plan.Valid() || stage == nil || stage.Verify(ctx) != nil {
+	if !plan.Valid() || stage == nil || stage.digest != plan.Artifact.SHA256 || stage.Verify(ctx) != nil {
 		return ErrPreflight
 	}
 	r := preflightRequest{Architecture: plan.Architecture, MinimumOS: plan.MinimumOS, Path: stage.Path(), Format: plan.Artifact.Format}
 	if r.Format == "msi" {
 		r.Detection = &Rule{Kind: "msi-product", ProductCode: plan.Detection.ProductCode, Version: plan.Detection.Version}
+	}
+	if plan.Kind == "windows-burn" {
+		r.Format = "burn"
+		r.Detection = &Rule{Kind: plan.Detection.Kind, UninstallKey: plan.Detection.UninstallKey, RegistryView: plan.Detection.RegistryView, Version: plan.Detection.Version}
 	}
 	if err := checkPreflight(ctx, r); err != nil {
 		return err
@@ -145,10 +167,12 @@ func HandlePreflightHelper(args []string) (bool, int) {
 	}
 	deadline := time.AfterFunc(observationTimeout, func() { os.Exit(1) })
 	defer deadline.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), observationTimeout)
+	defer cancel()
 	data, err := io.ReadAll(io.LimitReader(os.Stdin, maxMessage+1))
 	defer clear(data)
 	var r preflightRequest
-	if err != nil || !decodeMessage(data, &r) || !r.valid() || readPreflight(r) != nil {
+	if err != nil || !decodeMessage(data, &r) || !r.valid() || readPreflight(ctx, r) != nil || ctx.Err() != nil {
 		return true, 1
 	}
 	if _, err := io.WriteString(os.Stdout, `{"compatible":true}`); err != nil {

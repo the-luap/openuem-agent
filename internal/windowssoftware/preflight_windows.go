@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/open-uem/nats/enrollment/artifacts"
+	"github.com/open-uem/openuem-agent/internal/burnbundle"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -25,8 +27,8 @@ func preflightNative(ctx context.Context, r preflightRequest) error {
 	return runPreflight(ctx, command, r)
 }
 
-func readPreflight(r preflightRequest) error {
-	if !r.valid() {
+func readPreflight(ctx context.Context, r preflightRequest) error {
+	if ctx == nil || ctx.Err() != nil || !r.valid() {
 		return ErrPreflight
 	}
 	var process, native uint16
@@ -51,7 +53,33 @@ func readPreflight(r preflightRequest) error {
 	if r.Format == "exe" {
 		return readPEArchitecture(r.Path, native)
 	}
+	if r.Format == "burn" {
+		return readBurnMetadata(ctx, r.Path, r.Architecture, *r.Detection)
+	}
 	return readMSIMetadata(r.Path, r.Architecture, *r.Detection)
+}
+
+func readBurnMetadata(ctx context.Context, path, architecture string, rule Rule) error {
+	if ctx == nil || ctx.Err() != nil || machineForArchitecture(architecture) == 0 || !validBurnRule(rule) {
+		return ErrPreflight
+	}
+	// The parent retains its verified stage throughout the helper. This second
+	// protected handle also excludes write/delete sharing during native decoding.
+	file, err := openStagedArtifact(path, artifacts.MaxPackageSize)
+	if err != nil {
+		return ErrPreflight
+	}
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return ErrPreflight
+	}
+	registration, err := burnbundle.ReadRegistration(ctx, file, info.Size())
+	closeErr := file.Close()
+	if err != nil || closeErr != nil || ctx.Err() != nil || registration.Architecture != architecture || registration.BundleCode != rule.UninstallKey || registration.Version != rule.Version || registration.Scope != "machine" || registration.RegistryView != rule.RegistryView {
+		return ErrPreflight
+	}
+	return nil
 }
 
 func machineForArchitecture(architecture string) uint16 {

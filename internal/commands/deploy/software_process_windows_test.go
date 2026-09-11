@@ -64,6 +64,32 @@ func TestNativeWindowsSoftwareEXEArgumentsAndProcessFacts(t *testing.T) {
 	}
 }
 
+func TestNativeWindowsSoftwareBurnCannotFallThroughToMSI(t *testing.T) {
+	plan := softwareProcessPlan()
+	plan.Kind = "windows-burn"
+	plan.Arguments = []string{"/quiet", "/norestart"}
+	plan.Detection.UninstallKey = "{AABBCCDD-0000-4000-8000-000000000001}"
+	for _, operation := range []string{"install", "remove"} {
+		plan.Operation = operation
+		if operation == "remove" {
+			plan.Arguments = []string{"/uninstall", "/quiet", "/norestart"}
+		}
+		if !plan.Valid() {
+			t.Fatal("owned Burn contract invalid")
+		}
+		for _, path := range []string{"", `C:\owned\installer.exe`, `C:\owned\installer.msi`} {
+			called := false
+			result, err := runSoftwareProcess(t.Context(), plan, path, func(context.Context, string, string) (winGetProcessResult, error) {
+				called = true
+				return winGetProcessResult{}, nil
+			})
+			if err == nil || called || result.Started || result.ExitCode != nil {
+				t.Fatal("unverified Burn process lifecycle reached another adapter")
+			}
+		}
+	}
+}
+
 func TestNativeWindowsSoftwareCancellationPreservesUncertainty(t *testing.T) {
 	executable, err := os.Executable()
 	if err != nil {

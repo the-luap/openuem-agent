@@ -1,9 +1,10 @@
-# Read-only Burn layout inspection
+# Read-only Burn inspection and bounded preflight
 
 `internal/burnbundle.Inspect` locates the UX cabinet and section-declared bundle
-code in a version-2 `.wixburn` PE image. This is a metadata-reading foundation;
-it is not called by the installer executor and does not enable Burn delivery.
-The existing native EXE preflight still checks native PE architecture, while
+code in a version-2 `.wixburn` PE image. Together with `ReadRegistration`, it now
+supplies the bounded helper for explicit Burn plans. Burn execution admission
+and capability advertisement remain disabled pending native lifecycle evidence.
+The generic EXE preflight checks native PE architecture, while
 protected staging separately enforces the approved digest and Authenticode policy.
 
 The parser accepts standard PE32 x86 and PE32+ AMD64/ARM64 headers. Its returned
@@ -82,8 +83,8 @@ callback registrations across requests. Native allocations are limited to 16 MiB
 per allocation, 32 MiB simultaneously and 64 MiB cumulatively; input reads are
 limited to 128 MiB. Native context, allocations and virtual handles must close
 before successful output is returned. Cancellation rejects waiting admission and
-subsequent native callbacks. The existing preflight subprocess must supply the
-hard process deadline when this reader is integrated into execution.
+subsequent native callbacks. The preflight subprocess now supplies a hard process
+deadline for this reader, independently of cooperative callback cancellation.
 
 The XML reader limits document size, depth, tokens and attributes and rejects
 directives, external entities, duplicate attributes, repeated/nested registration
@@ -112,10 +113,35 @@ evidence. Internal tests can inspect bounded counters/status codes; those
 diagnostics contain no member data, names or native addresses and are not exposed
 by the public reader.
 
-Before source-derived Burn delivery, authenticated plan/capability changes and
-the preflight helper must require this proof and compare it with the exact
-approved machine registration. Source approval/provenance, package behavior,
-execution/recovery and physical endpoint acceptance remain separate requirements.
+## Bounded preflight and explicit capability
+
+The pinned shared protocol now distinguishes `windows-burn` from a generic EXE
+in the canonical signed plan and requires a capability retained from the device's
+signed recipient registration. Existing MSI/EXE wire encodings remain unchanged.
+`CheckInstaller` maps only that explicit kind to the private `burn` helper request;
+an EXE extension or GUID-shaped uninstall key never selects Burn implicitly.
+The helper requires native AMD64/ARM64 host compatibility and matches the complete
+embedded bundle code, exact displayed version, fixed machine scope and 64-bit
+registry view against the approved detection rule. It reopens only the protected
+retained stage with write/delete sharing excluded, and the parent verifies the
+same stage and its approved digest before and after inspection. Both install and
+remove inspect the pinned EXE; no mutable uninstall command is read.
+
+The ten-second parent cancellation and child exit timer bound native FDI work.
+Only a canonical positive response after complete proof is accepted; helper
+diagnostics are discarded. Portable pinned-module race tests pass for Windows
+software, Burn readers and agent admission in 26.115/1.882/20.023 seconds. Tagged
+Windows AMD64/ARM64 compilation and focused Windows vet pass. The generated native
+fixture now additionally exercises the real helper on native machine/user,
+foreign-architecture and x86 bundles, plus wrong identity/version/digest, retained
+stage closure, cancellation and removal. Its new CI results are still pending.
+
+The agent currently requests no Burn capability and rejects unsolicited capability
+replies and new Burn work before durable attempt admission. The process builder
+explicitly rejects Burn so it cannot fall through to MSI. Enabling advertisement
+and execution still requires native bundle process/child lifetime and recovery
+evidence, followed by source approval/provenance integration. Physical endpoint
+acceptance remains separate.
 The full roadmap remains in progress.
 
 The independent implementation uses format facts from Microsoft's
