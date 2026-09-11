@@ -67,3 +67,23 @@ receipt persistence before key release. Separately opted-in native fixtures crea
 install, observe and remove only uniquely identified synthetic MSI products on the
 ephemeral CI runner. They are not physical endpoint acceptance or a released,
 signed package lifecycle through the full console/worker/agent installation.
+
+## Owned major-upgrade fixture
+
+The native MSI CI script now requires an owned package replacement on both AMD64
+and ARM64. Two generated registry-only packages use different product/component
+identities and one private, randomly generated upgrade family. Version `1.2.4`
+uses Microsoft's [Upgrade table](https://learn.microsoft.com/en-us/windows/win32/msi/upgrade-table)
+to match only the exact previous `1.2.3` version. `FindRelatedProducts` precedes
+[`RemoveExistingProducts`](https://learn.microsoft.com/en-us/windows/win32/msi/removeexistingproducts-action),
+which runs inside the installation transaction before script generation. The
+fixture authoring accepts no caller-supplied family identifier and adds no files,
+services, custom actions or external sources.
+
+The test requires exact native old/new registration before and after each staged
+execution, complete old-product removal, an already-current no-op, harmless
+removal of the now-absent old product and final successor removal without fetching
+another artifact. Existing MSI property and read-only preflight checks also run
+natively on ARM64. Cross-compilation passes for both Windows architectures;
+native replacement evidence is pending CI. These fixtures do not change production
+upgrade policy or establish physical offline/restart/hibernate acceptance.

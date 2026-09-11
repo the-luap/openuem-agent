@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ func TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove(t *testing.T) {
 	}
 	f := windowstest.NewMSI(t, t.TempDir())
 	plan := softwareProcessPlan()
+	plan.Architecture = runtime.GOARCH
 	plan.Kind, plan.Artifact.Format = "windows-msi", "msi"
 	plan.Artifact.URL = "https://example.invalid/fixture.msi"
 	plan.Arguments, plan.MSIProperties = nil, f.Properties

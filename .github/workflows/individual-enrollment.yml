@@ -33,6 +33,9 @@ jobs:
       - name: Native ARM64 owned Burn MSI execution and child lifetime without skips
         shell: pwsh
         run: scripts/check-windows-burn-execution.ps1 -Architecture arm64
+      - name: Native ARM64 owned MSI install, major upgrade and removal without skips
+        shell: pwsh
+        run: scripts/check-windows-msi-execution.ps1 -Architecture arm64
       - name: Native ARM64 private readiness and joined shutdown without skips
         shell: pwsh
         run: scripts/check-windows-readiness.ps1 -Architecture arm64
@@ -201,21 +204,9 @@ jobs:
               throw "Required native package execution test did not pass: $test"
             }
           }
-      - name: Install and remove only a generated synthetic MSI on the ephemeral runner
+      - name: Install, upgrade and remove only generated synthetic MSIs on the ephemeral runner
         shell: pwsh
-        env:
-          OPENUEM_WINDOWS_MSI_FIXTURE: '1'
-        run: |
-          $events = go test -json -p 1 -count=1 -timeout 3m -tags openuem_msi_test -run '^TestNativeWindowsSoftwareOwnedMSI' ./internal/commands/deploy ./internal/windowssoftware
-          $result = $LASTEXITCODE
-          $events | Write-Output
-          if ($result -ne 0) { exit $result }
-          $records = $events | ForEach-Object { $_ | ConvertFrom-Json }
-          foreach ($test in @('TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove', 'TestNativeWindowsSoftwareOwnedMSIReadOnlyCompatibility', 'TestNativeWindowsSoftwareOwnedMSIExecutorInstallAndRemove')) {
-            if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {
-              throw "The required generated MSI fixture did not pass: $test"
-            }
-          }
+        run: scripts/check-windows-msi-execution.ps1 -Architecture amd64
       - name: Durable Windows software journal executes without skips
         shell: pwsh
         run: |

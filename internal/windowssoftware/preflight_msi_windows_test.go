@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,19 +20,19 @@ import (
 func TestNativeWindowsSoftwareOwnedMSIReadOnlyCompatibility(t *testing.T) {
 	msi := windowstest.NewMSI(t, t.TempDir())
 	r := Rule{Kind: "msi-product", ProductCode: msi.ProductCode, Version: msi.Version}
-	if readMSIMetadata(msi.Path, "amd64", r) != nil {
+	if readMSIMetadata(msi.Path, runtime.GOARCH, r) != nil {
 		t.Fatal("exact read-only MSI metadata denied")
 	}
-	if readMSIMetadata(msi.Path, "arm64", r) == nil {
+	if readMSIMetadata(msi.Path, map[string]string{"amd64": "arm64", "arm64": "amd64"}[runtime.GOARCH], r) == nil {
 		t.Fatal("foreign MSI architecture admitted")
 	}
 	wrong := r
 	wrong.Version = "1.2.30"
-	if readMSIMetadata(msi.Path, "amd64", wrong) == nil {
+	if readMSIMetadata(msi.Path, runtime.GOARCH, wrong) == nil {
 		t.Fatal("different MSI version admitted")
 	}
 	wrong = testRule()
-	if readMSIMetadata(msi.Path, "amd64", wrong) == nil {
+	if readMSIMetadata(msi.Path, runtime.GOARCH, wrong) == nil {
 		t.Fatal("different MSI product admitted")
 	}
 	f := newStageFixture(t)
@@ -50,6 +51,7 @@ func TestNativeWindowsSoftwareOwnedMSIReadOnlyCompatibility(t *testing.T) {
 	}
 	defer stage.Close()
 	plan := preflightPlan()
+	plan.Architecture = runtime.GOARCH
 	plan.Artifact = f.artifact
 	plan.Detection.ProductCode = msi.ProductCode
 	if CheckInstaller(t.Context(), plan, stage) != nil {
@@ -80,6 +82,7 @@ func TestNativeWindowsSoftwareOwnedMSIExecutorInstallAndRemove(t *testing.T) {
 	f.artifact.Format = "msi"
 	f.artifact.URL = strings.Replace(f.artifact.URL, "/fixture.exe?", "/fixture.msi?", 1)
 	plan := preflightPlan()
+	plan.Architecture = runtime.GOARCH
 	plan.Artifact, plan.MSIProperties, plan.Detection.ProductCode = f.artifact, msi.Properties, msi.ProductCode
 	remove := plan
 	remove.Operation, remove.Artifact, remove.MSIProperties = "remove", enrollment.SoftwareArtifact{}, nil
