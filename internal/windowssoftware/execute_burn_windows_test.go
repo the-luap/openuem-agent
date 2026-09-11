@@ -7,7 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -46,9 +48,34 @@ func ownedBurnExecution(t *testing.T, bundle windowstest.Burn) (enrollment.Softw
 	// Only the test seam accepts this generated unsigned bundle. Production
 	// staging always requires actual Authenticode before retaining a candidate.
 	ops.stage = func(ctx context.Context, p enrollment.SoftwarePlan, root string) (installerStage, error) {
-		return stageArtifact(ctx, p.Artifact, root, f.client, func(context.Context, string, string) error { return nil })
+		stage, err := stageArtifact(ctx, p.Artifact, root, f.client, func(context.Context, string, string) error { return nil })
+		if stage == nil {
+			return nil, err
+		}
+		return ownedBurnStage{StagedArtifact: stage, t: t}, err
 	}
 	return plan, f, ops
+}
+
+type ownedBurnStage struct {
+	*StagedArtifact
+	t *testing.T
+}
+
+func (s ownedBurnStage) Close() error {
+	err := s.StagedArtifact.close(func(path string) error {
+		err := os.Remove(path)
+		if err != nil {
+			var code syscall.Errno
+			_ = errors.As(err, &code)
+			s.t.Logf("owned Burn stage removal diagnostic: directory=%t windows_error=%d", path == s.directory, uint32(code))
+		}
+		return err
+	})
+	if err != nil {
+		s.t.Error("owned Burn stage cleanup failed", err)
+	}
+	return err
 }
 
 func TestNativeWindowsSoftwareOwnedBurnInstallAndRemove(t *testing.T) {

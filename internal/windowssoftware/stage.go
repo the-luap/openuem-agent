@@ -190,6 +190,12 @@ func (s *StagedArtifact) Verify(ctx context.Context) error {
 	return nil
 }
 func (s *StagedArtifact) Close() error {
+	return s.close(os.Remove)
+}
+
+// The removal seam lets owned native fixtures record redacted OS failures;
+// production always uses os.Remove and returns only ErrArtifactChanged.
+func (s *StagedArtifact) close(remove func(string) error) error {
 	if s == nil {
 		return nil
 	}
@@ -207,7 +213,7 @@ func (s *StagedArtifact) Close() error {
 	if s.fileInfo != nil {
 		entry, err := os.Lstat(s.path)
 		if err == nil && os.SameFile(entry, s.fileInfo) {
-			failed = os.Remove(s.path) != nil || failed
+			failed = remove(s.path) != nil || failed
 		} else if !errors.Is(err, os.ErrNotExist) {
 			failed = true
 		}
@@ -215,7 +221,7 @@ func (s *StagedArtifact) Close() error {
 	if s.directoryInfo != nil {
 		entry, err := os.Lstat(s.directory)
 		if err == nil && os.SameFile(entry, s.directoryInfo) {
-			failed = os.Remove(s.directory) != nil || failed
+			failed = remove(s.directory) != nil || failed
 		} else if !errors.Is(err, os.ErrNotExist) {
 			failed = true
 		}

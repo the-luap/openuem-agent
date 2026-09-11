@@ -10,7 +10,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $env:OPENUEM_BURN_WIX = Join-Path $toolsDirectory 'wix.exe'
 $env:OPENUEM_WINDOWS_BURN_FIXTURE = '1'
 try {
-    $events = go test @race -json -count=1 -timeout 7m -tags 'openuem_burn_test,openuem_msi_test' -run '^TestNativeWindowsSoftwareOwnedBurn(InstallAndRemove|JoinsProcesses)$' ./internal/windowssoftware
+    $events = go test @race -json -count=3 -timeout 7m -tags 'openuem_burn_test,openuem_msi_test' -run '^TestNativeWindowsSoftwareOwnedBurn(InstallAndRemove|JoinsProcesses)$' ./internal/windowssoftware
     $result = $LASTEXITCODE
     $events | Write-Output
     if ($result -ne 0) { exit $result }
@@ -18,7 +18,7 @@ try {
     foreach ($test in @('TestNativeWindowsSoftwareOwnedBurnInstallAndRemove',
         'TestNativeWindowsSoftwareOwnedBurnJoinsProcesses/cancelled',
         'TestNativeWindowsSoftwareOwnedBurnJoinsProcesses/unfinished-child')) {
-        if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {
+        if (@($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' }).Count -ne 3) {
             throw "Required owned Burn execution fixture did not pass: $test"
         }
     }
