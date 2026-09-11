@@ -3,7 +3,10 @@
 The protected software journal now retains read-only reconciliation evidence
 separately from immutable installer admission and execution results. The shared
 signed protocol, worker transport and individual service's observation consumer
-are implemented. The explicit console review/action remains in progress.
+are implemented. The [console review and history](https://github.com/the-luap/openuem-console/blob/3834fa9331f4a118504563126bb06937e1e798d9/docs/windows-software-requests.md)
+now provides separately confirmed checks, immutable original-scope review links,
+pending cancellation and verified outcomes. Release permits a new explicit
+execution request; it never retries the original installer automatically.
 
 Each `software-reconciliation-v1-NNNN` record atomically contains the signed
 read-only authorization and exact signed observation, bound to this installation.

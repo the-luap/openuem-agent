@@ -6,9 +6,10 @@ durable attempt before calling its native executor. The individual Windows servi
 now connects the protected recipient/journal, exact server capability and native
 MSI/EXE adapter through one joined consumer. Existing console preparations do not
 start installers. The console now has a [separate explicit dispatch and verified
-result history](https://github.com/the-luap/openuem-console/blob/c26c69424fa1ec2bba43412eab93816079a63a24/docs/windows-software-requests.md).
+result history](https://github.com/the-luap/openuem-console/blob/3834fa9331f4a118504563126bb06937e1e798d9/docs/windows-software-requests.md).
 The individual read-only reconciliation consumer and durable evidence are now
-implemented; explicit console reconciliation review/action remains in progress.
+implemented, alongside separate console review, confirmation, cancellation and
+verified reconciliation history.
 
 [Protected installer staging](windows-installer-staging.md) now implements the
 separate HTTPS, hash, private-file and native-signature boundary.
@@ -44,8 +45,9 @@ The [signed reconciliation journal](windows-software-reconciliation.md) now reta
 separate observations and acknowledgements, recovering pending evidence after
 task expiry and renewal. Only a verified acknowledged definite observation can
 release the exact local reservation. The joined individual observation consumer
-uses the original detection rule after later-boot verification. Explicit console
-review and dispatch still need integration.
+uses the original detection rule after later-boot verification. A separately
+confirmed console check authorizes that read; release does not retry the original
+installer or queue a replacement execution automatically.
 
 The client owns one cycle at a time under the installation service lease. It
 limits RPCs to five seconds, bounds native work by task expiry and leaves thirty
