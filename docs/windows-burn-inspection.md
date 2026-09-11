@@ -202,7 +202,13 @@ plus private readiness shutdown. The generated MSI uses the native
 and both the bundle and owned process payload use the same native architecture.
 Go 1.26.8 supports its Windows race detector only on AMD64; that existing required
 job retains race detection, while the ARM64 job runs native assertions without
-it. ARM64 tagged compilation and vet pass. Native ARM64 CI evidence is pending.
+it. ARM64 tagged compilation and vet pass. The first ARM64 run passes all three
+generated layouts in 21.09 seconds, native preflight in 8.95 seconds, cancellation
+in 8.17 seconds and the unfinished child in 6.62 seconds. MSI installation retains
+an uncertain process result and remains unresolved. A tagged fixture-only entry
+point now exposes the native runner error while retaining the exact production
+builder and runner; release builds never include it, and it exposes no process
+output or arguments. Native ARM64 installation/removal acceptance remains pending.
 
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/open-uem/nats/enrollment"
+	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	"github.com/open-uem/openuem-agent/internal/windowstest"
 	"golang.org/x/sys/windows"
 )
@@ -33,6 +34,15 @@ func ownedBurnExecution(t *testing.T, bundle windowstest.Burn) (enrollment.Softw
 	plan.Artifact, plan.Architecture = f.artifact, bundle.Architecture
 	plan.Detection.UninstallKey, plan.Detection.Version = bundle.BundleCode, bundle.Version
 	ops := nativeInstallerOperations()
+	// This tagged entry point runs the same production builder/runner and only
+	// exposes native errors for our generated fixture. No private output is read.
+	ops.run = func(ctx context.Context, plan enrollment.SoftwarePlan, path string) (installerProcess, error) {
+		result, err := deploy.RunOwnedBurnProcessFixture(ctx, plan, path)
+		if err != nil {
+			t.Logf("owned Burn process diagnostic: %v", err)
+		}
+		return installerProcess{Started: result.Started, ExitCode: result.ExitCode}, err
+	}
 	// Only the test seam accepts this generated unsigned bundle. Production
 	// staging always requires actual Authenticode before retaining a candidate.
 	ops.stage = func(ctx context.Context, p enrollment.SoftwarePlan, root string) (installerStage, error) {
