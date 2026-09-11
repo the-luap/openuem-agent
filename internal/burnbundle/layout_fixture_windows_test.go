@@ -3,6 +3,7 @@
 package burnbundle
 
 import (
+	"bytes"
 	"context"
 	"debug/pe"
 	"encoding/xml"
@@ -84,6 +85,31 @@ func TestOwnedWiXBundleLayout(t *testing.T) {
 			}
 			if layout.Architecture != target.goArch || layout.BundleCode == "" || layout.BundleCode != document.Registration.ID || document.Registration.Version != "1.2.3.4" {
 				t.Fatalf("generated bundle identity mismatch: %+v / %+v", layout, document.Registration)
+			}
+			registration, err := ReadRegistration(t.Context(), file, info.Size())
+			if err != nil {
+				t.Fatal("native embedded registration", err)
+			}
+			view := "64"
+			if target.goArch == "386" {
+				view = "32"
+			}
+			want := Registration{BundleCode: document.Registration.ID, Architecture: target.goArch, Version: document.Registration.Version, Scope: "machine", RegistryView: view}
+			if registration != want {
+				t.Fatalf("native registration mismatch: %+v / %+v", registration, want)
+			}
+			// Changing only the PE bundle code must invalidate the embedded binding.
+			changed, err := os.ReadFile(bundle)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parsed, err := pe.NewFile(bytes.NewReader(changed))
+			if err != nil || parsed.Section(".wixburn") == nil {
+				t.Fatal("owned Burn section missing")
+			}
+			changed[int(parsed.Section(".wixburn").Offset)+8] ^= 1
+			if got, err := ReadRegistration(t.Context(), bytes.NewReader(changed), int64(len(changed))); err != ErrFormat || got != (Registration{}) {
+				t.Fatal("changed header retained registration binding")
 			}
 			t.Logf("read-only generated bundle inspection: %+v", layout)
 		})

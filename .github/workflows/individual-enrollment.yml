@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Read only bounded native cabinet data with isolated callbacks
+        run: go test -race -count=1 ./internal/burnbundle
       - name: Build and inspect owned Burn bundles without executing them
         shell: pwsh
         run: scripts/check-windows-burn-format.ps1
@@ -42,6 +44,10 @@ jobs:
         run: go build ./...
       - name: Bounded Burn PE and UX container inspection
         run: go test -run '^$' -fuzz='^FuzzInspect$' -fuzztime=15s -parallel=2 ./internal/burnbundle
+      - name: Bounded Burn cabinet directory fuzzing
+        run: go test -run '^$' -fuzz='^FuzzCabinetIndex$' -fuzztime=15s -parallel=2 ./internal/burnbundle
+      - name: Embedded Burn registration XML fuzzing
+        run: go test -run '^$' -fuzz='^FuzzRegistration$' -fuzztime=15s -parallel=2 ./internal/burnbundle
       - name: Bounded Windows kernel process snapshot decoder
         run: go test -run '^$' -fuzz='^FuzzSystemProcessCreation$' -fuzztime=15s -parallel=2 ./internal/windowssoftware
 

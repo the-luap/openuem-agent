@@ -54,12 +54,57 @@ commit `383c6fd1d1e31564ede725eac00317d94423959f`. The independent manifest
 comparison uses WiX 4's `Registration/@Id`; newer authoring uses `Code`. This
 version distinction must be preserved by the future production manifest reader.
 
-Before execution integration, a bounded cabinet/registration reader must verify
-the embedded manifest against the header, exact registration version, machine
-scope and registry view. Appropriate authenticated plan/capability changes must
-require that proof before source-derived Burn approval and delivery become
-available. Package behavior, execution/recovery and physical endpoint acceptance
-remain separate requirements. The full roadmap remains in progress.
+## Embedded registration reader
+
+`ReadRegistration` now reads the bounded UX directory, decodes only its manifest
+into memory and binds the embedded registration to the section-declared bundle
+code. The result contains bootstrapper architecture, exact displayed version,
+fixed machine/user scope and the corresponding 32/64-bit registry view. Flexible
+scope cannot establish a fixed registry hive and is rejected. Header architecture
+and the manifest's `Win64` declaration must agree. The reader supports the known
+`Id`/`PerMachine` and `Code`/`Scope` attribute shapes without mixing them.
+
+Directory inspection checks every file entry and compressed-block range. It
+limits metadata to 1 MiB, files to 4,096, folders to 64, data blocks to 65,536,
+the manifest to 1 MiB and declared expanded UX data to 512 MiB. Names remain
+bounded opaque member identifiers; path components, duplicate names, spanning
+cabinets, execute attributes, overlapping files/blocks and unsupported compression
+are rejected. The manifest must be the unique first member `0`, starting at the
+beginning of the first folder. Reserved CAB header/folder/block areas are bounded.
+
+On native AMD64/ARM64 Windows processes, the fixed system `cabinet.dll` FDI API
+handles uncompressed, MSZIP and LZX data. All file callbacks use memory-backed
+handles; archive names never become filesystem paths. Only the manifest receives
+an output handle, and decoding deliberately stops when its exact output completes.
+No archive file or payload is written or executed. A single invocation gate and
+once-registered callbacks bind native work to its current reader without leaking
+callback registrations across requests. Native allocations are limited to 16 MiB
+per allocation, 32 MiB simultaneously and 64 MiB cumulatively; input reads are
+limited to 128 MiB. Native context, allocations and virtual handles must close
+before successful output is returned. Cancellation rejects waiting admission and
+subsequent native callbacks. The existing preflight subprocess must supply the
+hard process deadline when this reader is integrated into execution.
+
+The XML reader limits document size, depth, tokens and attributes and rejects
+directives, external entities, duplicate attributes, repeated/nested registration
+identities, unknown registration behavior, mixed schemas and mismatched displayed
+versions. Only the selected identity fields leave the reader; manifest contents,
+archive names and native error details are not returned as errors.
+
+Portable tests cover multiple folders, reserved data, MSZIP block history,
+directory/expansion bounds, scope/bitness, schema ambiguity, truncation and read
+failures. The CAB and XML fuzz runs pass 3,412,453 and 629,931 inputs in
+20.528/21.283 seconds. Local race tests and tagged Windows AMD64/ARM64 compilation
+pass. The native CI tests now cover memory-only decoding, read/codec failures,
+cancelled admission, concurrent reuse and the complete registration reader
+against the generated WiX fixtures, including a changed PE bundle code. Their
+first result for this embedded-reader change is pending.
+
+Before source-derived Burn delivery, authenticated plan/capability changes and
+the preflight helper must require this proof and compare it with the exact
+approved machine registration. Source approval/provenance, package behavior,
+execution/recovery and physical endpoint acceptance remain separate requirements.
+The full roadmap remains in progress.
 
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)
@@ -69,3 +114,11 @@ and [UX container offsets](https://github.com/wixtoolset/wix/blob/77aa9818ad3763
 The generated-fixture test follows WiX's
 [bundle authoring](https://docs.firegiant.com/wix/tools/burn/) and
 [versioned extension acquisition](https://docs.firegiant.com/wix/tools/wixexe/).
+The directory and native decoder follow Microsoft's
+[CAB specification](https://download.microsoft.com/download/4/D/A/4DA14F27-B4EF-4170-A6E6-5B1EF85B1BAA/%5BMS-CAB%5D.pdf),
+[FDICreate](https://learn.microsoft.com/en-us/windows/win32/api/fdi/nf-fdi-fdicreate),
+[FDICopy](https://learn.microsoft.com/en-us/windows/win32/api/fdi/nf-fdi-fdicopy)
+and [notification contract](https://learn.microsoft.com/en-us/windows/win32/api/fdi/nf-fdi-fnfdinotify).
+The identity shapes follow the pinned
+[WiX 4 writer](https://github.com/wixtoolset/wix/blob/v4.0.6/src/wix/WixToolset.Core.Burn/Bundles/CreateBurnManifestCommand.cs)
+and [current writer](https://github.com/wixtoolset/wix/blob/77aa9818ad37637f961afe143be88bdc38a3f350/src/wix/WixToolset.Core.Burn/Bundles/CreateBurnManifestCommand.cs).
