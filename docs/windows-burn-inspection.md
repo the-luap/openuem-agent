@@ -168,9 +168,18 @@ preflight. Production capability advertisement, new-task admission and direct
 Burn process dispatch stay disabled. The first native run exposed WiX's
 unconditional file-size query while binding the registry-only MSI. The fixture
 now includes the standard empty [File table](https://learn.microsoft.com/en-us/windows/win32/msi/file-table)
-without adding any installed files. Execution still awaits a passing native run;
-cancellation, child lifetime and post-boot recovery remain separate checks before
-enabling the complete delivery path.
+without adding any installed files. The complete native installation/removal
+fixture passes with race detection in 20.73 seconds at
+`f3f1325798db896357e973f0b684633f68d19300`.
+
+A second generated bundle carries only a waiting process and its child. It
+checks cancellation and an installer that exits while its child remains alive
+with closed output. The fixture retains process handles only after verifying
+the unique generated executable's digest, requires joined termination and an
+uncertain outcome without an exit code, and removes its own bundle registration.
+This additional lifecycle fixture passes Windows compilation and vet; native CI
+evidence is pending. Post-boot recovery and capability/source integration remain
+separate checks before enabling the complete delivery path.
 
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)
