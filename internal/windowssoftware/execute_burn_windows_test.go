@@ -36,6 +36,14 @@ func ownedBurnExecution(t *testing.T, bundle windowstest.Burn) (enrollment.Softw
 	plan.Artifact, plan.Architecture = f.artifact, bundle.Architecture
 	plan.Detection.UninstallKey, plan.Detection.Version = bundle.BundleCode, bundle.Version
 	ops := nativeInstallerOperations()
+	nativeInspect := ops.inspect
+	ops.inspect = func(ctx context.Context, plan enrollment.SoftwarePlan, stage installerStage) error {
+		owned, ok := stage.(ownedBurnStage)
+		if !ok {
+			return ErrPreflight
+		}
+		return nativeInspect(ctx, plan, owned.StagedArtifact)
+	}
 	// This tagged entry point runs the same production builder/runner and only
 	// exposes native errors for our generated fixture. No private output is read.
 	ops.run = func(ctx context.Context, plan enrollment.SoftwarePlan, path string) (installerProcess, error) {
