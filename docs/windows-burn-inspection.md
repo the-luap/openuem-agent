@@ -161,8 +161,14 @@ admission. Old profiles omit the hint and retain version zero. Mismatched server
 replies cannot introduce support. Focused portable race tests cover upgrade,
 downgrade, withdrawn/mismatched grants, withdrawal before/after durable admission,
 unchanged lost-receipt retries and protected platform gating in 8.521 seconds.
-Source approval/provenance integration and physical endpoint acceptance remain
-outstanding.
+The console now retains explicit source-approved Burn revisions and rechecks
+both provenance and signed recipient support at dispatch
+([console implementation](https://github.com/the-luap/openuem-console/commit/e905d902b3d38a5206225dab5e7580aefd6008b3)).
+Its source/catalog/dispatch/migration race suite passes in 39.571 seconds, and
+actual routes and responsive source-review pages pass owned fixtures. All seven
+agent jobs pass with capability negotiation at `763c6a5`
+([CI run](https://github.com/the-luap/openuem-agent/actions/runs/34629673589)).
+Physical endpoint acceptance remains outstanding.
 The full roadmap remains in progress.
 
 ## Owned execution fixture
