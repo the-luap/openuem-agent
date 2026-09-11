@@ -36,9 +36,11 @@ Portable tests cover all three bootstrapper architectures, GUID endianness,
 unsigned and certificate-range variants, attached/detached declarations, section
 ambiguity, arithmetic bounds, every fixture truncation and each read failure.
 An instrumented reader checks read count, byte count and access bounds. Local
-race tests pass in 1.402 seconds, and the existing Windows software suite passes
-in 26.273 seconds. The layout fuzz run passes 5,276,614 inputs in 31.649 seconds;
-focused vet and the tagged Windows test compilation also pass.
+race tests pass in 1.415 seconds, and the existing Windows software suite passes
+in 26.273 seconds. The initial layout fuzz run passes 5,276,614 inputs in 31.649 seconds. The
+corrected 48-byte-prefix reader passes another 151,135 inputs in 16.610 seconds;
+focused vet, the full Linux ARM64 build and tagged Windows test compilation also
+pass.
 
 The Windows CI job builds owned x86, AMD64 and ARM64 bundles using WiX and its
 Bal extension, both pinned to `4.0.6`. A generated Go payload does nothing and is
@@ -47,10 +49,10 @@ compares its registration code with our PE reader's result. The compiler and its
 extraction command operate only on those owned fixtures. No generated bundle,
 bootstrapper application or installer payload is executed, and no certificate
 is imported. The job requires every architecture case to pass without a skip.
-The first generated fixture exposed an overly strict assumption that the appended
-container table must fit the declared virtual size. The reader and portable
-fixtures now preserve WiX's 48-byte prefix layout; the corrected native CI result
-is pending.
+All three generated architectures pass in the native Windows fixture at agent
+commit `383c6fd1d1e31564ede725eac00317d94423959f`. The independent manifest
+comparison uses WiX 4's `Registration/@Id`; newer authoring uses `Code`. This
+version distinction must be preserved by the future production manifest reader.
 
 Before execution integration, a bounded cabinet/registration reader must verify
 the embedded manifest against the header, exact registration version, machine
