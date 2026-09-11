@@ -5,6 +5,7 @@ package deploy
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -57,9 +58,20 @@ func TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
-	result, err := RunSoftwareProcess(ctx, plan, f.Path)
+	logPath := filepath.Join(t.TempDir(), "owned-msi.log")
+	result, err := runSoftwareProcess(ctx, plan, f.Path, func(ctx context.Context, executable, command string) (winGetProcessResult, error) {
+		// Diagnostic logging belongs only to this synthetic test invocation.
+		return runWindowsProcess(ctx, executable, command+` /l*v "`+logPath+`"`)
+	})
 	if err != nil || !result.Started || result.ExitCode == nil || *result.ExitCode != 0 {
-		t.Fatal("owned MSI installation failed", result, err)
+		data, _ := os.ReadFile(logPath)
+		if len(data) > 12000 {
+			data = data[len(data)-12000:]
+		}
+		if result.ExitCode != nil {
+			t.Log("owned MSI exit code", *result.ExitCode)
+		}
+		t.Fatalf("owned MSI installation failed: %v\n%s", err, data)
 	}
 	assertState("5", 0)
 	key, err := registry.OpenKey(registry.LOCAL_MACHINE, f.RegistryPath, registry.QUERY_VALUE|registry.WOW64_64KEY)

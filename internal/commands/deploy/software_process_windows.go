@@ -28,6 +28,10 @@ type SoftwareProcessResult struct {
 // finish native compatibility/detection checks and retain the verified staged
 // artifact through this call. Windows services can outlive a cancelled job.
 func RunSoftwareProcess(ctx context.Context, plan enrollment.SoftwarePlan, stagedPath string) (SoftwareProcessResult, error) {
+	return runSoftwareProcess(ctx, plan, stagedPath, runWindowsProcess)
+}
+
+func runSoftwareProcess(ctx context.Context, plan enrollment.SoftwarePlan, stagedPath string, runner func(context.Context, string, string) (winGetProcessResult, error)) (SoftwareProcessResult, error) {
 	var result SoftwareProcessResult
 	if ctx == nil || ctx.Err() != nil || !plan.Valid() {
 		return result, ErrSoftwareProcess
@@ -40,7 +44,7 @@ func RunSoftwareProcess(ctx context.Context, plan enrollment.SoftwarePlan, stage
 	if err != nil {
 		return result, ErrSoftwareProcess
 	}
-	native, err := runWindowsProcess(ctx, executable, command)
+	native, err := runner(ctx, executable, command)
 	result.Started = native.Started
 	if err != nil || !native.Started {
 		return result, ErrSoftwareProcess
