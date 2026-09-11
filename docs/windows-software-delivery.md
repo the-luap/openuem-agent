@@ -5,7 +5,9 @@ pinned enrollment CA, decrypts the exact current-generation plan, and records a
 durable attempt before calling its native executor. The individual Windows service
 now connects the protected recipient/journal, exact server capability and native
 MSI/EXE adapter through one joined consumer. Existing console preparations do not
-start installers; explicit console dispatch/reconciliation remains to be implemented.
+start installers. The console now has a [separate explicit dispatch and verified
+result history](https://github.com/the-luap/openuem-console/blob/c26c69424fa1ec2bba43412eab93816079a63a24/docs/windows-software-requests.md).
+Uncertainty and completed-reboot reconciliation remain in progress.
 
 [Protected installer staging](windows-installer-staging.md) now implements the
 separate HTTPS, hash, private-file and native-signature boundary.
@@ -15,7 +17,8 @@ conservative success/reboot/failure/interruption outcomes.
 
 The protected journal uses immutable numbered start/result records. Native
 Windows storage uses DPAPI and System/Administrator-only publication. A start
-record contains the signed encrypted envelope and response nonce, never plaintext
+record contains the signed encrypted envelope, response nonce and
+[immutable native boot evidence](windows-software-boot-evidence.md), never plaintext
 artifact URLs, installer arguments or MSI properties. Only the exclusive durable
 creator can admit execution. Lost publication acknowledgements, existing attempts,
 corrupt records, gaps and partial restores cannot authorize another attempt.
@@ -34,8 +37,10 @@ identity and complete immutable history.
 After a crash, a retained attempt without a result yields `uncertain` execution.
 An orphaned installer or Windows service might still be working. Neither a free
 agent process lease nor elapsed time proves termination or rollback. The server
-keeps uncertain/restart-required work reserved. Explicit reconciliation and
-native reboot evidence remain to be implemented.
+keeps uncertain/restart-required work reserved. New attempts now retain native
+boot evidence before execution; legacy attempts cannot acquire it retroactively.
+An explicit reconciliation protocol still needs to join a later kernel session
+to fresh exact software observations without repeating the installer.
 
 The client owns one cycle at a time under the installation service lease. It
 limits RPCs to five seconds, bounds native work by task expiry and leaves thirty

@@ -24,8 +24,10 @@ target. A reboot exit remains `restart_required`, even when the target already
 appears installed. An unapproved exit is `failed`. Interrupted, incomplete or
 unobservable work remains `uncertain`. None of these paths retries an installer
 or proves rollback. The signed result is durably recorded before network delivery.
-Console preparations still require a separate explicit dispatch implementation;
-this service does not turn stored preparations into executable tasks.
+Console preparations require the separate confirmed dispatch action; this service
+does not turn stored preparations into executable tasks. Its durable admission
+now retains [native boot evidence](windows-software-boot-evidence.md) for later
+reconciliation. Retention alone does not release an uncertain reservation.
 
 `windowssoftware.CheckHost` uses a bounded read-only child of the installed
 agent to read the native machine architecture and Windows version. Emulation is

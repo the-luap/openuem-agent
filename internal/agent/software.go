@@ -12,11 +12,12 @@ import (
 
 	"github.com/open-uem/nats/enrollment"
 	"github.com/open-uem/openuem-agent/internal/enrollmentstore"
+	"github.com/open-uem/openuem-agent/internal/windowssoftware"
 )
 
 type softwareJournal interface {
 	Lookup(enrollment.SoftwareTask) (*enrollmentstore.SoftwareEntry, error)
-	Begin(enrollment.SoftwareTask, *enrollment.SoftwareSecret) (bool, *enrollmentstore.SoftwareEntry, error)
+	BeginWithBootSession(enrollment.SoftwareTask, *enrollment.SoftwareSecret, windowssoftware.BootSession) (bool, *enrollmentstore.SoftwareEntry, error)
 	RecordResult(enrollment.SoftwareResult) error
 }
 type softwareExecutor func(context.Context, enrollment.SoftwarePlan) enrollment.SoftwareOutcome
@@ -30,6 +31,7 @@ type softwareClient struct {
 	key                    *enrollment.SoftwareRecipientKey
 	journal                softwareJournal
 	live                   func() error
+	bootSession            func() (windowssoftware.BootSession, error)
 	recipientID            string
 	pending                *enrollment.SoftwareResult
 	persisted              bool
@@ -52,7 +54,7 @@ func newSoftwareClient(i *enrollmentstore.Identity, key *enrollment.SoftwareReci
 		return nil, enrollment.ErrSoftware
 	}
 	hash := sha256.Sum256(cert.Raw)
-	return &softwareClient{identity: i, certificate: cert, authority: root, scope: enrollment.SoftwareIdentity{AgentID: i.Response.DeviceID, TenantID: i.Response.TenantID, SiteID: i.Response.SiteID, CertificateHash: hex.EncodeToString(hash[:])}, key: key, journal: journal, live: live}, nil
+	return &softwareClient{identity: i, certificate: cert, authority: root, scope: enrollment.SoftwareIdentity{AgentID: i.Response.DeviceID, TenantID: i.Response.TenantID, SiteID: i.Response.SiteID, CertificateHash: hex.EncodeToString(hash[:])}, key: key, journal: journal, live: live, bootSession: windowssoftware.ReadBootSession}, nil
 }
 
 func (r *softwareClient) clearPending() {
@@ -236,7 +238,14 @@ func (r *softwareClient) cycle(ctx context.Context, exchange recoveryExchange, e
 		return enrollment.ErrSoftware
 	}
 	defer secret.Close()
-	won, entry, err := r.journal.Begin(task, secret)
+	if r.bootSession == nil {
+		return enrollment.ErrSoftware
+	}
+	boot, err := r.bootSession()
+	if err != nil || !boot.Valid() {
+		return enrollment.ErrSoftware
+	}
+	won, entry, err := r.journal.BeginWithBootSession(task, secret, boot)
 	if err != nil || entry == nil {
 		return enrollment.ErrSoftware
 	}
@@ -246,6 +255,12 @@ func (r *softwareClient) cycle(ctx context.Context, exchange recoveryExchange, e
 			return enrollment.ErrSoftware
 		}
 		return r.deliver(ctx, exchange)
+	}
+	// A changed native session after durable admission cannot authorize starting
+	// this installer under a different boot. Retain intent and recover as uncertain.
+	current, err := r.bootSession()
+	if err != nil || current != boot || entry.BootSession != boot {
+		return enrollment.ErrSoftware
 	}
 	deadline := time.Unix(task.Context.ExpiresAt, 0)
 	if signDeadline := r.certificate.NotAfter.Add(-30 * time.Second); signDeadline.Before(deadline) {

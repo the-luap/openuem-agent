@@ -49,6 +49,12 @@ func TestWindowsDPAPIDurableSoftwareJournal(t *testing.T) {
 	runDurableSoftwareJournal(t, b)
 }
 
+func TestWindowsDPAPISoftwareAdmissionBoot(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(map[bool]string{false: "current", true: "legacy"}[legacy], func(t *testing.T) { b, _ := windowsFixture(t); runSoftwareBootJournal(t, b, legacy) })
+	}
+}
+
 func TestWindowsDPAPISoftwareInventoryRejectsOrphanedEvidence(t *testing.T) {
 	b, _ := windowsFixture(t)
 	runRetainedSecurityPreventsEnrollment(t, b, softwareRecord("result", MaxSoftwareAttempts), restorePendingFixture(t))

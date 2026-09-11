@@ -14,6 +14,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/open-uem/nats/enrollment"
 	"github.com/open-uem/openuem-agent/internal/enrollmentstore"
+	"github.com/open-uem/openuem-agent/internal/windowssoftware"
 )
 
 type softwareJournalFixture struct {
@@ -25,7 +26,7 @@ func copySoftwareEntry(e *enrollmentstore.SoftwareEntry) *enrollmentstore.Softwa
 	if e == nil {
 		return nil
 	}
-	copy := &enrollmentstore.SoftwareEntry{Task: e.Task, Nonce: bytes.Clone(e.Nonce)}
+	copy := &enrollmentstore.SoftwareEntry{Task: e.Task, Nonce: bytes.Clone(e.Nonce), BootSession: e.BootSession}
 	if e.Result != nil {
 		data, _ := json.Marshal(e.Result)
 		copy.Result = new(enrollment.SoftwareResult)
@@ -45,13 +46,22 @@ func (j *softwareJournalFixture) Lookup(task enrollment.SoftwareTask) (*enrollme
 	return copySoftwareEntry(j.entry), nil
 }
 func (j *softwareJournalFixture) Begin(task enrollment.SoftwareTask, secret *enrollment.SoftwareSecret) (bool, *enrollmentstore.SoftwareEntry, error) {
+	return j.begin(task, secret, windowssoftware.BootSession{})
+}
+func (j *softwareJournalFixture) BeginWithBootSession(task enrollment.SoftwareTask, secret *enrollment.SoftwareSecret, boot windowssoftware.BootSession) (bool, *enrollmentstore.SoftwareEntry, error) {
+	if !boot.Valid() {
+		return false, nil, enrollmentstore.ErrUnavailable
+	}
+	return j.begin(task, secret, boot)
+}
+func (j *softwareJournalFixture) begin(task enrollment.SoftwareTask, secret *enrollment.SoftwareSecret, boot windowssoftware.BootSession) (bool, *enrollmentstore.SoftwareEntry, error) {
 	if j.entry != nil {
 		return false, copySoftwareEntry(j.entry), nil
 	}
 	if j.failStart && !j.commitBeforeError {
 		return false, nil, enrollmentstore.ErrUnavailable
 	}
-	j.entry = &enrollmentstore.SoftwareEntry{Task: task, Nonce: secret.Nonce()}
+	j.entry = &enrollmentstore.SoftwareEntry{Task: task, Nonce: secret.Nonce(), BootSession: boot}
 	if j.failStart {
 		return false, nil, enrollmentstore.ErrUnavailable
 	}
@@ -110,6 +120,9 @@ func newSoftwareRuntimeFixture(t *testing.T) *softwareRuntimeFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(r.close)
+	r.bootSession = func() (windowssoftware.BootSession, error) {
+		return windowssoftware.BootSession{Sequence: 41, SystemProcessCreated: 130000000000000001}, nil
+	}
 	plan := enrollment.SoftwarePlan{Kind: "windows-msi", Operation: "install", Identifier: "Owned.RuntimeFixture", Version: "1.2.3", Architecture: "amd64", MinimumOS: "10.0.26100", Artifact: enrollment.SoftwareArtifact{URL: "https://packages.example.test/fixture.msi?token=private-source", SHA256: strings.Repeat("a", 64), Format: "msi"}, Detection: enrollment.SoftwareDetection{Kind: "msi-product", ProductCode: "{AABBCCDD-0000-4000-8000-000000000001}", Version: "1.2.3"}, MSIProperties: map[string]string{"LICENSEKEY": "private-license"}, SuccessCodes: []uint32{0}, RebootCodes: []uint32{3010}}
 	hash, err := plan.Digest()
 	if err != nil {
@@ -130,6 +143,45 @@ func newSoftwareRuntimeFixture(t *testing.T) *softwareRuntimeFixture {
 		}
 	})
 	return f
+}
+
+func TestSoftwareClientRequiresNativeBootBeforeAdmission(t *testing.T) {
+	for _, failure := range []string{"missing_reader", "read_error", "invalid", "changed_after_admission"} {
+		t.Run(failure, func(t *testing.T) {
+			f := newSoftwareRuntimeFixture(t)
+			calls := 0
+			f.client.bootSession = func() (windowssoftware.BootSession, error) {
+				calls++
+				if failure == "read_error" {
+					return windowssoftware.BootSession{}, windowssoftware.ErrBootEvidence
+				}
+				if failure == "invalid" {
+					return windowssoftware.BootSession{}, nil
+				}
+				boot := windowssoftware.BootSession{Sequence: 41, SystemProcessCreated: 130000000000000001}
+				if calls > 1 {
+					boot.Sequence++
+					boot.SystemProcessCreated++
+				}
+				return boot, nil
+			}
+			if failure == "missing_reader" {
+				f.client.bootSession = nil
+			}
+			if err := f.client.cycle(t.Context(), f.exchange(t), func(context.Context, enrollment.SoftwarePlan) enrollment.SoftwareOutcome {
+				t.Fatal("unverified boot admitted native installer")
+				return softwareInterrupted()
+			}); err == nil {
+				t.Fatal("missing or changed boot accepted")
+			}
+			if (f.journal.entry != nil) != (failure == "changed_after_admission") {
+				t.Fatal("invalid boot changed durable admission")
+			}
+			if f.journal.entry != nil && (f.journal.entry.BootSession.Sequence != 41 || f.journal.entry.Result != nil) {
+				t.Fatal("changed boot rewrote admission history")
+			}
+		})
+	}
 }
 func (f *softwareRuntimeFixture) exchange(t *testing.T) recoveryExchange {
 	t.Helper()

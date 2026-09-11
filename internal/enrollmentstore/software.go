@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/open-uem/nats/enrollment"
+	"github.com/open-uem/openuem-agent/internal/windowssoftware"
 )
 
 // Permanent history is bounded and never recycled. Exhaustion stops new work;
@@ -21,6 +22,7 @@ const (
 	softwareRecipientMagic = "openuem/enrollment/software/recipient/v1\x00"
 	softwareBindingMagic   = "openuem/enrollment/software/binding/v1\x00"
 	softwareStartMagic     = "openuem/enrollment/software/start/v1\x00"
+	softwareStartMagicV2   = "openuem/enrollment/software/start/v2\x00"
 	softwareResultMagic    = "openuem/enrollment/software/result/v1\x00"
 )
 
@@ -168,9 +170,10 @@ type SoftwareJournal struct {
 }
 
 type SoftwareEntry struct {
-	Task   enrollment.SoftwareTask
-	Nonce  []byte
-	Result *enrollment.SoftwareResult
+	Task        enrollment.SoftwareTask
+	Nonce       []byte
+	Result      *enrollment.SoftwareResult
+	BootSession windowssoftware.BootSession
 }
 
 func (*SoftwareEntry) String() string               { return "[protected Windows software journal entry]" }
@@ -268,7 +271,11 @@ func (j *SoftwareJournal) read(ordinal int) (*SoftwareEntry, error) {
 	if startErr != nil || resultErr != nil && !errors.Is(resultErr, ErrMissing) {
 		return nil, ErrUnavailable
 	}
-	fields, err := decodeFields(start, softwareStartMagic, 4)
+	magic, count := softwareStartMagic, 4
+	if bytes.HasPrefix(start, []byte(softwareStartMagicV2)) {
+		magic, count = softwareStartMagicV2, 5
+	}
+	fields, err := decodeFields(start, magic, count)
 	if err != nil || !bytes.Equal(fields[0], j.binding) || string(fields[1]) != fmt.Sprint(ordinal) || len(fields[3]) != 32 {
 		return nil, ErrUnavailable
 	}
@@ -277,6 +284,10 @@ func (j *SoftwareJournal) read(ordinal int) (*SoftwareEntry, error) {
 		return nil, ErrUnavailable
 	}
 	entry := &SoftwareEntry{Task: *task, Nonce: bytes.Clone(fields[3])}
+	if count == 5 && (decodeCanonicalJSON(fields[4], &entry.BootSession) != nil || !entry.BootSession.Valid()) {
+		entry.Close()
+		return nil, ErrUnavailable
+	}
 	if errors.Is(resultErr, ErrMissing) {
 		return entry, nil
 	}
@@ -380,6 +391,19 @@ func (j *SoftwareJournal) lookup(task enrollment.SoftwareTask) (*SoftwareEntry, 
 // exclusive durable creation admits execution. Any prior intent, failed reload
 // or lost commit response prohibits another attempt, including across restarts.
 func (j *SoftwareJournal) Begin(task enrollment.SoftwareTask, secret *enrollment.SoftwareSecret) (bool, *SoftwareEntry, error) {
+	return j.begin(task, secret, nil)
+}
+
+// BeginWithBootSession records the native session before execution admission.
+// Old records stay readable and can never acquire evidence from a later boot.
+func (j *SoftwareJournal) BeginWithBootSession(task enrollment.SoftwareTask, secret *enrollment.SoftwareSecret, boot windowssoftware.BootSession) (bool, *SoftwareEntry, error) {
+	if !boot.Valid() {
+		return false, nil, ErrUnavailable
+	}
+	return j.begin(task, secret, &boot)
+}
+
+func (j *SoftwareJournal) begin(task enrollment.SoftwareTask, secret *enrollment.SoftwareSecret, boot *windowssoftware.BootSession) (bool, *SoftwareEntry, error) {
 	if j == nil || j.store == nil || secret == nil {
 		return false, nil, ErrUnavailable
 	}
@@ -426,7 +450,17 @@ func (j *SoftwareJournal) Begin(task enrollment.SoftwareTask, secret *enrollment
 		if err != nil {
 			return false, nil, ErrUnavailable
 		}
-		record, err := encodeFields(softwareStartMagic, j.binding, []byte(fmt.Sprint(j.next)), wire, nonce)
+		magic := softwareStartMagic
+		fields := [][]byte{j.binding, []byte(fmt.Sprint(j.next)), wire, nonce}
+		if boot != nil {
+			magic = softwareStartMagicV2
+			data, err := json.Marshal(boot)
+			if err != nil {
+				return false, nil, ErrUnavailable
+			}
+			fields = append(fields, data)
+		}
+		record, err := encodeFields(magic, fields...)
 		if err != nil {
 			return false, nil, ErrUnavailable
 		}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/open-uem/nats/enrollment"
+	"github.com/open-uem/openuem-agent/internal/windowssoftware"
 )
 
 func softwareFixture(t *testing.T, backend NativeBackend) (*Store, *Identity, *SoftwareJournal, *enrollment.SoftwareTask, *enrollment.SoftwareSecret) {
@@ -178,6 +179,120 @@ func runDurableSoftwareJournal(t *testing.T, backend NativeBackend) {
 
 func TestSoftwareJournalDurableExclusiveAdmissionAndReceipt(t *testing.T) {
 	runDurableSoftwareJournal(t, newMemoryBackend(t))
+}
+
+func runSoftwareBootJournal(t *testing.T, backend NativeBackend, legacy bool) {
+	t.Helper()
+	s, i, j, task, secret := softwareFixture(t, backend)
+	boot := windowssoftware.BootSession{Sequence: 41, SystemProcessCreated: 130000000000000001}
+	var won bool
+	var entry *SoftwareEntry
+	var err error
+	if legacy {
+		won, entry, err = j.Begin(*task, secret)
+	} else {
+		won, entry, err = j.BeginWithBootSession(*task, secret, boot)
+	}
+	if err != nil || !won || entry == nil || entry.BootSession.Valid() == legacy {
+		t.Fatal("admission boot binding", err)
+	}
+	entry.Close()
+	original, err := backend.Load(softwareRecord("start", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(original)
+	// A later agent/store instance must retain the admission session. A restored
+	// old-format entry must not be upgraded with evidence from the current boot.
+	restarted, err := s.OpenSoftwareJournal(i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	later := windowssoftware.BootSession{Sequence: 42, SystemProcessCreated: boot.SystemProcessCreated + 1}
+	won, entry, err = restarted.BeginWithBootSession(*task, secret, later)
+	if err != nil || won || entry == nil || entry.BootSession.Valid() == legacy || !legacy && entry.BootSession != boot {
+		t.Fatal("retry replaced admission session", err)
+	}
+	defer entry.Close()
+	retained, err := backend.Load(softwareRecord("start", 1))
+	defer clear(retained)
+	if err != nil || !bytes.Equal(original, retained) {
+		t.Fatal("immutable admission changed", err)
+	}
+	if err = j.RecordResult(*softwareResult(t, j, i, *task, entry.Nonce, "uncertain")); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := restarted.Lookup(*task)
+	if err != nil || recovered == nil || recovered.Result == nil || recovered.BootSession != entry.BootSession {
+		t.Fatal("receipt lost admission evidence", err)
+	}
+	recovered.Close()
+}
+
+func TestSoftwareJournalKeepsAdmissionBootAndLegacyAbsence(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(map[bool]string{false: "current", true: "legacy"}[legacy], func(t *testing.T) { runSoftwareBootJournal(t, newMemoryBackend(t), legacy) })
+	}
+}
+
+func TestSoftwareJournalRejectsMalformedBootAndRecoversLostAdmission(t *testing.T) {
+	for _, mutation := range []string{"missing", "invalid", "noncanonical", "lost_commit"} {
+		t.Run(mutation, func(t *testing.T) {
+			b := newMemoryBackend(t)
+			s, i, j, task, secret := softwareFixture(t, b)
+			boot := windowssoftware.BootSession{Sequence: 41, SystemProcessCreated: 130000000000000001}
+			if _, _, err := j.BeginWithBootSession(*task, secret, windowssoftware.BootSession{}); err == nil {
+				t.Fatal("absent boot evidence admitted execution")
+			}
+			if mutation == "lost_commit" {
+				b.failCreate, b.commitBeforeError = softwareRecord("start", 1), true
+			}
+			won, entry, err := j.BeginWithBootSession(*task, secret, boot)
+			if mutation == "lost_commit" {
+				if err == nil || won || entry != nil {
+					t.Fatal("lost commit admitted execution")
+				}
+				b.failCreate = ""
+			} else {
+				if err != nil || !won {
+					t.Fatal(err)
+				}
+				entry.Close()
+				fields, err := decodeFields(b.records[softwareRecord("start", 1)], softwareStartMagicV2, 5)
+				if err != nil {
+					t.Fatal(err)
+				}
+				switch mutation {
+				case "missing":
+					fields = fields[:4]
+				case "invalid":
+					fields[4] = []byte(`{"sequence":42,"system_process_created":0}`)
+				case "noncanonical":
+					fields[4] = append([]byte(" "), fields[4]...)
+				}
+				data, err := encodeFields(softwareStartMagicV2, fields...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				b.records[softwareRecord("start", 1)] = data
+			}
+			j, err = s.OpenSoftwareJournal(i)
+			if mutation != "lost_commit" {
+				if err == nil {
+					t.Fatal("corrupt immutable boot evidence reopened")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			won, entry, err = j.BeginWithBootSession(*task, secret, windowssoftware.BootSession{Sequence: 42, SystemProcessCreated: boot.SystemProcessCreated + 1})
+			if err != nil || won || entry == nil || entry.BootSession != boot {
+				t.Fatal("crash recovery rewrote admission evidence", err)
+			}
+			entry.Close()
+		})
+	}
 }
 
 func TestSoftwareJournalLostCommitNeverRetriesAndRecoversExactResult(t *testing.T) {

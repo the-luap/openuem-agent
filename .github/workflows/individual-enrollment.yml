@@ -22,6 +22,8 @@ jobs:
         run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware
       - name: Build the agent
         run: go build ./...
+      - name: Bounded Windows kernel process snapshot decoder
+        run: go test -run '^$' -fuzz='^FuzzSystemProcessCreation$' -fuzztime=15s -parallel=2 ./internal/windowssoftware
 
   mac-storage:
     runs-on: macos-latest
@@ -92,7 +94,8 @@ jobs:
             'TestNativeWindowsSoftwareStagingVerifiesActualAuthenticodeWithoutExecution',
             'TestNativeWindowsSoftwareEXEArgumentsAndProcessFacts',
             'TestNativeWindowsSoftwareCancellationPreservesUncertainty',
-            'TestNativeWindowsSoftwareHostAndPECompatibility'
+            'TestNativeWindowsSoftwareHostAndPECompatibility',
+            'TestNativeWindowsSoftwareBootSession'
           )
           foreach ($test in $required) {
             if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {
