@@ -25,6 +25,8 @@ func TestNativeWindowsSoftwareOwnedMSIMajorUpgrade(t *testing.T) {
 	first := windowstest.NewMSI(t, t.TempDir())
 	second := windowstest.NewMSIMajorUpgrade(t, t.TempDir(), first)
 	f := newStageFixture(t)
+	f.artifact.Format = "msi"
+	f.artifact.URL = strings.Replace(f.artifact.URL, "/fixture.exe?", "/fixture.msi?", 1)
 	ops := nativeInstallerOperations()
 	// Only generated, unsigned test bytes use this seam. Native trust and process
 	// boundaries otherwise match the production executor.
@@ -35,8 +37,6 @@ func TestNativeWindowsSoftwareOwnedMSIMajorUpgrade(t *testing.T) {
 		plan := preflightPlan()
 		plan.Architecture, plan.Version = runtime.GOARCH, msi.Version
 		plan.Artifact = f.artifact
-		plan.Artifact.Format = "msi"
-		plan.Artifact.URL = strings.Replace(plan.Artifact.URL, "/fixture.exe?", "/fixture.msi?", 1)
 		plan.MSIProperties = msi.Properties
 		plan.Detection.ProductCode, plan.Detection.Version = msi.ProductCode, msi.Version
 		content, err := os.ReadFile(msi.Path)
