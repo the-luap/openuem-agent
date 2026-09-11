@@ -37,6 +37,23 @@ type cabinetDecode struct {
 	inputs                                             map[uintptr]int64
 	output                                             []byte
 	writing, complete, failed                          bool
+	trace                                              *cabinetTrace
+}
+
+// Internal tests may inspect fixed counters/status codes. No archive bytes,
+// names, native addresses or diagnostics escape the public reader.
+type cabinetTrace struct {
+	Phase                              uint8
+	Result                             uintptr
+	Error                              [3]int32
+	Calls, Opened                      uintptr
+	ReadBytes, Written, AllocatedTotal int64
+	Inputs, Allocations                int
+	Complete, Failed                   bool
+	Notifications                      [12]uintptr
+	NotificationCount                  int
+	OpenFlags                          uintptr
+	OpenNameMatches                    bool
 }
 
 type fdiNotification struct {
@@ -51,6 +68,10 @@ type fdiNotification struct {
 // must provide the hard process deadline when this is integrated into execution;
 // cancellation here also stops subsequent native callbacks and gate acquisition.
 func decodeCabinet(ctx context.Context, reader io.ReaderAt, size int64, index cabinetIndex) ([]byte, error) {
+	return decodeCabinetTraced(ctx, reader, size, index, nil)
+}
+
+func decodeCabinetTraced(ctx context.Context, reader io.ReaderAt, size int64, index cabinetIndex, trace *cabinetTrace) ([]byte, error) {
 	if ctx == nil || ctx.Err() != nil || reader == nil || size < 36 || size > maxUXSize || index.manifestSize < 1 || index.manifestSize > maxManifestSize {
 		return nil, ErrFormat
 	}
@@ -63,9 +84,13 @@ func decodeCabinet(ctx context.Context, reader io.ReaderAt, size int64, index ca
 	if createFDI.Find() != nil || copyFDI.Find() != nil || destroyFDI.Find() != nil {
 		return nil, ErrFormat
 	}
-	s := &cabinetDecode{ctx: ctx, reader: reader, size: size, wanted: index.manifestSize, memory: make(map[uintptr]int64), inputs: make(map[uintptr]int64)}
+	s := &cabinetDecode{ctx: ctx, reader: reader, size: size, wanted: index.manifestSize, memory: make(map[uintptr]int64), inputs: make(map[uintptr]int64), trace: trace}
 	activeCabinet = s
 	defer func() {
+		if trace != nil {
+			trace.Calls, trace.Opened, trace.ReadBytes, trace.Written, trace.AllocatedTotal = s.calls, s.opened, s.readBytes, int64(len(s.output)), s.allocatedTotal
+			trace.Inputs, trace.Allocations, trace.Complete, trace.Failed = len(s.inputs), len(s.memory), s.complete, s.failed
+		}
 		for ptr := range s.memory {
 			windows.LocalFree(windows.Handle(ptr))
 		}
@@ -76,12 +101,24 @@ func decodeCabinet(ctx context.Context, reader io.ReaderAt, size int64, index ca
 	var pin runtime.Pinner
 	pin.Pin(&errors[0])
 	defer pin.Unpin()
+	if trace != nil {
+		trace.Phase = 1
+	}
 	handle, _, _ := createFDI.Call(cabinetCallbacks[0], cabinetCallbacks[1], cabinetCallbacks[2], cabinetCallbacks[3], cabinetCallbacks[4], cabinetCallbacks[5], cabinetCallbacks[6], ^uintptr(0), uintptr(unsafe.Pointer(&errors[0])))
+	if trace != nil {
+		trace.Error = errors
+		trace.Phase = 2
+	}
 	if handle == 0 {
 		return nil, ErrFormat
 	}
 	name, path := []byte("openuem.cab\x00"), []byte{0}
 	result, _, _ := copyFDI.Call(handle, uintptr(unsafe.Pointer(&name[0])), uintptr(unsafe.Pointer(&path[0])), 0, cabinetCallbacks[7], 0, 0)
+	if trace != nil {
+		trace.Error = errors
+		trace.Result = result
+		trace.Phase = 3
+	}
 	runtime.KeepAlive(name)
 	runtime.KeepAlive(path)
 	// The close notification intentionally aborts immediately after the manifest.
@@ -162,6 +199,10 @@ func nativeName(ptr *byte, want string) bool {
 
 func cabinetOpen(name *byte, flags, mode uintptr) uintptr {
 	s := cabinetActive()
+	if s != nil && s.trace != nil {
+		s.trace.OpenFlags = flags
+		s.trace.OpenNameMatches = nativeName(name, "openuem.cab")
+	}
 	if s == nil || !nativeName(name, "openuem.cab") || flags&3 != 0 || flags&0x700 != 0 || s.opened >= 16 {
 		return ^uintptr(0)
 	}
@@ -252,6 +293,10 @@ func cabinetNotify(kind uintptr, n *fdiNotification) uintptr {
 	s := cabinetActive()
 	if s == nil || n == nil {
 		return ^uintptr(0)
+	}
+	if s.trace != nil && s.trace.NotificationCount < len(s.trace.Notifications) {
+		s.trace.Notifications[s.trace.NotificationCount] = kind
+		s.trace.NotificationCount++
 	}
 	switch kind {
 	case 0: // fdintCABINET_INFO; external and split cabinets were rejected above.

@@ -23,9 +23,10 @@ func TestNativeCabinetManifestMemoryOnly(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := decodeCabinet(t.Context(), bytes.NewReader(cab), int64(len(cab)), index)
+			var trace cabinetTrace
+			got, err := decodeCabinetTraced(t.Context(), bytes.NewReader(cab), int64(len(cab)), index, &trace)
 			if err != nil || !bytes.Equal(got, payload) {
-				t.Fatalf("compression=%v reserve=%v: native decode %v, bytes=%d", compressed, reserve, err, len(got))
+				t.Fatalf("compression=%v reserve=%v: native decode %v, bytes=%d trace=%+v", compressed, reserve, err, len(got), trace)
 			}
 			if activeCabinet != nil {
 				t.Fatal("native decode context retained")
