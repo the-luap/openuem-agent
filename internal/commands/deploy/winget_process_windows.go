@@ -26,6 +26,12 @@ func runWinGetProcess(ctx context.Context, executable string, args []string) (re
 // Command construction remains in the adapter: MSI has property-value quoting
 // rules in addition to Windows argv rules. Ownership and cancellation are shared.
 func runWindowsProcess(ctx context.Context, executable, commandLine string) (result winGetProcessResult, resultErr error) {
+	return runWindowsProcessWithDrainObserver(ctx, executable, commandLine, nil)
+}
+
+// The optional observer is used only by tagged owned-fixture diagnostics. The
+// production entry point passes nil and exposes no job process identities.
+func runWindowsProcessWithDrainObserver(ctx context.Context, executable, commandLine string, observe func(windows.Handle, uint32, bool, bool)) (result winGetProcessResult, resultErr error) {
 	if ctx == nil {
 		return result, errors.New("execution context required")
 	}
@@ -183,6 +189,9 @@ func runWindowsProcess(ctx context.Context, executable, commandLine string) (res
 		case <-ctx.Done():
 			return result, ctx.Err()
 		case <-drain.C:
+			if observe != nil {
+				observe(job, active, pendingOut != nil, pendingErr != nil)
+			}
 			return result, errors.New("WinGet left unfinished output or child work")
 		case <-pendingOut:
 			pendingOut = nil

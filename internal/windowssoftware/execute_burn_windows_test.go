@@ -84,6 +84,8 @@ func TestNativeWindowsSoftwareOwnedBurnInstallAndRemove(t *testing.T) {
 	live := func() error { return nil }
 	out := executeInstaller(ctx, plan, f.root, live, ops)
 	if !out.ValidFor(plan) || out.State != "observed" || out.Execution != "started" || out.Before.State != Absent || !out.After.Matches(plan.Detection) {
+		observed, observeErr := Observe(ctx, msiRule)
+		t.Logf("owned MSI observation after incomplete Burn process: state=%s version=%s error=%v", observed.State, observed.Version, observeErr)
 		t.Fatal("owned Burn installation lacks exact machine evidence", out)
 	}
 	if installed, err := Observe(ctx, msiRule); err != nil || !installed.Matches(msiRule) {
