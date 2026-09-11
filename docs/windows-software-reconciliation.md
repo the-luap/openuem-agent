@@ -2,9 +2,8 @@
 
 The protected software journal now retains read-only reconciliation evidence
 separately from immutable installer admission and execution results. The shared
-signed protocol and worker transport are implemented. Connecting the individual
-service's observation consumer and the explicit console action remains in progress;
-this journal does not itself poll, observe software or start an installer.
+signed protocol, worker transport and individual service's observation consumer
+are implemented. The explicit console review/action remains in progress.
 
 Each `software-reconciliation-v1-NNNN` record atomically contains the signed
 read-only authorization and exact signed observation, bound to this installation.
@@ -43,3 +42,34 @@ original receipts, offline recovery after expiry, renewal with current submissio
 proof, damaged restores and concurrent retries. The Windows CI requires the real
 DPAPI journal lifecycle test to execute without skipping. These are owned synthetic
 fixtures, not physical reboot or released package lifecycle acceptance.
+
+## Individual service consumer
+
+The worker's `software_reconciliation_version` is independent of executable
+`software_task_version`. Only the exact supported version with a protected Windows
+journal enables its consumer. The existing joined software loop serializes reads
+and installations and sends pending reconciliation evidence before polling for
+new work. Legacy and non-Windows configuration cannot enable this path.
+
+A current signed task authorizes only the exact original machine detection rule.
+The client compares the retained admission boot with the current native session
+before any observation and reads the session again afterward. Missing original
+admission, legacy boot absence or unusable/changed native evidence yields
+`unavailable`; a session that does not prove a later boot yields `waiting_for_boot`
+without querying package state. Read failure, cancellation or malformed helper
+output yields `unknown`. A successful exact read produces `observed` or `drifted`
+according to the original installation or removal expectation.
+
+The native helper has its own ten-second bound and joins on cancellation. The
+consumer additionally bounds observation by task expiry and the signing
+certificate's lifetime. It stores the signed result before private WSS submission,
+checks the exact returned receipt and persists acknowledgement before releasing
+its in-memory copy. Shutdown joins the helper and receipt publication before
+closing the protected store, signer and installation lease.
+
+Client tests cover real private WSS, all outcome branches, exact install/removal
+expectations, malformed output, failed storage/replies/acknowledgements, expired
+receipt recovery without polling, and joined service cancellation. Windows CI
+also requires the native MSI query helper to return a signed read-only result
+without skipping. That test uses synthetic boot/command evidence and an absent
+fixture product; it does not claim a physical reboot or package installation.

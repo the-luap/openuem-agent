@@ -34,9 +34,11 @@ before a separately authorized read-only reconciliation. It neither verifies an
 application nor proves successful installation, rollback or completed updates.
 The signed reconciliation protocol and [protected observation
 journal](windows-software-reconciliation.md) now bind later-session evidence to
-the original admission. The individual observation consumer and console action
-still need integration. The current service keeps uncertain/restart-required
-outcomes reserved.
+the original admission. The joined individual consumer rechecks the native session
+after the exact read-only observation and publishes a separate durable receipt.
+The explicit console review/action still needs integration. Uncertain or
+restart-required execution stays reserved until a verified definite reconciliation
+is acknowledged; the original execution result remains unchanged.
 
 ## Durable format and compatibility
 

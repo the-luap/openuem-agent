@@ -72,6 +72,10 @@ func (o Observation) valid() bool {
 	return (o.State == Present && validText(o.Version, 128)) || (o.State == Absent && o.Version == "")
 }
 
+// Valid checks the exact bounded native observation grammar before a caller
+// turns helper output into signed management evidence.
+func (o Observation) Valid() bool { return o.valid() }
+
 // Matches describes only this observation. Callers still have to bind fresh
 // observations to the authenticated operation and preserve restart uncertainty.
 func (o Observation) Matches(r Rule) bool {

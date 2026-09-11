@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -93,6 +94,7 @@ func (j *softwareJournalFixture) RecordResult(result enrollment.SoftwareResult) 
 }
 
 type softwareRuntimeFixture struct {
+	issuer                  crypto.Signer
 	agent                   *Agent
 	worker                  *nats.Conn
 	client                  *softwareClient
@@ -128,7 +130,7 @@ func newSoftwareRuntimeFixture(t *testing.T) *softwareRuntimeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &softwareRuntimeFixture{agent: a, worker: worker, client: r, journal: j, recipient: enrollment.SoftwareRecipient{ID: uuid.NewString(), Identity: r.scope, PublicKey: key.PublicKey()}}
+	f := &softwareRuntimeFixture{agent: a, worker: worker, client: r, journal: j, issuer: issuer, recipient: enrollment.SoftwareRecipient{ID: uuid.NewString(), Identity: r.scope, PublicKey: key.PublicKey()}}
 	c := enrollment.SoftwareContext{Version: 1, Protocol: enrollment.SoftwareProtocol, Identity: r.scope, TaskID: uuid.NewString(), PreparationID: uuid.NewString(), RevisionID: uuid.NewString(), RecipientID: f.recipient.ID, PlanHash: hash, Expectation: plan.Expectation(), CreatedAt: time.Now().Unix(), ExpiresAt: time.Now().Add(5 * time.Minute).Unix()}
 	f.task, err = enrollment.SealSoftwareTask(f.recipient, c, plan, bytes.Repeat([]byte{7}, 32), r.authority, issuer, time.Now())
 	if err != nil {

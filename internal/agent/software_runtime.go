@@ -10,6 +10,10 @@ import (
 )
 
 func (a *Agent) setSoftwareCapability(version int) {
+	a.setSoftwareCapabilities(version, 0)
+}
+
+func (a *Agent) setSoftwareCapabilities(version, reconciliationVersion int) {
 	r := a.individual
 	if r == nil {
 		return
@@ -19,7 +23,12 @@ func (a *Agent) setSoftwareCapability(version int) {
 		accepted = int32(version)
 	}
 	r.softwareVersion.Store(accepted)
-	if accepted == 0 {
+	reconciliation := int32(0)
+	if reconciliationVersion == enrollment.SoftwareReconciliationVersion && r.software != nil && r.software.reconciliationJournal() != nil && r.identity != nil && r.identity.Platform == "windows" {
+		reconciliation = int32(reconciliationVersion)
+	}
+	r.softwareReconciliationVersion.Store(reconciliation)
+	if accepted == 0 && reconciliation == 0 {
 		return
 	}
 	a.startSoftwareConsumer(func(ctx context.Context, plan enrollment.SoftwarePlan) enrollment.SoftwareOutcome {
@@ -33,8 +42,12 @@ func (a *Agent) setSoftwareCapability(version int) {
 }
 
 func (a *Agent) startSoftwareConsumer(execute softwareExecutor) {
+	a.startSoftwareConsumerWithObserver(execute, windowssoftware.Observe)
+}
+
+func (a *Agent) startSoftwareConsumerWithObserver(execute softwareExecutor, observe softwareObserver) {
 	r := a.individual
-	if r == nil || r.software == nil || execute == nil {
+	if r == nil || r.software == nil || execute == nil || observe == nil {
 		return
 	}
 	r.mu.Lock()
@@ -74,6 +87,16 @@ func (a *Agent) startSoftwareConsumer(execute softwareExecutor) {
 			return message.Data, nil
 		}
 		for {
+			if r.softwareReconciliationVersion.Load() == enrollment.SoftwareReconciliationVersion {
+				if r.software.reconcile(r.ctx, exchange, func(ctx context.Context, rule windowssoftware.Rule) (windowssoftware.Observation, error) {
+					if r.softwareReconciliationVersion.Load() != enrollment.SoftwareReconciliationVersion || r.software.live() != nil {
+						return windowssoftware.Observation{State: windowssoftware.Unknown}, enrollment.ErrSoftware
+					}
+					return observe(ctx, rule)
+				}) != nil && r.ctx.Err() == nil {
+					log.Print("[ERROR]: private Windows software reconciliation failed")
+				}
+			}
 			if r.softwareVersion.Load() == enrollment.SoftwareVersion {
 				if r.software.cycle(r.ctx, exchange, execute) != nil && r.ctx.Err() == nil {
 					log.Print("[ERROR]: private Windows software request failed")

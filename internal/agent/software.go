@@ -25,16 +25,18 @@ type softwareExecutor func(context.Context, enrollment.SoftwarePlan) enrollment.
 // One joined service goroutine owns this client. The borrowed identity, native
 // Store and installation service lease must remain live until it has stopped.
 type softwareClient struct {
-	identity               *enrollmentstore.Identity
-	certificate, authority *x509.Certificate
-	scope                  enrollment.SoftwareIdentity
-	key                    *enrollment.SoftwareRecipientKey
-	journal                softwareJournal
-	live                   func() error
-	bootSession            func() (windowssoftware.BootSession, error)
-	recipientID            string
-	pending                *enrollment.SoftwareResult
-	persisted              bool
+	identity                *enrollmentstore.Identity
+	certificate, authority  *x509.Certificate
+	scope                   enrollment.SoftwareIdentity
+	key                     *enrollment.SoftwareRecipientKey
+	journal                 softwareJournal
+	live                    func() error
+	bootSession             func() (windowssoftware.BootSession, error)
+	recipientID             string
+	pending                 *enrollment.SoftwareResult
+	persisted               bool
+	reconciliationPending   *enrollmentstore.SoftwareReconciliationEntry
+	reconciliationPersisted bool
 }
 
 func newSoftwareClient(i *enrollmentstore.Identity, key *enrollment.SoftwareRecipientKey, journal softwareJournal, live func() error) (*softwareClient, error) {
@@ -66,6 +68,7 @@ func (r *softwareClient) clearPending() {
 func (r *softwareClient) close() {
 	if r != nil {
 		r.clearPending()
+		r.clearReconciliation()
 		r.key.Close()
 	}
 }
@@ -74,13 +77,13 @@ func (r *softwareClient) persistPending() error {
 		return enrollment.ErrSoftware
 	}
 	if r.pending == nil || r.persisted {
-		return nil
+		return r.persistReconciliation()
 	}
 	if r.journal.RecordResult(*r.pending) != nil {
 		return enrollment.ErrSoftware
 	}
 	r.persisted = true
-	return nil
+	return r.persistReconciliation()
 }
 func (r *softwareClient) request(ctx context.Context, exchange recoveryExchange, request enrollment.SoftwareRequest) (*enrollment.SoftwareReply, error) {
 	if ctx == nil || ctx.Err() != nil || exchange == nil || r.live() != nil {

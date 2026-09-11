@@ -26,29 +26,30 @@ var errIndividualAgent = errors.New("individual agent configuration or protected
 // individualRuntime is selected before any shared certificate is read. Its
 // immutable identity/scope comes only from the protected enrollment store.
 type individualRuntime struct {
-	identity        *enrollmentstore.Identity
-	directory       string
-	readiness       readinessEndpoint
-	ctx             context.Context
-	cancel          context.CancelFunc
-	mu              sync.Mutex
-	connectMu       sync.Mutex
-	stopping        bool
-	consumerStarted bool
-	work            sync.WaitGroup
-	brokerClosed    <-chan struct{}
-	connection      *nats.Conn
-	hardwareVersion atomic.Int32
-	recoveryVersion atomic.Int32
-	rotationVersion atomic.Int32
-	recoveryStarted bool
-	recovery        *recoveryClient
-	rotation        *rotationClient
-	recoveryStore   *enrollmentstore.Store
-	softwareVersion atomic.Int32
-	softwareStarted bool
-	software        *softwareClient
-	softwareStore   *enrollmentstore.Store
+	identity                      *enrollmentstore.Identity
+	directory                     string
+	readiness                     readinessEndpoint
+	ctx                           context.Context
+	cancel                        context.CancelFunc
+	mu                            sync.Mutex
+	connectMu                     sync.Mutex
+	stopping                      bool
+	consumerStarted               bool
+	work                          sync.WaitGroup
+	brokerClosed                  <-chan struct{}
+	connection                    *nats.Conn
+	hardwareVersion               atomic.Int32
+	recoveryVersion               atomic.Int32
+	rotationVersion               atomic.Int32
+	recoveryStarted               bool
+	recovery                      *recoveryClient
+	rotation                      *rotationClient
+	recoveryStore                 *enrollmentstore.Store
+	softwareVersion               atomic.Int32
+	softwareReconciliationVersion atomic.Int32
+	softwareStarted               bool
+	software                      *softwareClient
+	softwareStore                 *enrollmentstore.Store
 }
 
 func individualDirectory(mode, directory string) (string, error) {
