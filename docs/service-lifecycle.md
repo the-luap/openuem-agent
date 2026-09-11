@@ -71,8 +71,13 @@ Configuration failures return to their caller instead of calling `log.Fatal`
 from agent work. The service closes its logger after runtime cleanup; new Unix
 log directories include the owner execute bit required to access their files.
 
+Windows legacy package callbacks now join their bounded, context-aware
+[WinGet execution and result handling](windows-package-execution.md). Cancellation
+also interrupts legacy broker request waits when an agent service context is
+present. An interrupted package command reports an unverified device state.
+
 These changes deliberately do not claim a bounded stop for every existing
-inventory tool, software/profile handler, legacy broker request, keychain call
+inventory tool, software/profile handler, keychain call
 or SFTP authorization request. Work that ignores cancellation is joined rather
 than abandoned with freed resources. Remaining OS execution bounds are required
 for complete native service acceptance.

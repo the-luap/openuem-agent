@@ -886,7 +886,7 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 		}
 
 		if !taskAlreadySuccessful || force {
-			stdout, stderr, err := deploy.InstallPackage(action, keepUpdated, a.Config.Debug)
+			stdout, stderr, err := deploy.InstallPackageContext(a.ctx, action)
 			if err != nil {
 				return nil, err
 			}
@@ -917,7 +917,7 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
 		if !taskAlreadySuccessful || force {
-			stdout, stderr, err := deploy.UninstallPackage(action)
+			stdout, stderr, err := deploy.UninstallPackageContext(a.ctx, action)
 			if err != nil {
 				return nil, err
 			}

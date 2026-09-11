@@ -22,7 +22,6 @@ import (
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	"github.com/open-uem/openuem-agent/internal/agent/rustdesk"
-	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	"github.com/open-uem/openuem-agent/internal/commands/netbird"
 	"github.com/open-uem/openuem-agent/internal/commands/printers"
 	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
@@ -480,151 +479,11 @@ func (a *Agent) StopRemoteDesktopSubscribe() error {
 	return nil
 }
 
-func (a *Agent) InstallPackageSubscribe() error {
-	_, err := a.NATSConnection.Subscribe("agent.installpackage."+a.Config.UUID, func(msg *nats.Msg) {
+func (a *Agent) InstallPackageSubscribe() error { return a.subscribePackage("install") }
 
-		action := openuem_nats.DeployAction{}
-		err := json.Unmarshal(msg.Data, &action)
-		if err != nil {
-			log.Printf("[ERROR]: could not get the package id to install, reason: %v\n", err)
-			return
-		}
+func (a *Agent) UpdatePackageSubscribe() error { return a.subscribePackage("update") }
 
-		if _, stderr, err := deploy.InstallPackage(action, false, a.Config.Debug); err != nil {
-			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
-			action.Failed = true
-			action.Info = stderr
-			if err := a.SendDeployResult(&action); err != nil {
-				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-				if err := SaveDeploymentNotACK(action); err != nil {
-					log.Println("[ERROR]: could not save deployment pending ack to JSON file", err)
-				}
-			}
-			return
-		}
-
-		// Send deploy result if succesful
-		action.When = time.Now()
-		action.Failed = false
-		if err := a.SendDeployResult(&action); err != nil {
-			log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-			if err := SaveDeploymentNotACK(action); err != nil {
-				log.Println("[ERROR]: could not save deployment pending ack to JSON file", err)
-			}
-		}
-
-		// Send a report to update the installed apps
-		r := a.RunReport()
-		if r == nil {
-			return
-		}
-		if err := a.SendReport(r); err != nil {
-			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to agent install package, reason: %v", err)
-	}
-	return nil
-}
-
-func (a *Agent) UpdatePackageSubscribe() error {
-	_, err := a.NATSConnection.Subscribe("agent.updatepackage."+a.Config.UUID, func(msg *nats.Msg) {
-
-		action := openuem_nats.DeployAction{}
-		err := json.Unmarshal(msg.Data, &action)
-		if err != nil {
-			log.Printf("[ERROR]: could not get the package id to update, reason: %v\n", err)
-			return
-		}
-
-		if _, stderr, err := deploy.UpdatePackage(action); err != nil {
-			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
-				log.Println("[INFO]: could not update package using package manager, no updates found", err)
-			} else {
-				log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
-				action.Failed = true
-				action.Info = stderr
-				if err := a.SendDeployResult(&action); err != nil {
-					log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-				}
-			}
-			return
-		}
-
-		// Send deploy result if succesful
-		action.When = time.Now()
-		action.Failed = false
-		if err := a.SendDeployResult(&action); err != nil {
-			log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-			if err := SaveDeploymentNotACK(action); err != nil {
-				log.Println("[ERROR]: could not save deployment pending ack to JSON file", err)
-			}
-		}
-
-		// Send a report to update the installed apps
-		r := a.RunReport()
-		if r == nil {
-			return
-		}
-
-		if err := a.SendReport(r); err != nil {
-			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to agent install package, reason: %v", err)
-	}
-	return nil
-}
-
-func (a *Agent) UninstallPackageSubscribe() error {
-	_, err := a.NATSConnection.Subscribe("agent.uninstallpackage."+a.Config.UUID, func(msg *nats.Msg) {
-
-		action := openuem_nats.DeployAction{}
-		err := json.Unmarshal(msg.Data, &action)
-		if err != nil {
-			log.Printf("[ERROR]: could not get the package id to uninstall, reason: %v\n", err)
-			return
-		}
-
-		if _, stderr, err := deploy.UninstallPackage(action); err != nil {
-			log.Printf("[ERROR]: could not uninstall package, reason: %v\n", err)
-			action.Failed = false
-			action.Info = stderr
-			if err := a.SendDeployResult(&action); err != nil {
-				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-			}
-			return
-		}
-
-		// Send deploy result if succesful
-		action.When = time.Now()
-		if err := a.SendDeployResult(&action); err != nil {
-			log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-			if err := SaveDeploymentNotACK(action); err != nil {
-				log.Println("[ERROR]: could not save deployment pending ack to JSON file", err)
-			}
-		}
-
-		// Send a report to update the installed apps
-		r := a.RunReport()
-		if r == nil {
-			return
-		}
-
-		if err := a.SendReport(r); err != nil {
-			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to agent uninstall package, reason: %v", err)
-	}
-	return nil
-}
+func (a *Agent) UninstallPackageSubscribe() error { return a.subscribePackage("uninstall") }
 
 func (a *Agent) AgentSettingsSubscribe() error {
 	_, err := a.NATSConnection.Subscribe("agent.settings."+a.Config.UUID, func(msg *nats.Msg) {

@@ -260,6 +260,11 @@ func (a *Agent) requestBroker(operation string, data []byte, timeout time.Durati
 		return nil, errors.New("agent broker connection is not ready")
 	}
 	if a.individual == nil {
+		if a.ctx != nil {
+			ctx, cancel := context.WithTimeout(a.ctx, timeout)
+			defer cancel()
+			return a.NATSConnection.RequestWithContext(ctx, operation, data)
+		}
 		return a.NATSConnection.Request(operation, data, timeout)
 	}
 	subject, err := enrollment.RequestSubject(a.individual.identity.Response.DeviceID, operation)
