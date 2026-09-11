@@ -22,7 +22,9 @@ never allocate a whole image, section or cabinet. COFF symbol tables, payloads,
 certificate bodies and CAB members are not followed.
 
 File and virtual section ranges must be aligned, complete and non-overlapping.
-The complete container table must fit both raw and virtual `.wixburn` sizes. The
+The fixed prefix must fit the declared virtual section, while the appended
+container table must fit the raw `.wixburn` bytes. WiX declares a 48-byte virtual
+prefix even when the appended table extends beyond it. The
 UX cabinet begins after all PE sections, fits the file, and declares the same
 cabinet length. Current and retained original certificate ranges must fit the
 file and cannot overlap the UX cabinet or PE sections. Two certificate ranges
@@ -45,7 +47,10 @@ compares its registration code with our PE reader's result. The compiler and its
 extraction command operate only on those owned fixtures. No generated bundle,
 bootstrapper application or installer payload is executed, and no certificate
 is imported. The job requires every architecture case to pass without a skip.
-This native fixture was added with the reader; its first CI result is pending.
+The first generated fixture exposed an overly strict assumption that the appended
+container table must fit the declared virtual size. The reader and portable
+fixtures now preserve WiX's 48-byte prefix layout; the corrected native CI result
+is pending.
 
 Before execution integration, a bounded cabinet/registration reader must verify
 the embedded manifest against the header, exact registration version, machine

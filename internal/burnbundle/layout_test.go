@@ -46,6 +46,9 @@ func layoutFixture(machine uint16) []byte {
 		header := section + i*40
 		copy(data[header:], name)
 		put32(data, header+8, 256)
+		if name == ".wixburn" {
+			put32(data, header+8, 48)
+		}
 		put32(data, header+12, uint32(4096*(i+1)))
 		put32(data, header+16, 512)
 		put32(data, header+20, uint32(512*(i+1)))
@@ -113,71 +116,70 @@ func TestInspectCertificateRangesAndAdditionalContainers(t *testing.T) {
 
 func TestInspectRejectsAmbiguousAndOutOfBoundsLayouts(t *testing.T) {
 	changes := map[string]func([]byte){
-		"DOS signature":                 func(b []byte) { b[0] = 0 },
-		"PE signature":                  func(b []byte) { b[128] = 0 },
-		"PE before DOS end":             func(b []byte) { put32(b, 60, 32) },
-		"PE offset overflow":            func(b []byte) { put32(b, 60, 0xfffffff8) },
-		"PE misalignment":               func(b []byte) { put32(b, 60, 129) },
-		"unknown architecture":          func(b []byte) { put16(b, 132, 0xa641) },
-		"architecture format mismatch":  func(b []byte) { put16(b, 132, 0x14c) },
-		"no sections":                   func(b []byte) { put16(b, 134, 0) },
-		"too many sections":             func(b []byte) { put16(b, 134, 97) },
-		"object file":                   func(b []byte) { put16(b, 150, 0) },
-		"DLL":                           func(b []byte) { put16(b, 150, 0x2002) },
-		"system image":                  func(b []byte) { put16(b, 150, 0x1002) },
-		"short optional header":         func(b []byte) { put16(b, 148, 239) },
-		"huge optional header":          func(b []byte) { put16(b, 148, 65535) },
-		"optional magic":                func(b []byte) { put16(b, 152, 0x10b) },
-		"directory count":               func(b []byte) { put32(b, 260, 17) },
-		"section alignment":             func(b []byte) { put32(b, 184, 513) },
-		"small section alignment":       func(b []byte) { put32(b, 184, 256) },
-		"zero file alignment":           func(b []byte) { put32(b, 188, 0) },
-		"file alignment":                func(b []byte) { put32(b, 188, 513) },
-		"huge file alignment":           func(b []byte) { put32(b, 188, 1<<20) },
-		"image size":                    func(b []byte) { put32(b, 208, 8192) },
-		"image alignment":               func(b []byte) { put32(b, 208, 16383) },
-		"header truncates sections":     func(b []byte) { put32(b, 212, 0) },
-		"header exceeds file":           func(b []byte) { put32(b, 212, 4096) },
-		"header alignment":              func(b []byte) { put32(b, 212, 513) },
-		"missing Burn section":          func(b []byte) { b[472] = 'x' },
-		"duplicate Burn section":        func(b []byte) { copy(b[432:440], ".wixburn") },
-		"raw overlap":                   func(b []byte) { put32(b, 492, 1024) },
-		"raw inside header":             func(b []byte) { put32(b, 492, 0) },
-		"raw range overflow":            func(b []byte) { put32(b, 488, 0xfffffe00) },
-		"raw offset overflow":           func(b []byte) { put32(b, 492, 0xfffffe00) },
-		"raw unaligned":                 func(b []byte) { put32(b, 492, 1537) },
-		"raw size unaligned":            func(b []byte) { put32(b, 488, 511) },
-		"virtual overlap":               func(b []byte) { put32(b, 484, 8192) },
-		"virtual inside header":         func(b []byte) { put32(b, 484, 0) },
-		"virtual unaligned":             func(b []byte) { put32(b, 484, 12289) },
-		"virtual overflow":              func(b []byte) { put32(b, 480, 0xffffffff) },
-		"virtual header truncation":     func(b []byte) { put32(b, 480, 51) },
-		"BSS with raw pointer":          func(b []byte) { put32(b, 448, 0) },
-		"Burn magic":                    func(b []byte) { put32(b, 1536, 0) },
-		"unknown Burn version":          func(b []byte) { put32(b, 1540, 3) },
-		"zero GUID":                     func(b []byte) { clear(b[1544:1560]) },
-		"non CAB format":                func(b []byte) { put32(b, 1576, 2) },
-		"no containers":                 func(b []byte) { put32(b, 1580, 0) },
-		"excessive containers":          func(b []byte) { put32(b, 1580, 65) },
-		"empty attached container":      func(b []byte) { put32(b, 1580, 2) },
-		"table exceeds virtual section": func(b []byte) { put32(b, 480, 52); put32(b, 1580, 2); put32(b, 1588, 64) },
-		"UX inside sections":            func(b []byte) { put32(b, 1560, 1536) },
-		"UX offset overflow":            func(b []byte) { put32(b, 1560, 0xffffffff) },
-		"UX size overflow":              func(b []byte) { put32(b, 1584, 0xffffffff) },
-		"UX beyond EOF":                 func(b []byte) { put32(b, 1584, 65) },
-		"UX too small":                  func(b []byte) { put32(b, 1584, 35) },
-		"cabinet signature":             func(b []byte) { b[2048] = 0 },
-		"cabinet length mismatch":       func(b []byte) { put32(b, 2056, 63) },
-		"certificate offset only":       func(b []byte) { put32(b, 296, 2056) },
-		"certificate size only":         func(b []byte) { put32(b, 300, 8) },
-		"certificate overlaps UX":       func(b []byte) { put32(b, 296, 2056); put32(b, 300, 8) },
-		"certificate overlaps section":  func(b []byte) { put32(b, 296, 1536); put32(b, 300, 8) },
-		"certificate overlaps header":   func(b []byte) { put32(b, 296, 64); put32(b, 300, 8) },
-		"certificate past EOF":          func(b []byte) { put32(b, 296, 2112); put32(b, 300, 8) },
-		"original overlaps UX":          func(b []byte) { put32(b, 1568, 2056); put32(b, 1572, 8) },
-		"original overlaps section":     func(b []byte) { put32(b, 1568, 1536); put32(b, 1572, 8) },
-		"original offset only":          func(b []byte) { put32(b, 1568, 2056) },
-		"original size only":            func(b []byte) { put32(b, 1572, 8) },
+		"DOS signature":                func(b []byte) { b[0] = 0 },
+		"PE signature":                 func(b []byte) { b[128] = 0 },
+		"PE before DOS end":            func(b []byte) { put32(b, 60, 32) },
+		"PE offset overflow":           func(b []byte) { put32(b, 60, 0xfffffff8) },
+		"PE misalignment":              func(b []byte) { put32(b, 60, 129) },
+		"unknown architecture":         func(b []byte) { put16(b, 132, 0xa641) },
+		"architecture format mismatch": func(b []byte) { put16(b, 132, 0x14c) },
+		"no sections":                  func(b []byte) { put16(b, 134, 0) },
+		"too many sections":            func(b []byte) { put16(b, 134, 97) },
+		"object file":                  func(b []byte) { put16(b, 150, 0) },
+		"DLL":                          func(b []byte) { put16(b, 150, 0x2002) },
+		"system image":                 func(b []byte) { put16(b, 150, 0x1002) },
+		"short optional header":        func(b []byte) { put16(b, 148, 239) },
+		"huge optional header":         func(b []byte) { put16(b, 148, 65535) },
+		"optional magic":               func(b []byte) { put16(b, 152, 0x10b) },
+		"directory count":              func(b []byte) { put32(b, 260, 17) },
+		"section alignment":            func(b []byte) { put32(b, 184, 513) },
+		"small section alignment":      func(b []byte) { put32(b, 184, 256) },
+		"zero file alignment":          func(b []byte) { put32(b, 188, 0) },
+		"file alignment":               func(b []byte) { put32(b, 188, 513) },
+		"huge file alignment":          func(b []byte) { put32(b, 188, 1<<20) },
+		"image size":                   func(b []byte) { put32(b, 208, 8192) },
+		"image alignment":              func(b []byte) { put32(b, 208, 16383) },
+		"header truncates sections":    func(b []byte) { put32(b, 212, 0) },
+		"header exceeds file":          func(b []byte) { put32(b, 212, 4096) },
+		"header alignment":             func(b []byte) { put32(b, 212, 513) },
+		"missing Burn section":         func(b []byte) { b[472] = 'x' },
+		"duplicate Burn section":       func(b []byte) { copy(b[432:440], ".wixburn") },
+		"raw overlap":                  func(b []byte) { put32(b, 492, 1024) },
+		"raw inside header":            func(b []byte) { put32(b, 492, 0) },
+		"raw range overflow":           func(b []byte) { put32(b, 488, 0xfffffe00) },
+		"raw offset overflow":          func(b []byte) { put32(b, 492, 0xfffffe00) },
+		"raw unaligned":                func(b []byte) { put32(b, 492, 1537) },
+		"raw size unaligned":           func(b []byte) { put32(b, 488, 511) },
+		"virtual overlap":              func(b []byte) { put32(b, 484, 8192) },
+		"virtual inside header":        func(b []byte) { put32(b, 484, 0) },
+		"virtual unaligned":            func(b []byte) { put32(b, 484, 12289) },
+		"virtual overflow":             func(b []byte) { put32(b, 480, 0xffffffff) },
+		"virtual header truncation":    func(b []byte) { put32(b, 480, 47) },
+		"BSS with raw pointer":         func(b []byte) { put32(b, 448, 0) },
+		"Burn magic":                   func(b []byte) { put32(b, 1536, 0) },
+		"unknown Burn version":         func(b []byte) { put32(b, 1540, 3) },
+		"zero GUID":                    func(b []byte) { clear(b[1544:1560]) },
+		"non CAB format":               func(b []byte) { put32(b, 1576, 2) },
+		"no containers":                func(b []byte) { put32(b, 1580, 0) },
+		"excessive containers":         func(b []byte) { put32(b, 1580, 65) },
+		"empty attached container":     func(b []byte) { put32(b, 1580, 2) },
+		"UX inside sections":           func(b []byte) { put32(b, 1560, 1536) },
+		"UX offset overflow":           func(b []byte) { put32(b, 1560, 0xffffffff) },
+		"UX size overflow":             func(b []byte) { put32(b, 1584, 0xffffffff) },
+		"UX beyond EOF":                func(b []byte) { put32(b, 1584, 65) },
+		"UX too small":                 func(b []byte) { put32(b, 1584, 35) },
+		"cabinet signature":            func(b []byte) { b[2048] = 0 },
+		"cabinet length mismatch":      func(b []byte) { put32(b, 2056, 63) },
+		"certificate offset only":      func(b []byte) { put32(b, 296, 2056) },
+		"certificate size only":        func(b []byte) { put32(b, 300, 8) },
+		"certificate overlaps UX":      func(b []byte) { put32(b, 296, 2056); put32(b, 300, 8) },
+		"certificate overlaps section": func(b []byte) { put32(b, 296, 1536); put32(b, 300, 8) },
+		"certificate overlaps header":  func(b []byte) { put32(b, 296, 64); put32(b, 300, 8) },
+		"certificate past EOF":         func(b []byte) { put32(b, 296, 2112); put32(b, 300, 8) },
+		"original overlaps UX":         func(b []byte) { put32(b, 1568, 2056); put32(b, 1572, 8) },
+		"original overlaps section":    func(b []byte) { put32(b, 1568, 1536); put32(b, 1572, 8) },
+		"original offset only":         func(b []byte) { put32(b, 1568, 2056) },
+		"original size only":           func(b []byte) { put32(b, 1572, 8) },
 	}
 	for name, change := range changes {
 		t.Run(name, func(t *testing.T) {
@@ -193,7 +195,7 @@ func TestInspectRejectsAmbiguousAndOutOfBoundsLayouts(t *testing.T) {
 
 func TestInspectBoundedContainerTable(t *testing.T) {
 	data := layoutFixture(0x8664)
-	put32(data, 480, 512)
+	put32(data, 480, 48)
 	put32(data, 1580, 64)
 	for i := 1; i < 64; i++ {
 		put32(data, 1584+i*4, 1)
@@ -202,11 +204,11 @@ func TestInspectBoundedContainerTable(t *testing.T) {
 	if _, err := Inspect(r, r.size); err != nil {
 		t.Fatal(err)
 	}
-	put32(data, 480, 303)
+	put32(data, 480, 47)
 	if _, err := Inspect(bytes.NewReader(data), int64(len(data))); err != ErrFormat {
-		t.Fatal("table exceeds virtual section")
+		t.Fatal("truncated virtual prefix")
 	}
-	put32(data, 480, 512)
+	put32(data, 480, 48)
 	put32(data, 1580, 65)
 	if _, err := Inspect(bytes.NewReader(data), int64(len(data))); err != ErrFormat {
 		t.Fatal("too many containers")

@@ -108,7 +108,6 @@ func Inspect(reader io.ReaderAt, size int64) (Layout, error) {
 	rawRanges := []region{{0, headerSize}}
 	virtualRanges := []region{{0, headerSize}}
 	var burn region
-	var burnVirtualSize int64
 	stubMinimum := headerSize
 	for i := int64(0); i < count; i++ {
 		header := sections[i*40 : (i+1)*40]
@@ -128,11 +127,12 @@ func Inspect(reader io.ReaderAt, size int64) (Layout, error) {
 			return empty, ErrFormat
 		}
 		if string(header[:8]) == ".wixburn" {
-			if burn.size != 0 || raw.size < 52 || u32(header[8:]) < 52 {
+			// WiX declares a 48-byte virtual prefix and appends the container
+			// sizes in the raw section. The table need not fit VirtualSize.
+			if burn.size != 0 || raw.size < 52 || u32(header[8:]) < 48 {
 				return empty, ErrFormat
 			}
 			burn = raw
-			burnVirtualSize = u32(header[8:])
 		}
 	}
 	if burn.size == 0 || certificate.overlaps(rawRanges[0]) {
@@ -143,7 +143,7 @@ func Inspect(reader io.ReaderAt, size int64) (Layout, error) {
 		return empty, ErrFormat
 	}
 	containers := u32(metadata[44:])
-	if containers < 1 || containers > maxContainers || containers > (min(burn.size, burnVirtualSize)-48)/4 {
+	if containers < 1 || containers > maxContainers || containers > (burn.size-48)/4 {
 		return empty, ErrFormat
 	}
 	// Validate the bounded declaration table without following attached payloads.
