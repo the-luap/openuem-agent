@@ -4,7 +4,6 @@ package deploy
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -36,23 +35,27 @@ func RunOwnedBurnProcessFixture(ctx context.Context, plan enrollment.SoftwarePla
 // Inspect only this runner's retained job, with a fixed bound. Never enumerate
 // unrelated processes or emit full paths, command lines or captured output.
 func ownedJobImages(job windows.Handle) []string {
-	var buffer [8 + 32*8]byte // DWORD counts followed by native 64-bit process IDs.
-	if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicProcessIdList, uintptr(unsafe.Pointer(&buffer[0])), uint32(len(buffer)), nil); err != nil {
-		return []string{"unavailable"}
+	// Native pointer alignment matters on ARM64 as well as field offsets.
+	var info struct {
+		Assigned, Count uint32
+		PIDs            [32]uintptr
 	}
-	count := binary.LittleEndian.Uint32(buffer[4:8])
+	if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicProcessIdList, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
+		return []string{fmt.Sprintf("query_failed(%v)", err)}
+	}
+	count := info.Count
 	if count > 32 {
 		return []string{"excessive"}
 	}
 	var images []string
 	for i := uint32(0); i < count; i++ {
-		pid := binary.LittleEndian.Uint64(buffer[8+i*8 : 16+i*8])
+		pid := info.PIDs[i]
 		if pid == 0 || pid > 0xffffffff {
 			return []string{"invalid"}
 		}
 		handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 		if err != nil {
-			images = append(images, "unavailable")
+			images = append(images, fmt.Sprintf("open_failed(%v)", err))
 			continue
 		}
 		name := make([]uint16, 32768)
@@ -60,7 +63,7 @@ func ownedJobImages(job windows.Handle) []string {
 		err = windows.QueryFullProcessImageName(handle, 0, &name[0], &length)
 		windows.CloseHandle(handle)
 		if err != nil {
-			images = append(images, "unavailable")
+			images = append(images, fmt.Sprintf("image_failed(%v)", err))
 			continue
 		}
 		images = append(images, filepath.Base(windows.UTF16ToString(name[:length])))
