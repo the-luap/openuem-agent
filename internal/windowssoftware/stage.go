@@ -40,6 +40,7 @@ type StagedArtifact struct {
 	fileInfo, directoryInfo os.FileInfo
 	size                    int64
 	closed                  bool
+	closeErr                error
 }
 
 func (*StagedArtifact) String() string               { return "[private staged Windows installer]" }
@@ -202,34 +203,48 @@ func (s *StagedArtifact) close(remove func(string) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return nil
+		return s.closeErr
 	}
 	s.closed = true
+	deadline := time.Now().Add(2 * time.Second)
 	failed := false
 	if s.file != nil {
 		failed = s.file.Close() != nil
 		s.file = nil
 	}
 	if s.fileInfo != nil {
-		entry, err := os.Lstat(s.path)
-		if err == nil && os.SameFile(entry, s.fileInfo) {
-			failed = remove(s.path) != nil || failed
-		} else if !errors.Is(err, os.ErrNotExist) {
-			failed = true
-		}
+		failed = removeStagedEntry(s.path, s.fileInfo, deadline, remove) != nil || failed
 	}
 	if s.directoryInfo != nil {
-		entry, err := os.Lstat(s.directory)
-		if err == nil && os.SameFile(entry, s.directoryInfo) {
-			failed = remove(s.directory) != nil || failed
-		} else if !errors.Is(err, os.ErrNotExist) {
-			failed = true
-		}
+		failed = removeStagedEntry(s.directory, s.directoryInfo, deadline, remove) != nil || failed
 	}
 	if failed {
-		return ErrArtifactChanged
+		s.closeErr = ErrArtifactChanged
 	}
-	return nil
+	return s.closeErr
+}
+
+// Cleanup remains joined even when execution was cancelled. Windows can retain
+// a mapping or a non-delete-sharing handle briefly; recheck the original object
+// on every attempt under one bounded deadline. Never remove a replacement or
+// recursively delete unexpected children, and never schedule deletion at reboot.
+func removeStagedEntry(path string, original os.FileInfo, deadline time.Time, remove func(string) error) error {
+	for {
+		entry, err := os.Lstat(path)
+		if err == nil {
+			if !os.SameFile(entry, original) {
+				return ErrArtifactChanged
+			}
+			err = remove(path)
+		}
+		if err == nil || errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if !retryStagedRemoval(err, original.IsDir()) || !time.Now().Before(deadline) {
+			return ErrArtifactChanged
+		}
+		time.Sleep(min(10*time.Millisecond, time.Until(deadline)))
+	}
 }
 
 type stagingContextReader struct {

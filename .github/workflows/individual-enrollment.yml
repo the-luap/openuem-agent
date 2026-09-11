@@ -27,6 +27,9 @@ jobs:
       # Go 1.26 supports the Windows race detector only on AMD64; that job remains required.
       - name: Native ARM64 bounded cabinet callbacks
         run: go test -count=1 -timeout 2m ./internal/burnbundle
+      - name: Native ARM64 protected staging and bounded cleanup without skips
+        shell: pwsh
+        run: scripts/check-windows-staging.ps1 -Architecture arm64
       - name: Native ARM64 Burn metadata and preflight without skips
         shell: pwsh
         run: scripts/check-windows-burn-format.ps1 -Architecture arm64
@@ -70,6 +73,9 @@ jobs:
       - name: Install and remove only an owned Burn bundle with a generated registry-only MSI
         shell: pwsh
         run: scripts/check-windows-burn-execution.ps1
+      - name: Native AMD64 protected staging and bounded cleanup without skips
+        shell: pwsh
+        run: scripts/check-windows-staging.ps1 -Architecture amd64
 
   windows-burn-format:
     runs-on: windows-latest

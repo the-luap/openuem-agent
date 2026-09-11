@@ -68,6 +68,39 @@ func assertStageEmpty(t *testing.T, root string) {
 	}
 }
 
+func TestSoftwareStagingCleanupFailureRemainsPrivateAndClosed(t *testing.T) {
+	f := newStageFixture(t)
+	stage, err := stageArtifact(t.Context(), f.artifact, f.root, f.client, func(context.Context, string, string) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = stage.close(func(string) error { return errors.New("private cleanup path and diagnostic") })
+	if err != ErrArtifactChanged || stage.Close() != err || stage.Path() != "" || stage.Verify(t.Context()) == nil {
+		t.Fatal("failed cleanup exposed native details, lost its error or reopened the candidate", err)
+	}
+}
+
+func TestSoftwareStagingCleanupPreservesUnexpectedChildren(t *testing.T) {
+	f := newStageFixture(t)
+	stage, err := stageArtifact(t.Context(), f.artifact, f.root, f.client, func(context.Context, string, string) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := stage.Path()
+	foreign := filepath.Join(stage.directory, "unexpected-owned-fixture")
+	if err = os.WriteFile(foreign, []byte("preserve"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err = stage.Close()
+	data, readErr := os.ReadFile(foreign)
+	if err != ErrArtifactChanged || stage.Close() != err || readErr != nil || string(data) != "preserve" {
+		t.Fatal("cleanup removed unexpected contents or hid incomplete removal", err, readErr)
+	}
+	if _, err = os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("unexpected sibling prevented exact owned artifact removal", err)
+	}
+}
+
 func TestSoftwareStagingChecksExactPrivateBytesBeforeAndAfterNativePolicy(t *testing.T) {
 	f := newStageFixture(t)
 	checks := 0

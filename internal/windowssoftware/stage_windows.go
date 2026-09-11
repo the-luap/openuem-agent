@@ -3,11 +3,17 @@
 package windowssoftware
 
 import (
+	"errors"
 	"os"
 
 	"github.com/open-uem/nats/enrollment/keyfile"
 	"golang.org/x/sys/windows"
 )
+
+func retryStagedRemoval(err error, directory bool) bool {
+	return errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_ACCESS_DENIED) ||
+		errors.Is(err, windows.ERROR_USER_MAPPED_FILE) || directory && errors.Is(err, windows.ERROR_DIR_NOT_EMPTY)
+}
 
 func openStagedArtifact(path string, size int64) (*os.File, error) {
 	checked, err := keyfile.Open(path, size)
