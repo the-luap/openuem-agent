@@ -46,9 +46,11 @@ the rule nor diagnostics enter shell commands or ordinary application logs.
 The read-only helper has no installer or broker operation.
 
 The parent applies a ten-second deadline, honors earlier cancellation, kills and
-joins the owned helper, bounds retained output to 2 KiB and limits pipe cleanup to
+joins the owned helper, bounds retained output to 4 KiB and limits pipe cleanup to
 one second. The MSI and registry reads use fixed-size native buffers; they do not
 allocate the size requested by a registry value or repeat an unbounded read.
+The helper also enforces its own ten-second process deadline, covering an
+unclosed input pipe and an abrupt loss of the parent process.
 Malformed, duplicate, unknown, case-aliased, partial and excessive messages fail.
 Nonzero exits and native diagnostics return one redacted observation error.
 
@@ -61,7 +63,9 @@ lost execution outcome. The helper's timeout does not reverse an installation.
 
 Portable race tests use owned copies of the test executable for valid, absent,
 different-version, oversized, incomplete, duplicate, failed and stalled output.
-Cancellation requires a joined process and unknown state. MSI decision tests
+Cancellation requires a joined process and unknown state. A separate process test
+leaves an owned helper's input open and requires its independent deadline.
+MSI decision cases
 exercise installed/advertised/absent/error transitions and disappearance between
 state and version reads, without changing an MSI installation.
 

@@ -22,7 +22,7 @@ var ErrObservation = errors.New("exact Windows software state could not be read"
 
 const (
 	helperArgument     = "--openuem-observe-windows-software"
-	maxMessage         = 2048
+	maxMessage         = 4096
 	observationTimeout = 10 * time.Second
 	Present            = "present"
 	Absent             = "absent"
@@ -102,6 +102,10 @@ func HandleHelper(args []string) (bool, int) {
 	if len(args) != 1 {
 		return true, 1
 	}
+	// The read-only helper owns its deadline even if the parent crashes before
+	// cancelling it. It never spawns children or starts installer operations.
+	deadline := time.AfterFunc(observationTimeout, func() { os.Exit(1) })
+	defer deadline.Stop()
 	data, err := io.ReadAll(io.LimitReader(os.Stdin, maxMessage+1))
 	defer clear(data)
 	var r Rule

@@ -93,6 +93,12 @@ func TestSoftwareObservationRejectsAmbiguousRulesAndMessages(t *testing.T) {
 	if !decodeMessage(data, &decoded) || decoded != testRule() {
 		t.Fatal("canonical helper input lost")
 	}
+	long := Rule{Kind: "uninstall-key", UninstallKey: strings.Repeat("<", 255), RegistryView: "64", Version: strings.Repeat(">", 128)}
+	data, _ = json.Marshal(long)
+	var longDecoded Rule
+	if long.Validate() != nil || !decodeMessage(data, &longDecoded) || longDecoded != long {
+		t.Fatal("valid escaped detection rule exceeded the helper boundary")
+	}
 	if (Observation{State: Present, Version: "1.2.30"}).Matches(testRule()) || (Observation{State: Absent}).Matches(testRule()) || !(Observation{State: Present, Version: "1.2.3"}).Matches(testRule()) {
 		t.Fatal("exact version evidence changed")
 	}
@@ -195,5 +201,36 @@ func TestSoftwareObservationChildIsBoundedJoinedAndRedacted(t *testing.T) {
 	}
 	if o, err := Observe(nil, testRule()); !errors.Is(err, ErrObservation) || o.State != Unknown {
 		t.Fatal("nil context accepted", o, err)
+	}
+}
+
+func TestSoftwareObservationHelperHasIndependentDeadline(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Keep the input pipe open. The helper must end itself without an EOF or
+	// parent cancellation; this watchdog only prevents a broken test leaking it.
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, executable, helperArgument)
+	input, err := command.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	started := time.Now()
+	if err = command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(testRule())
+	if _, err = input.Write(data); err != nil {
+		_ = command.Process.Kill()
+		_ = command.Wait()
+		t.Fatal(err)
+	}
+	err = command.Wait()
+	if err == nil || ctx.Err() != nil || command.ProcessState == nil || command.ProcessState.ExitCode() != 1 || time.Since(started) < observationTimeout {
+		t.Fatal("helper did not enforce its independent deadline", err, ctx.Err())
 	}
 }

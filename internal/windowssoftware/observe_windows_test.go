@@ -109,8 +109,9 @@ func TestNativeWindowsSoftwareRejectsMalformedUTF16(t *testing.T) {
 	if value, ok := exactUTF16(valid); !ok || value != "1.2.🚀" {
 		t.Fatal("valid surrogate pair lost")
 	}
-	// Exercise native REG_SZ buffer parsing using an owned key, including a
-	// missing terminator that higher-level registry helpers normally conceal.
+	// Exercise native REG_SZ parsing with embedded terminators and an unpaired
+	// surrogate. RegSetValueExW can add a missing final terminator itself, so a
+	// nonterminated write is not proof of malformed data returned by Windows.
 	name := "OpenUEM-owned-malformed-" + uuid.NewString()
 	root, err := registry.OpenKey(registry.LOCAL_MACHINE, uninstallBranch, registry.CREATE_SUB_KEY|registry.ENUMERATE_SUB_KEYS|registry.WOW64_64KEY)
 	if err != nil {
@@ -130,7 +131,7 @@ func TestNativeWindowsSoftwareRejectsMalformedUTF16(t *testing.T) {
 	r := Rule{Kind: "uninstall-key", UninstallKey: name, RegistryView: "64", Version: "1.2.3"}
 	valueName, _ := windows.UTF16PtrFromString("DisplayVersion")
 	setValue := windows.NewLazySystemDLL("advapi32.dll").NewProc("RegSetValueExW")
-	for _, units := range [][]uint16{{'1', '2'}, {'1', 0, '2', 0}, {0xD800, 0}} {
+	for _, units := range [][]uint16{{'1', 0, '2', 0}, {0xD800, 0}} {
 		var data bytes.Buffer
 		if err := binary.Write(&data, binary.LittleEndian, units); err != nil {
 			t.Fatal(err)
