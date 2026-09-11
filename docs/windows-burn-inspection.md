@@ -209,6 +209,17 @@ an uncertain process result and remains unresolved. A tagged fixture-only entry
 point now exposes the native runner error while retaining the exact production
 builder and runner; release builds never include it, and it exposes no process
 output or arguments. Native ARM64 installation/removal acceptance remains pending.
+The next diagnostic confirms the generated MSI is present at version `1.2.3`
+while two job processes remain active and both output streams are drained.
+An aligned native process list is being checked to identify that remaining work.
+
+The owned execution fixtures now explicitly set the authored
+[`Chain.DisableSystemRestore`](https://docs.firegiant.com/wix/schema/wxs/chain/)
+option so their bootstrapper does not request host restore points in addition to
+the intended synthetic payload. This changes only the generated test bundles,
+not approved plans, process timeouts, child joining or production arguments.
+The preceding default-restore fixture remains in native diagnostic CI for
+comparison; the effect on the ARM64 completion failure is not yet established.
 
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)

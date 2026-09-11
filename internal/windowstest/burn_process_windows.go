@@ -53,7 +53,7 @@ func main() {
 	bundle := `<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
   <Bundle Name="OpenUEM owned Burn process fixture" Manufacturer="OpenUEM test" Version="1.2.3.4" UpgradeCode="` + uuid.NewString() + `">
     <BootstrapperApplication><bal:WixStandardBootstrapperApplication LicenseUrl="" Theme="hyperlinkLicense" /></BootstrapperApplication>
-    <Chain><ExePackage SourceFile="payload.exe" PerMachine="yes" Permanent="yes" DetectCondition="0" /></Chain>
+    <Chain DisableSystemRestore="yes"><ExePackage SourceFile="payload.exe" PerMachine="yes" Permanent="yes" DetectCondition="0" /></Chain>
   </Bundle>
 </Wix>`
 	if err := os.WriteFile(filepath.Join(root, "bundle.wxs"), []byte(bundle), 0600); err != nil {

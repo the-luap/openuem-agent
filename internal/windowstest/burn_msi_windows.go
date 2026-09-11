@@ -25,7 +25,7 @@ func NewMSIBurn(t *testing.T) (Burn, MSI) {
 	source := `<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
   <Bundle Name="OpenUEM owned Burn MSI fixture" Manufacturer="OpenUEM test" Version="1.2.3.4" UpgradeCode="` + uuid.NewString() + `">
     <BootstrapperApplication><bal:WixStandardBootstrapperApplication LicenseUrl="" Theme="hyperlinkLicense" /></BootstrapperApplication>
-    <Chain><MsiPackage SourceFile="owned fixture.msi" /></Chain>
+    <Chain DisableSystemRestore="yes"><MsiPackage SourceFile="owned fixture.msi" /></Chain>
   </Bundle>
 </Wix>`
 	if err := os.WriteFile(filepath.Join(root, "bundle.wxs"), []byte(source), 0600); err != nil {
