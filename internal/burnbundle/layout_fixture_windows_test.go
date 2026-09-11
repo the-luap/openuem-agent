@@ -75,14 +75,14 @@ func TestOwnedWiXBundleLayout(t *testing.T) {
 			var document struct {
 				XMLName      xml.Name `xml:"BurnManifest"`
 				Registration struct {
-					Code    string `xml:"Code,attr"`
+					ID      string `xml:"Id,attr"` // WiX 4 uses Id; newer authoring uses Code.
 					Version string `xml:"Version,attr"`
 				} `xml:"Registration"`
 			}
 			if err := xml.Unmarshal(manifest, &document); err != nil {
 				t.Fatal(err)
 			}
-			if layout.Architecture != target.goArch || layout.BundleCode == "" || layout.BundleCode != document.Registration.Code || document.Registration.Version != "1.2.3.4" {
+			if layout.Architecture != target.goArch || layout.BundleCode == "" || layout.BundleCode != document.Registration.ID || document.Registration.Version != "1.2.3.4" {
 				t.Fatalf("generated bundle identity mismatch: %+v / %+v", layout, document.Registration)
 			}
 			t.Logf("read-only generated bundle inspection: %+v", layout)
