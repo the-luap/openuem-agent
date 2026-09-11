@@ -138,8 +138,11 @@ stage closure, cancellation and removal. All four native helper cases pass in
 13.58 seconds at `767bf1a9ec62456807bc783c2cd60db9dbc6f30e`; the generated layout
 suite also passes in 15.44 seconds with race detection. Linux and macOS CI pass.
 The separate Windows storage suite failed during isolated broker provisioning
-and cleanup. Its package processes now run serially to reduce shared runner
-disk/CPU contention; production timeouts and assertions remain unchanged.
+and cleanup. Its package processes now run serially after parallel compilation
+to reduce shared runner disk/CPU contention. The complete native Windows suite
+passes at `68876c30fd6301327b5d3f2e45c82a54c5ce0311`. A per-package test timeout
+preserves diagnostic stacks if an intermittent hang returns; production
+timeouts and assertions remain unchanged.
 
 The agent currently requests no Burn capability and rejects unsolicited capability
 replies and new Burn work before durable attempt admission. The process builder
@@ -162,9 +165,12 @@ The fixture has an explicit environment opt-in and must pass without skipping.
 Only this test seam accepts the generated unsigned artifact and routes its exact
 quiet arguments through the existing EXE process boundary after required Burn
 preflight. Production capability advertisement, new-task admission and direct
-Burn process dispatch stay disabled. The new execution fixture has not yet run
-on Windows; cancellation, child lifetime and post-boot recovery remain separate
-checks before enabling the complete delivery path.
+Burn process dispatch stay disabled. The first native run exposed WiX's
+unconditional file-size query while binding the registry-only MSI. The fixture
+now includes the standard empty [File table](https://learn.microsoft.com/en-us/windows/win32/msi/file-table)
+without adding any installed files. Execution still awaits a passing native run;
+cancellation, child lifetime and post-boot recovery remain separate checks before
+enabling the complete delivery path.
 
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)

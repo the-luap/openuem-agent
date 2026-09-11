@@ -125,7 +125,8 @@ jobs:
           # Compile in parallel, then isolate native fixture processes sharing disk/CPU.
           go test -run '^$' @packages
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go test -p 1 -count=1 @packages
+          # Preserve goroutine stacks if one package hangs before the job limit.
+          go test -p 1 -count=1 -timeout 3m @packages
       - name: Owned Windows package processes and observations execute without skips
         shell: pwsh
         run: |
