@@ -91,7 +91,8 @@ jobs:
             'TestNativeWindowsSoftwareStagingExcludesWriteDeleteAndReplacement',
             'TestNativeWindowsSoftwareStagingVerifiesActualAuthenticodeWithoutExecution',
             'TestNativeWindowsSoftwareEXEArgumentsAndProcessFacts',
-            'TestNativeWindowsSoftwareCancellationPreservesUncertainty'
+            'TestNativeWindowsSoftwareCancellationPreservesUncertainty',
+            'TestNativeWindowsSoftwareHostAndPECompatibility'
           )
           foreach ($test in $required) {
             if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {
@@ -103,13 +104,15 @@ jobs:
         env:
           OPENUEM_WINDOWS_MSI_FIXTURE: '1'
         run: |
-          $events = go test -json -count=1 -timeout 3m -tags openuem_msi_test -run '^TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove$' ./internal/commands/deploy
+          $events = go test -json -count=1 -timeout 3m -tags openuem_msi_test -run '^TestNativeWindowsSoftwareOwnedMSI' ./internal/commands/deploy ./internal/windowssoftware
           $result = $LASTEXITCODE
           $events | Write-Output
           if ($result -ne 0) { exit $result }
           $records = $events | ForEach-Object { $_ | ConvertFrom-Json }
-          if (-not ($records | Where-Object { $_.Test -eq 'TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove' -and $_.Action -eq 'pass' })) {
-            throw 'The generated MSI install/property/removal fixture did not pass'
+          foreach ($test in @('TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove', 'TestNativeWindowsSoftwareOwnedMSIReadOnlyCompatibility')) {
+            if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {
+              throw "The required generated MSI fixture did not pass: $test"
+            }
           }
       - name: Durable Windows software journal executes without skips
         shell: pwsh

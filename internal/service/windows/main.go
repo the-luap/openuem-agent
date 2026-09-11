@@ -18,6 +18,9 @@ import (
 )
 
 func main() {
+	if handled, code := windowssoftware.HandlePreflightHelper(os.Args[1:]); handled {
+		os.Exit(code)
+	}
 	if handled, code := windowssoftware.HandleHelper(os.Args[1:]); handled {
 		os.Exit(code)
 	}

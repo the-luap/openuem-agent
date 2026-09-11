@@ -7,6 +7,21 @@ an artifact, or establish installed state. Its caller must complete those steps
 and retain the protected artifact and installation service lease through execution.
 The individual software client is not yet connected to this adapter.
 
+`windowssoftware.CheckHost` uses a bounded read-only child of the installed
+agent to read the native machine architecture and Windows version. Emulation is
+not native package eligibility. The loaded Windows build must match the registry
+build; the update revision is read twice. Registry revision is compatibility
+evidence, not proof that a reboot completed. `CheckInstaller` retains and checks
+the protected staged file before and after reading exact MSI product code,
+reported product version and summary architecture, or the EXE's native PE
+architecture. MSI database access is strictly read-only and cannot advertise,
+repair or configure a product. The helper owns a ten-second deadline and returns
+only a bounded canonical compatibility result over private pipes.
+
+Primary API references: [native architecture](https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2),
+[read-only MSI database access](https://learn.microsoft.com/en-us/windows/win32/api/msiquery/nf-msiquery-msiopendatabasew),
+[MSI template architecture](https://learn.microsoft.com/en-us/windows/win32/msi/template-summary).
+
 EXE arguments use Windows argv quoting without a shell. MSI commands use the
 system-directory `msiexec.exe`, an exact product code or absolute staged file,
 quiet machine installation and suppressed reboot. Approved public properties use

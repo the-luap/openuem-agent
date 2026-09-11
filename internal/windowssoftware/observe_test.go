@@ -16,11 +16,39 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if handled, code := HandlePreflightHelper(os.Args[1:]); handled {
+		os.Exit(code)
+	}
 	if handled, code := packagesignature.HandleHelper(os.Args[1:]); handled {
 		os.Exit(code)
 	}
 	if handled, code := HandleHelper(os.Args[1:]); handled {
 		os.Exit(code)
+	}
+	if len(os.Args) == 3 && os.Args[1] == "owned-preflight-fixture" {
+		_, _ = io.Copy(io.Discard, io.LimitReader(os.Stdin, maxMessage+1))
+		switch os.Args[2] {
+		case "compatible":
+			fmt.Fprint(os.Stdout, `{"compatible":true}`)
+		case "false":
+			fmt.Fprint(os.Stdout, `{"compatible":false}`)
+		case "duplicate":
+			fmt.Fprint(os.Stdout, `{"compatible":false,"compatible":true}`)
+		case "extra":
+			fmt.Fprint(os.Stdout, `{"compatible":true,"extra":"private"}`)
+		case "oversized":
+			fmt.Fprint(os.Stdout, strings.Repeat("x", maxMessage+1))
+		case "partial":
+			fmt.Fprint(os.Stdout, `{"compatible":`)
+		case "error":
+			fmt.Fprint(os.Stderr, "private preflight diagnostic")
+			os.Exit(2)
+		case "wait":
+			time.Sleep(time.Minute)
+		default:
+			os.Exit(8)
+		}
+		os.Exit(0)
 	}
 	if len(os.Args) == 3 && os.Args[1] == "owned-observation-fixture" {
 		data, _ := io.ReadAll(io.LimitReader(os.Stdin, maxMessage+1))

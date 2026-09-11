@@ -65,13 +65,28 @@ func TestNativeWindowsSoftwareOwnedMSIInstallPropertiesAndRemove(t *testing.T) {
 	})
 	if err != nil || !result.Started || result.ExitCode == nil || *result.ExitCode != 0 {
 		data, _ := os.ReadFile(logPath)
-		if len(data) > 12000 {
-			data = data[len(data)-12000:]
+		// The engine writes UTF-16 diagnostics. Select failure context before
+		// the long property footer, keeping logs bounded to this owned fixture.
+		lines := strings.Split(strings.ReplaceAll(string(data), "\x00", ""), "\n")
+		var diagnostic strings.Builder
+		for i, line := range lines {
+			if strings.Contains(line, "Return value 3") {
+				for _, contextLine := range lines[max(0, i-15) : i+1] {
+					diagnostic.WriteString(contextLine + "\n")
+				}
+			}
+		}
+		if diagnostic.Len() == 0 {
+			diagnostic.WriteString(strings.Join(lines[max(0, len(lines)-30):], "\n"))
+		}
+		text := diagnostic.String()
+		if len(text) > 20000 {
+			text = text[:20000]
 		}
 		if result.ExitCode != nil {
 			t.Log("owned MSI exit code", *result.ExitCode)
 		}
-		t.Fatalf("owned MSI installation failed: %v\n%s", err, data)
+		t.Fatalf("owned MSI installation failed: %v\n%s", err, text)
 	}
 	assertState("5", 0)
 	key, err := registry.OpenKey(registry.LOCAL_MACHINE, f.RegistryPath, registry.QUERY_VALUE|registry.WOW64_64KEY)

@@ -40,7 +40,7 @@ func newStageFixture(t *testing.T) *stageFixture {
 	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.requests.Add(1)
-		if r.Method != "GET" || r.URL.Path != "/fixture.exe" || r.URL.RawQuery != "token=private-source" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Accept-Encoding") != "identity" || r.TLS == nil || len(r.TLS.PeerCertificates) != 0 {
+		if r.Method != "GET" || r.URL.Path != "/fixture."+f.artifact.Format || r.URL.RawQuery != "token=private-source" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Accept-Encoding") != "identity" || r.TLS == nil || len(r.TLS.PeerCertificates) != 0 {
 			t.Error("artifact download carried identity or changed exact target")
 		}
 		if f.handler != nil {
