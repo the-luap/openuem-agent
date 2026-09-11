@@ -193,6 +193,17 @@ boot. The six reconciliation scenarios include drift, unknown observation and
 same-boot waiting. These protocol fixtures pass in 4.066 seconds; they do not
 represent a physical reboot or endpoint acceptance.
 
+A separate native ARM64 job now uses GitHub's documented
+[`windows-11-arm` runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+It requires an ARM64 Go toolchain and executes bounded CAB callbacks, all generated
+format/preflight cases, actual owned Burn installation/removal and child lifetime,
+plus private readiness shutdown. The generated MSI uses the native
+[`Arm64` template summary](https://learn.microsoft.com/en-us/windows/win32/msi/template-summary),
+and both the bundle and owned process payload use the same native architecture.
+Go 1.26.8 supports its Windows race detector only on AMD64; that existing required
+job retains race detection, while the ARM64 job runs native assertions without
+it. ARM64 tagged compilation and vet pass. Native ARM64 CI evidence is pending.
+
 The independent implementation uses format facts from Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)
 and the pinned WiX

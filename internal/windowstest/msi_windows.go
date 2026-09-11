@@ -33,8 +33,9 @@ func NewMSI(t *testing.T, directory string) MSI {
 	f := MSI{Path: filepath.Join(directory, "owned fixture.msi"), ProductCode: guid(), Version: "1.2.3", RegistryPath: `Software\OpenUEM-Owned-MSI-` + uuid.NewString(), Properties: map[string]string{
 		"PLAIN": "literal-value", "SPACES": "  spaced value  ", "SLASH": `C:\path with spaces\`, "SLASHES": `two backslashes\\`, "UNICODE": "Unicode 🐈", "EMPTY": "", "SPECIAL": "literal ; $() & %PATH% = /qn",
 	}}
-	if runtime.GOARCH != "amd64" {
-		t.Fatal("synthetic x64 MSI execution requires an amd64 Windows runner")
+	platform := map[string]string{"amd64": "x64", "arm64": "Arm64"}[runtime.GOARCH]
+	if platform == "" {
+		t.Fatal("synthetic native MSI execution requires an amd64 or arm64 Windows runner")
 	}
 	dll := windows.NewLazySystemDLL("msi.dll")
 	call := func(name string, args ...uintptr) {
@@ -103,7 +104,7 @@ func NewMSI(t *testing.T, directory string) MSI {
 	var summary uint32
 	call("MsiGetSummaryInformationW", uintptr(database), 0, 6, uintptr(unsafe.Pointer(&summary)))
 	defer dll.NewProc("MsiCloseHandle").Call(uintptr(summary))
-	for id, value := range map[uintptr]string{2: "Installation Database", 7: "x64;1033", 9: guid()} {
+	for id, value := range map[uintptr]string{2: "Installation Database", 7: platform + ";1033", 9: guid()} {
 		text, _ := windows.UTF16PtrFromString(value)
 		call("MsiSummaryInfoSetPropertyW", uintptr(summary), id, 30, 0, 0, uintptr(unsafe.Pointer(text))) // VT_LPSTR
 	}

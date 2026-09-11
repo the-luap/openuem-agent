@@ -9,6 +9,34 @@ permissions:
   contents: read
 
 jobs:
+  windows-arm64:
+    runs-on: windows-11-arm
+    timeout-minutes: 15
+    env:
+      DOTNET_ROLL_FORWARD: Major
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          architecture: arm64
+          cache: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      # Go 1.26 supports the Windows race detector only on AMD64; that job remains required.
+      - name: Native ARM64 bounded cabinet callbacks
+        run: go test -count=1 -timeout 2m ./internal/burnbundle
+      - name: Native ARM64 Burn metadata and preflight without skips
+        shell: pwsh
+        run: scripts/check-windows-burn-format.ps1 -Architecture arm64
+      - name: Native ARM64 owned Burn MSI execution and child lifetime without skips
+        shell: pwsh
+        run: scripts/check-windows-burn-execution.ps1 -Architecture arm64
+      - name: Native ARM64 private readiness and joined shutdown without skips
+        shell: pwsh
+        run: scripts/check-windows-readiness.ps1 -Architecture arm64
+
   windows-readiness:
     runs-on: windows-latest
     timeout-minutes: 5

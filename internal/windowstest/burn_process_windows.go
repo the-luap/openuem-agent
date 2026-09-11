@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
@@ -22,7 +23,7 @@ type BurnProcesses struct {
 func NewProcessBurn(t *testing.T) BurnProcesses {
 	t.Helper()
 	wix := os.Getenv("OPENUEM_BURN_WIX")
-	if !filepath.IsAbs(wix) {
+	if !filepath.IsAbs(wix) || runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		t.Fatal("owned Burn fixture requires the isolated pinned WiX tool")
 	}
 	root := t.TempDir()
@@ -47,7 +48,7 @@ func main() {
 	if err := os.WriteFile(filepath.Join(root, "payload.go"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
-	runBurnTool(t, root, []string{"GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0"}, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", f.Payload, "payload.go")
+	runBurnTool(t, root, []string{"GOOS=windows", "GOARCH=" + runtime.GOARCH, "CGO_ENABLED=0"}, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", f.Payload, "payload.go")
 	runBurnTool(t, root, nil, wix, "extension", "add", "WixToolset.Bal.wixext/4.0.6")
 	bundle := `<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
   <Bundle Name="OpenUEM owned Burn process fixture" Manufacturer="OpenUEM test" Version="1.2.3.4" UpgradeCode="` + uuid.NewString() + `">
@@ -58,6 +59,6 @@ func main() {
 	if err := os.WriteFile(filepath.Join(root, "bundle.wxs"), []byte(bundle), 0600); err != nil {
 		t.Fatal(err)
 	}
-	f.Burn = buildBurnFixture(t, root, wix, "amd64", "machine", "yes")
+	f.Burn = buildBurnFixture(t, root, wix, runtime.GOARCH, "machine", "yes")
 	return f
 }

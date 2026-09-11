@@ -30,7 +30,7 @@ func ownedBurnExecution(t *testing.T, bundle windowstest.Burn) (enrollment.Softw
 	hash := sha256.Sum256(content)
 	f.artifact.SHA256 = hex.EncodeToString(hash[:])
 	plan := burnPreflightPlan()
-	plan.Artifact = f.artifact
+	plan.Artifact, plan.Architecture = f.artifact, bundle.Architecture
 	plan.Detection.UninstallKey, plan.Detection.Version = bundle.BundleCode, bundle.Version
 	ops := nativeInstallerOperations()
 	// Only the test seam accepts this generated unsigned bundle. Production

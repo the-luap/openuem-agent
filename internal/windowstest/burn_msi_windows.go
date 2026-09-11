@@ -5,6 +5,7 @@ package windowstest
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
@@ -30,5 +31,5 @@ func NewMSIBurn(t *testing.T) (Burn, MSI) {
 	if err := os.WriteFile(filepath.Join(root, "bundle.wxs"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return buildBurnFixture(t, root, wix, "amd64", "machine", "yes"), msi
+	return buildBurnFixture(t, root, wix, runtime.GOARCH, "machine", "yes"), msi
 }
