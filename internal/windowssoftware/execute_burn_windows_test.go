@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/open-uem/nats/enrollment"
-	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	"github.com/open-uem/openuem-agent/internal/windowstest"
 	"golang.org/x/sys/windows"
 )
@@ -34,17 +33,6 @@ func ownedBurnExecution(t *testing.T, bundle windowstest.Burn) (enrollment.Softw
 	plan.Artifact = f.artifact
 	plan.Detection.UninstallKey, plan.Detection.Version = bundle.BundleCode, bundle.Version
 	ops := nativeInstallerOperations()
-	// The production client advertises no Burn capability yet. This fixture
-	// alone uses the existing exact EXE process boundary after Burn preflight.
-	// The production builder still explicitly rejects the new Burn kind.
-	ops.run = func(ctx context.Context, p enrollment.SoftwarePlan, path string) (installerProcess, error) {
-		if p.Kind != "windows-burn" {
-			t.Fatal("owned Burn fixture changed the inspected plan kind")
-		}
-		p.Kind = "windows-exe"
-		result, err := deploy.RunSoftwareProcess(ctx, p, path)
-		return installerProcess{Started: result.Started, ExitCode: result.ExitCode}, err
-	}
 	// Only the test seam accepts this generated unsigned bundle. Production
 	// staging always requires actual Authenticode before retaining a candidate.
 	ops.stage = func(ctx context.Context, p enrollment.SoftwarePlan, root string) (installerStage, error) {

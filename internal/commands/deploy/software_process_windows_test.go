@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/open-uem/nats/enrollment"
+	"golang.org/x/sys/windows"
 )
 
 func softwareProcessPlan() enrollment.SoftwarePlan {
@@ -64,7 +65,7 @@ func TestNativeWindowsSoftwareEXEArgumentsAndProcessFacts(t *testing.T) {
 	}
 }
 
-func TestNativeWindowsSoftwareBurnCannotFallThroughToMSI(t *testing.T) {
+func TestNativeWindowsSoftwareBurnUsesExactPinnedEXE(t *testing.T) {
 	plan := softwareProcessPlan()
 	plan.Kind = "windows-burn"
 	plan.Arguments = []string{"/quiet", "/norestart"}
@@ -79,12 +80,19 @@ func TestNativeWindowsSoftwareBurnCannotFallThroughToMSI(t *testing.T) {
 		}
 		for _, path := range []string{"", `C:\owned\installer.exe`, `C:\owned\installer.msi`} {
 			called := false
-			result, err := runSoftwareProcess(t.Context(), plan, path, func(context.Context, string, string) (winGetProcessResult, error) {
+			result, err := runSoftwareProcess(t.Context(), plan, path, func(_ context.Context, executable, command string) (winGetProcessResult, error) {
 				called = true
-				return winGetProcessResult{}, nil
+				if executable != path || command != windows.ComposeCommandLine(append([]string{path}, plan.Arguments...)) {
+					t.Error("explicit Burn changed the pinned executable or fixed arguments")
+				}
+				return winGetProcessResult{Started: true, ExitCode: 0}, nil
 			})
-			if err == nil || called || result.Started || result.ExitCode != nil {
-				t.Fatal("unverified Burn process lifecycle reached another adapter")
+			if path == `C:\owned\installer.exe` {
+				if err != nil || !called || !result.Started || result.ExitCode == nil || *result.ExitCode != 0 {
+					t.Fatal("explicit Burn did not execute its retained artifact", result, err)
+				}
+			} else if err == nil || called || result.Started || result.ExitCode != nil {
+				t.Fatal("Burn with no pinned EXE reached another adapter")
 			}
 		}
 	}

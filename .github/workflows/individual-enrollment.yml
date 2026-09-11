@@ -149,6 +149,7 @@ jobs:
             'TestNativeWindowsSoftwareStagingExcludesWriteDeleteAndReplacement',
             'TestNativeWindowsSoftwareStagingVerifiesActualAuthenticodeWithoutExecution',
             'TestNativeWindowsSoftwareEXEArgumentsAndProcessFacts',
+            'TestNativeWindowsSoftwareBurnUsesExactPinnedEXE',
             'TestNativeWindowsSoftwareCancellationPreservesUncertainty',
             'TestNativeWindowsSoftwareHostAndPECompatibility',
             'TestNativeWindowsSoftwareBootSession',

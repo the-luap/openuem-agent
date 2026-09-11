@@ -63,14 +63,13 @@ func softwareCommand(plan enrollment.SoftwarePlan, stagedPath, msiexec string) (
 	if !plan.Valid() {
 		return "", "", ErrSoftwareProcess
 	}
-	if plan.Kind == "windows-exe" {
+	if plan.Kind == "windows-exe" || plan.Kind == "windows-burn" {
 		if !softwareLocalPath(stagedPath, ".exe") {
 			return "", "", ErrSoftwareProcess
 		}
 		return stagedPath, windows.ComposeCommandLine(append([]string{stagedPath}, plan.Arguments...)), nil
 	}
 	// New authenticated kinds cannot fall through to the MSI command builder.
-	// Burn execution remains unavailable until its native process lifecycle is verified.
 	if plan.Kind != "windows-msi" || !softwareLocalPath(msiexec, ".exe") {
 		return "", "", ErrSoftwareProcess
 	}
