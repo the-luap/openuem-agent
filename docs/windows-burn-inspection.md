@@ -94,11 +94,23 @@ archive names and native error details are not returned as errors.
 Portable tests cover multiple folders, reserved data, MSZIP block history,
 directory/expansion bounds, scope/bitness, schema ambiguity, truncation and read
 failures. The CAB and XML fuzz runs pass 3,412,453 and 629,931 inputs in
-20.528/21.283 seconds. Local race tests and tagged Windows AMD64/ARM64 compilation
-pass. The native CI tests now cover memory-only decoding, read/codec failures,
-cancelled admission, concurrent reuse and the complete registration reader
-against the generated WiX fixtures, including a changed PE bundle code. Their
-first result for this embedded-reader change is pending.
+20.528/21.283 seconds. The final local race suite passes in 1.588 seconds, and tagged Windows
+AMD64/ARM64 compilation passes. Native Windows race tests pass in 1.472 seconds,
+including memory-only decoding, read/codec failures, cancelled admission and
+concurrent reuse. The complete registration reader passes against all three
+generated WiX architectures in 15.10 seconds, including rejection of a changed PE
+bundle code. All Linux, macOS, Windows and generated-format CI jobs pass at agent
+commit `bf1f80adf9960387f82e414d60263b7054816c23`. These runtime checks use an AMD64
+Windows runner; native ARM64 process and physical endpoint acceptance remain open.
+
+The decoder uses the explicit `-1` notification result to stop after complete
+manifest output. FDI reports this as `FDIERROR_USER_ABORT`; returning `FALSE` from
+the close notification instead reports a target-file error. Success requires the
+explicit abort, complete expected bytes, unchanged cancellation state and closed
+native resources. Ordinary I/O errors and partial output never become identity
+evidence. Internal tests can inspect bounded counters/status codes; those
+diagnostics contain no member data, names or native addresses and are not exposed
+by the public reader.
 
 Before source-derived Burn delivery, authenticated plan/capability changes and
 the preflight helper must require this proof and compare it with the exact
