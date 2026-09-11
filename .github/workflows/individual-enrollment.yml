@@ -87,7 +87,9 @@ jobs:
             'TestNativeWindowsPackageProfileRejectsInvalidDataBeforeExecution',
             'TestNativeWindowsSoftwareRegistrationIsExactAndViewBound',
             'TestNativeWindowsSoftwareMSIAbsenceAndStrictHelper',
-            'TestNativeWindowsSoftwareRejectsMalformedUTF16'
+            'TestNativeWindowsSoftwareRejectsMalformedUTF16',
+            'TestNativeWindowsSoftwareStagingExcludesWriteDeleteAndReplacement',
+            'TestNativeWindowsSoftwareStagingVerifiesActualAuthenticodeWithoutExecution'
           )
           foreach ($test in $required) {
             if (-not ($records | Where-Object { $_.Test -eq $test -and $_.Action -eq 'pass' })) {

@@ -6,6 +6,10 @@ durable attempt before calling its native executor. The client is implemented an
 tested through private WSS subjects, but is not yet wired into service startup or
 the native MSI/EXE adapter. Existing console preparations do not start installers.
 
+[Protected installer staging](windows-installer-staging.md) now implements the
+separate HTTPS, hash, private-file and native-signature boundary. The native
+execution adapter and service integration remain open.
+
 The protected journal uses immutable numbered start/result records. Native
 Windows storage uses DPAPI and System/Administrator-only publication. A start
 record contains the signed encrypted envelope and response nonce, never plaintext

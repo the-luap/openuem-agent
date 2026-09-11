@@ -11,9 +11,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/open-uem/openuem-agent/internal/packagesignature"
 )
 
 func TestMain(m *testing.M) {
+	if handled, code := packagesignature.HandleHelper(os.Args[1:]); handled {
+		os.Exit(code)
+	}
 	if handled, code := HandleHelper(os.Args[1:]); handled {
 		os.Exit(code)
 	}
