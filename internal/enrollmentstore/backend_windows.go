@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"unsafe"
 
@@ -50,6 +53,86 @@ func OpenNative(directory string) (NativeBackend, error) {
 }
 
 func (b *windowsBackend) Close() error { b.closed.Store(true); return nil }
+
+// Inspect names without decrypting every absent bounded software slot. Any
+// software-prefixed entry, even malformed, prevents a fresh enrollment fallback.
+func (b *windowsBackend) hasSoftwareRecords() (bool, error) {
+	if b.closed.Load() || checkSystemDirectory(b.directory) != nil {
+		return false, ErrUnavailable
+	}
+	directory, err := os.Open(b.directory)
+	if err != nil {
+		return false, ErrUnavailable
+	}
+	defer directory.Close()
+	for {
+		entries, err := directory.Readdirnames(128)
+		for _, name := range entries {
+			if strings.HasPrefix(strings.ToLower(name), "software-") {
+				return true, nil
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		if err != nil {
+			return false, ErrUnavailable
+		}
+	}
+}
+
+// Journal recovery decrypts only named slots after checking this installation's
+// protected directory. Every software filename must be canonical; a result-only
+// slot is included so the journal can reject partial restores.
+func (b *windowsBackend) softwareRecordOrdinals() ([]int, error) {
+	if b.closed.Load() || checkSystemDirectory(b.directory) != nil {
+		return nil, ErrUnavailable
+	}
+	directory, err := os.Open(b.directory)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	defer directory.Close()
+	seen := make(map[int]bool)
+	count := 0
+	for {
+		names, err := directory.Readdirnames(128)
+		for _, name := range names {
+			count++
+			if count > 20000 {
+				return nil, ErrUnavailable
+			}
+			if !strings.HasPrefix(strings.ToLower(name), "software-") {
+				continue
+			}
+			record, ok := strings.CutSuffix(name, ".dpapi")
+			if !ok || !validRecord(record) {
+				return nil, ErrUnavailable
+			}
+			for _, stage := range []string{"start", "result"} {
+				if suffix, ok := strings.CutPrefix(record, "software-"+stage+"-v1-"); ok {
+					n, parseErr := strconv.Atoi(suffix)
+					if parseErr != nil {
+						return nil, ErrUnavailable
+					}
+					seen[n] = true
+				}
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, ErrUnavailable
+		}
+	}
+	ordinals := make([]int, 0, len(seen))
+	for n := range seen {
+		ordinals = append(ordinals, n)
+	}
+	slices.Sort(ordinals)
+	return ordinals, nil
+}
 
 func (b *windowsBackend) Load(record string) ([]byte, error) {
 	if !validRecord(record) || b.closed.Load() || checkSystemDirectory(b.directory) != nil {

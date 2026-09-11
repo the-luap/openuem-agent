@@ -109,6 +109,43 @@ static OSStatus openuem_keychain_create(SecKeychainRef keychain, const char *ser
     return status;
 }
 
+// Inventory only this installation's item attributes. No key data, other
+// services or default keychains are queried. Unknown software names also count.
+static OSStatus openuem_keychain_has_software(SecKeychainRef keychain, const char *service, int *present) {
+    *present = 0;
+    OSStatus status = SecKeychainSetUserInteractionAllowed(false);
+    if (status != errSecSuccess) return status;
+    SecKeychainStatus state = 0;
+    status = SecKeychainGetStatus(keychain, &state);
+    if (status != errSecSuccess) return status;
+    if (!(state & kSecUnlockStateStatus)) return errSecInteractionNotAllowed;
+    CFMutableDictionaryRef query = openuem_keychain_query(service, "unused");
+    if (!query) return errSecAllocate;
+    CFDictionaryRemoveValue(query, kSecAttrAccount);
+    const void *entries[] = {keychain};
+    CFArrayRef search = CFArrayCreate(kCFAllocatorDefault, entries, 1, &kCFTypeArrayCallBacks);
+    if (!search) { CFRelease(query); return errSecAllocate; }
+    CFDictionarySetValue(query, kSecMatchSearchList, search);
+    CFDictionarySetValue(query, kSecMatchLimit, kSecMatchLimitAll);
+    CFDictionarySetValue(query, kSecReturnAttributes, kCFBooleanTrue);
+    CFTypeRef value = NULL;
+    status = SecItemCopyMatching(query, &value);
+    CFRelease(search); CFRelease(query);
+    if (status == errSecItemNotFound) status = errSecSuccess;
+    else if (status == errSecSuccess) {
+        if (!value || CFGetTypeID(value) != CFArrayGetTypeID()) status = errSecDecode;
+        else for (CFIndex i = 0; i < CFArrayGetCount((CFArrayRef)value); i++) {
+            CFTypeRef item = CFArrayGetValueAtIndex((CFArrayRef)value, i);
+            if (!item || CFGetTypeID(item) != CFDictionaryGetTypeID()) { status = errSecDecode; break; }
+            CFTypeRef account = CFDictionaryGetValue((CFDictionaryRef)item, kSecAttrAccount);
+            if (!account || CFGetTypeID(account) != CFStringGetTypeID()) { status = errSecDecode; break; }
+            if (CFStringHasPrefix((CFStringRef)account, CFSTR("software-"))) { *present = 1; break; }
+        }
+    }
+    if (value) CFRelease(value);
+    return status;
+}
+
 static void openuem_secret_free(void *data, size_t length) {
     if (!data) return;
     volatile unsigned char *bytes = data;
@@ -173,6 +210,21 @@ func (b *keychainBackend) Close() error {
 		b.keychain = 0
 	}
 	return nil
+}
+
+func (b *keychainBackend) hasSoftwareRecords() (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.keychain == 0 {
+		return false, ErrUnavailable
+	}
+	service := C.CString(b.service)
+	defer C.free(unsafe.Pointer(service))
+	var present C.int
+	if C.openuem_keychain_has_software(b.keychain, service, &present) != C.errSecSuccess {
+		return false, ErrUnavailable
+	}
+	return present != 0, nil
 }
 
 func (b *keychainBackend) Load(record string) ([]byte, error) {

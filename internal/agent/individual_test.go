@@ -95,6 +95,12 @@ RemoteAssistanceDisabled = false
 
 func nativeRuntimeFixture(t *testing.T) (*Agent, *nats.Conn, jetstream.JetStream) {
 	t.Helper()
+	a, worker, js, _ := nativeRuntimeFixtureWithIssuer(t)
+	return a, worker, js
+}
+
+func nativeRuntimeFixtureWithIssuer(t *testing.T) (*Agent, *nats.Conn, jetstream.JetStream, *ecdsa.PrivateKey) {
+	t.Helper()
 	keys, err := enrollment.GenerateKeys()
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +196,7 @@ func nativeRuntimeFixture(t *testing.T) (*Agent, *nats.Conn, jetstream.JetStream
 		t.Fatal(err)
 	}
 	t.Cleanup(a.Stop)
-	return a, worker, js
+	return a, worker, js, caKey
 }
 
 func TestIndividualAgentSendsItsActualReportOverWSSAndPrivateSubjects(t *testing.T) {

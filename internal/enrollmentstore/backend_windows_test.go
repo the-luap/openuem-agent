@@ -44,6 +44,16 @@ func TestWindowsDPAPIDurableRotationJournal(t *testing.T) {
 	runDurableRotationJournal(t, b)
 }
 
+func TestWindowsDPAPIDurableSoftwareJournal(t *testing.T) {
+	b, _ := windowsFixture(t)
+	runDurableSoftwareJournal(t, b)
+}
+
+func TestWindowsDPAPISoftwareInventoryRejectsOrphanedEvidence(t *testing.T) {
+	b, _ := windowsFixture(t)
+	runRetainedSecurityPreventsEnrollment(t, b, softwareRecord("result", MaxSoftwareAttempts), restorePendingFixture(t))
+}
+
 func TestWindowsDPAPIPartialRestoreCannotReplaceLaterJournalEvidence(t *testing.T) {
 	b, _ := windowsFixture(t)
 	runRetainedSecurityPreventsEnrollment(t, b, rotationRecord(true, enrollment.MaxRotationAttempts), restorePendingFixture(t))

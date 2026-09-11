@@ -42,6 +42,43 @@ func TestMacKeychainDurableRotationJournal(t *testing.T) {
 	runDurableRotationJournal(t, f.backend)
 }
 
+func TestMacKeychainSoftwareInventoryUsesOnlyInstallationAttributes(t *testing.T) {
+	f := newKeychainFixture(t)
+	present, err := f.backend.hasSoftwareRecords()
+	if err != nil || present {
+		t.Fatal("empty installation had software history", err)
+	}
+	if err = f.backend.Create(pendingRecord, []byte("owned unrelated record")); err != nil {
+		t.Fatal(err)
+	}
+	present, err = f.backend.hasSoftwareRecords()
+	if err != nil || present {
+		t.Fatal("unrelated record matched software history", err)
+	}
+	if err = f.backend.Create(softwareRecord("result", MaxSoftwareAttempts), []byte("owned partial restore")); err != nil {
+		t.Fatal(err)
+	}
+	present, err = f.backend.hasSoftwareRecords()
+	if err != nil || !present {
+		t.Fatal("software result missed by native attribute inventory", err)
+	}
+	other, err := openFileKeychain(f.keychain.path, f.service+".other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	present, err = other.hasSoftwareRecords()
+	if err != nil || present {
+		t.Fatal("software inventory crossed installation namespace", err)
+	}
+	if err = f.keychain.Lock(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.backend.hasSoftwareRecords(); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("locked keychain appeared empty", err)
+	}
+}
+
 func newKeychainFixture(t *testing.T) *keychainFixture {
 	t.Helper()
 	directory := t.TempDir()

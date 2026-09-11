@@ -362,6 +362,9 @@ func (s *Store) loadOriginalIdentity(p *pending) (*Identity, error) {
 // Native read errors also fail closed; no surviving data is rewritten or removed.
 // Extend this inventory whenever another protected lifecycle record is introduced.
 func (s *Store) securityRecordsAbsent() bool {
+	if !s.softwareRecordsAbsent() {
+		return false
+	}
 	for _, name := range []string{recipientRecord, rotationAnchorRecord} {
 		data, err := s.backend.Load(name)
 		clear(data)

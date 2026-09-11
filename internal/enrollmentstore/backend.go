@@ -41,6 +41,16 @@ func validRecord(record string) bool {
 	if record == pendingRecord || record == identityRecord || record == recipientRecord || record == rotationAnchorRecord {
 		return true
 	}
+	for _, prefix := range []string{"software-start-v1-", "software-result-v1-", "software-recipient-v1-"} {
+		if suffix, ok := strings.CutPrefix(record, prefix); ok {
+			limit := MaxSoftwareAttempts
+			if prefix == "software-recipient-v1-" {
+				limit = MaxIdentityRenewalAttempts + 1
+			}
+			n, err := strconv.Atoi(suffix)
+			return err == nil && n >= 1 && n <= limit && suffix == fmt.Sprintf("%04d", n)
+		}
+	}
 	for _, prefix := range []string{"rotation-start-v1-", "rotation-result-v1-"} {
 		if suffix, ok := strings.CutPrefix(record, prefix); ok {
 			n, err := strconv.Atoi(suffix)

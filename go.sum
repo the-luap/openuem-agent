@@ -135,6 +135,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/the-luap/openuem-nats v0.11.1-0.20260910125305-07a6ac8e2a5e h1:kscHFW2DmrBDqQGQt6V+eGvl6MMUMclhod3nLRrVGx8=
 github.com/the-luap/openuem-nats v0.11.1-0.20260910125305-07a6ac8e2a5e/go.mod h1:GWRchq7CFK1F+ELrC4N7OeOptBGvaJbBwjdR6JS1aQc=
+github.com/the-luap/openuem-nats v0.11.1-0.20260911084735-b932b7b43161 h1:Tdzl4BWLyAMvXh7RVTcl4T7/wHdV35ssJfkh0isNF+U=
+github.com/the-luap/openuem-nats v0.11.1-0.20260911084735-b932b7b43161/go.mod h1:GWRchq7CFK1F+ELrC4N7OeOptBGvaJbBwjdR6JS1aQc=
 github.com/tklauser/go-sysconf v0.3.16 h1:frioLaCQSsF5Cy1jgRBrzr6t502KIIwQ0MArYICU0nA=
 github.com/tklauser/go-sysconf v0.3.16/go.mod h1:/qNL9xxDhc7tx3HSRsLWNnuzbVfh3e7gh/BmM179nYI=
 github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9RXw=
