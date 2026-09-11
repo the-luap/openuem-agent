@@ -134,7 +134,12 @@ software, Burn readers and agent admission in 26.115/1.882/20.023 seconds. Tagge
 Windows AMD64/ARM64 compilation and focused Windows vet pass. The generated native
 fixture now additionally exercises the real helper on native machine/user,
 foreign-architecture and x86 bundles, plus wrong identity/version/digest, retained
-stage closure, cancellation and removal. Its new CI results are still pending.
+stage closure, cancellation and removal. All four native helper cases pass in
+13.58 seconds at `767bf1a9ec62456807bc783c2cd60db9dbc6f30e`; the generated layout
+suite also passes in 15.44 seconds with race detection. Linux and macOS CI pass.
+The separate Windows storage suite failed during isolated broker provisioning
+and cleanup. Its package processes now run serially to reduce shared runner
+disk/CPU contention; production timeouts and assertions remain unchanged.
 
 The agent currently requests no Burn capability and rejects unsolicited capability
 replies and new Burn work before durable attempt admission. The process builder

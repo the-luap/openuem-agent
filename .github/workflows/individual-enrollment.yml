@@ -96,7 +96,8 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Native DPAPI, private publication and Local System recovery
-        run: go test -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware ./internal/burnbundle
+        # Native broker stores and process fixtures share the runner's disk/CPU.
+        run: go test -p 1 -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware ./internal/burnbundle
       - name: Owned Windows package processes and observations execute without skips
         shell: pwsh
         run: |
