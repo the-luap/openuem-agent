@@ -36,3 +36,8 @@ from that local server into the real Authenticode helper. A deliberately damaged
 copy with its own matching SHA-256 must still fail native signature policy. Neither
 copy is executed; no certificate is imported and OS trust is unchanged. These
 checks are not physical package-installation acceptance.
+
+The separate [Burn layout reader](windows-burn-inspection.md) locates a bounded
+UX cabinet and section-declared bundle code without executing the package. It
+does not yet establish embedded registration identity and is not wired into
+native preflight or execution.
