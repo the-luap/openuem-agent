@@ -41,6 +41,16 @@ func TestWinGetProcessHelper(t *testing.T) {
 		_, _ = fmt.Fprint(os.Stderr, strings.Repeat("e", 1<<20))
 	case "child":
 		time.Sleep(30 * time.Second)
+	case "owner":
+		executable, err := os.Executable()
+		if err != nil {
+			os.Exit(95)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err = runWinGetProcess(ctx, executable, winGetHelperArgs("tree", args[1])); err != nil {
+			os.Exit(96)
+		}
 	case "tree", "unfinished-child":
 		executable, err := os.Executable()
 		if err != nil {
@@ -75,7 +85,7 @@ func TestNativeWindowsWinGetPreservesArgumentsAndExitCode(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	want := []string{"", "Vendor.Product;$(echo)'&`", "1.2 beta", `quoted"value`, `ends with slash\`, "--all", "Grüße"}
+	want := []string{"", "Vendor.Product;$(echo)'&`", "1.2 beta", `quoted"value`, `ends with slash\`, "--all", "Unicode 🐈"}
 	result, err := runWinGetProcess(ctx, executable, winGetHelperArgs(append([]string{"echo"}, want...)...))
 	if err != nil || !result.Started || result.ExitCode != 0 || result.Stderr != "diagnostic" {
 		t.Fatalf("echo = %+v, %v", result, err)
@@ -178,6 +188,29 @@ func TestNativeWindowsWinGetRejectsUnfinishedChildWithClosedOutput(t *testing.T)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("unfinished child exceeded drain deadline")
+	}
+	assertWinGetFixtureExited(t, handles)
+}
+
+func TestNativeWindowsWinGetOwnerExitTerminatesOwnedTree(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pidFile := filepath.Join(t.TempDir(), "owned-processes.json")
+	owner := exec.Command(executable, winGetHelperArgs("owner", pidFile)...)
+	if err = owner.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = owner.Process.Kill(); _ = owner.Wait() }()
+	handles := openWinGetFixtureProcesses(t, pidFile, 2)
+	// This deliberately bypasses the runner's cancellation/cleanup code. The
+	// operating system must close the owner's private job handle on process exit.
+	if err = owner.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if err = owner.Wait(); err == nil {
+		t.Fatal("fixture owner did not exit abnormally")
 	}
 	assertWinGetFixtureExited(t, handles)
 }

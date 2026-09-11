@@ -82,6 +82,7 @@ jobs:
             'TestNativeWindowsWinGetBoundsOutputAndRejectsStartup',
             'TestNativeWindowsWinGetCancellationJoinsOwnedTree',
             'TestNativeWindowsWinGetRejectsUnfinishedChildWithClosedOutput',
+            'TestNativeWindowsWinGetOwnerExitTerminatesOwnedTree',
             'TestNativeWindowsPackageShutdownJoinsResultAndClosesAdmission'
           )
           foreach ($test in $required) {

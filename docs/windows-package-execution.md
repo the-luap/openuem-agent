@@ -82,7 +82,10 @@ Required native Windows CI fixtures launch only copies of the test executable.
 They check exact arguments, full exit codes, large output, startup rejection,
 cancelled parent/child termination, preservation of an unrelated fixture process,
 unfinished children that closed their output, and service shutdown joining result
-handling. The workflow requires explicit passing events for these native tests;
+handling. A separate owner-crash fixture bypasses runner cleanup and verifies
+that Windows closes the private job and terminates both owned descendants.
+Argument round trips include a supplementary Unicode character. The workflow
+requires explicit passing events for these native tests;
 a skipped test does not satisfy the check. Cross-compilation alone is not native
 execution evidence.
 
@@ -93,3 +96,8 @@ pending-ack JSON file is not a transactional outbox or a crash recovery guarante
 The legacy list helper, custom MSI/PowerShell tasks, and Brew/Flatpak process
 lifetime handling are outside this execution change. No physical or enrolled
 endpoint is used by these tests.
+
+Commit `81ed1be` passed the
+[native Windows CI job](https://github.com/the-luap/openuem-agent/actions/runs/34566414541/job/103159346316),
+including all five required execution/shutdown tests. The subsequent owner-crash
+and supplementary Unicode cases require their own updated native CI result.
