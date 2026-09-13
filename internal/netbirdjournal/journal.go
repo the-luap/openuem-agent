@@ -58,6 +58,7 @@ type Journal struct {
 	installation string
 	boot         Boot
 	entries      map[string]*entry
+	withdrawals  map[string]*withdrawal
 	last         *entry
 	clock        time.Time
 	poisoned     bool
@@ -74,7 +75,7 @@ func Open(directory, installation string, identity netbirdcommand.Identity, boot
 	if err != nil {
 		return nil, err
 	}
-	j := &Journal{files: f, installation: installation, identity: identity, boot: boot, entries: map[string]*entry{}}
+	j := &Journal{files: f, installation: installation, identity: identity, boot: boot, entries: map[string]*entry{}, withdrawals: map[string]*withdrawal{}}
 	accepted := false
 	defer func() {
 		if !accepted {
@@ -100,15 +101,27 @@ func Open(directory, installation string, identity netbirdcommand.Identity, boot
 		}
 	}
 	for index := 1; index <= MaxAttempts; index++ {
+		if names[withdrawalName(index)] {
+			w := &withdrawal{}
+			if index != len(j.entries)+len(j.withdrawals)+1 || f.read(withdrawalName(index), w) != nil || !w.valid(identity.DeviceID) || w.Index != index || j.entries[w.Receipt.RequestID] != nil || j.withdrawals[w.Receipt.RequestID] != nil {
+				return nil, ErrUnavailable
+			}
+			if j.last != nil && j.last.release == nil && (j.last.result == nil || j.last.result.Receipt.Status == "unconfirmed") {
+				return nil, ErrUnavailable
+			}
+			j.withdrawals[w.Receipt.RequestID] = w
+			j.advance(w.RecordedAt)
+			continue
+		}
 		name := recordName(index, "start")
 		if !names[name] {
 			continue
 		}
-		if index != len(j.entries)+1 {
+		if index != len(j.entries)+len(j.withdrawals)+1 {
 			return nil, ErrUnavailable
 		}
 		e := &entry{index: index}
-		if f.read(name, &e.start) != nil || !e.start.valid(identity.DeviceID) || j.entries[e.start.RequestID] != nil {
+		if f.read(name, &e.start) != nil || !e.start.valid(identity.DeviceID) || j.entries[e.start.RequestID] != nil || j.withdrawals[e.start.RequestID] != nil {
 			return nil, ErrUnavailable
 		}
 		if j.last != nil && j.last.result == nil && j.last.release == nil || j.last != nil && j.last.result != nil && j.last.result.Receipt.Status == "unconfirmed" && j.last.release == nil {
@@ -184,6 +197,13 @@ func (j *Journal) Lookup(c netbirdcommand.Command) (*netbirdcommand.Receipt, err
 	if err != nil || c.Identity != j.identity {
 		return nil, ErrConflict
 	}
+	if w := j.withdrawals[c.RequestID]; w != nil {
+		if !w.Receipt.Matches(c) {
+			return nil, ErrConflict
+		}
+		r := w.Receipt
+		return &r, nil
+	}
 	e := j.entries[c.RequestID]
 	if e == nil {
 		return nil, nil
@@ -207,6 +227,13 @@ func (j *Journal) Begin(c netbirdcommand.Command, now time.Time) (bool, *netbird
 	if err != nil || c.Identity != j.identity {
 		return false, nil, ErrConflict
 	}
+	if w := j.withdrawals[c.RequestID]; w != nil {
+		if !w.Receipt.Matches(c) {
+			return false, nil, ErrConflict
+		}
+		r := w.Receipt
+		return false, &r, nil
+	}
 	if e := j.entries[c.RequestID]; e != nil {
 		if digest != e.start.CommandHash {
 			return false, nil, ErrConflict
@@ -220,10 +247,10 @@ func (j *Journal) Begin(c netbirdcommand.Command, now time.Time) (bool, *netbird
 	if j.last != nil && j.last.release == nil && (j.last.result == nil || j.last.result.Receipt.Status == "unconfirmed") {
 		return false, nil, ErrPending
 	}
-	if len(j.entries) >= MaxAttempts {
+	if len(j.entries)+len(j.withdrawals) >= MaxAttempts {
 		return false, nil, ErrFull
 	}
-	e := &entry{index: len(j.entries) + 1, start: start{RequestID: c.RequestID, DeviceID: c.DeviceID, Revision: c.Revision, CommandHash: digest, Operation: c.Operation, IssuedAt: c.IssuedAt.UTC(), ExpiresAt: c.ExpiresAt.UTC(), RecordedAt: now.UTC(), Boot: j.boot}, active: true}
+	e := &entry{index: len(j.entries) + len(j.withdrawals) + 1, start: start{RequestID: c.RequestID, DeviceID: c.DeviceID, Revision: c.Revision, CommandHash: digest, Operation: c.Operation, IssuedAt: c.IssuedAt.UTC(), ExpiresAt: c.ExpiresAt.UTC(), RecordedAt: now.UTC(), Boot: j.boot}, active: true}
 	if err = j.files.create(recordName(e.index, "start"), e.start); err != nil {
 		j.poisoned = true
 		return false, nil, ErrUnavailable

@@ -23,7 +23,7 @@ func (j *Journal) stateLocked(now time.Time) netbirdcommand.State {
 	if !j.available() || !j.clockValid(now) {
 		return netbirdcommand.State{Status: "unavailable"}
 	}
-	s := netbirdcommand.State{Status: "ready", Remaining: MaxAttempts - len(j.entries)}
+	s := netbirdcommand.State{Status: "ready", Remaining: MaxAttempts - len(j.entries) - len(j.withdrawals)}
 	if s.Remaining == 0 {
 		s.Status = "full"
 	}
@@ -52,8 +52,9 @@ func (j *Journal) stateLocked(now time.Time) netbirdcommand.State {
 		Identity     netbirdcommand.Identity
 		Boot         Boot
 		Count        int
+		Withdrawals  int
 		Last         any
-	}{j.installation, j.identity, j.boot, len(j.entries), last})
+	}{j.installation, j.identity, j.boot, len(j.entries), len(j.withdrawals), last})
 	if err != nil {
 		return netbirdcommand.State{Status: "unavailable"}
 	}
@@ -77,6 +78,13 @@ func (j *Journal) queryLocked(id, digest string) (*netbirdcommand.Receipt, strin
 	}
 	if !netbirdcommand.ValidRequestID(id) || !netbirdcommand.ValidDigest(digest) {
 		return nil, "", ErrConflict
+	}
+	if w := j.withdrawals[id]; w != nil {
+		if w.Receipt.CommandHash != digest {
+			return nil, "", ErrConflict
+		}
+		r := w.Receipt
+		return &r, w.WithdrawalID, nil
 	}
 	e := j.entries[id]
 	if e == nil {
@@ -116,11 +124,15 @@ func (j *Journal) Control(ctx context.Context, data []byte) (netbirdcommand.Cont
 		r.State = j.stateLocked(now)
 		return r, nil
 	}
-	if c.Kind == "release" {
-		err = j.releaseLocked(c.ReferenceID, c.CommandHash, c.RequestID, now)
+	if c.Kind == "release" || c.Kind == "withdraw" {
+		if c.Kind == "withdraw" {
+			err = j.withdrawLocked(c, now)
+		} else {
+			err = j.releaseLocked(c.ReferenceID, c.CommandHash, c.RequestID, now)
+		}
 		if err != nil {
 			switch {
-			case errors.Is(err, ErrPending):
+			case errors.Is(err, ErrPending), errors.Is(err, ErrFull):
 				r.Outcome = "blocked"
 			case errors.Is(err, ErrConflict):
 				r.Outcome = "conflict"
@@ -138,6 +150,10 @@ func (j *Journal) Control(ctx context.Context, data []byte) (netbirdcommand.Cont
 		r.Outcome = "unavailable"
 	case receipt == nil:
 		r.Outcome = "missing"
+	case receipt.Status == "withdrawn" && c.Version != netbirdcommand.RecoveryVersion:
+		r.Outcome = "conflict"
+	case c.Version == netbirdcommand.RecoveryVersion && (receipt.Revision != c.Revision || receipt.Operation != c.Operation):
+		r.Outcome = "conflict"
 	default:
 		r.Receipt, r.ReleaseID = *receipt, releaseID
 	}

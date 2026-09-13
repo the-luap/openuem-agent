@@ -89,7 +89,7 @@ and syncs the directory; Windows uses a write-through move without replacement.
 An interrupted publication may leave an unavailable journal requiring explicit
 recovery. Do not delete records or restore a coherent older journal snapshot to
 retry a command: local metadata cannot prove what happened outside that retained
-history. The journal has a hard limit of 4,096 attempts and does not prune
+history. The journal has a hard limit of 4,096 attempts/withdrawals and does not prune
 duplicate-protection records automatically.
 
 ## Uncertainty and explicit release
@@ -166,8 +166,43 @@ Its [reviewed resolution flow](https://github.com/the-luap/openuem-console/blob/
 persists immutable intent before one release control and requires matching
 retained evidence before opening console admission. Lost replies use read-only
 receipt queries under the current certificate with the same resolution UUID.
-Original unconfirmed outcomes remain unchanged. Missing evidence and an
-undelivered release stay blocked; no automatic resend or journal reset is used.
-Registration,
-provider key lifecycle, installation/uninstallation, authoritative peer deletion
-and physical device acceptance remain open.
+Original unconfirmed outcomes remain unchanged. Managed registration and
+combined provider/agent resolution are implemented in the console. Unknown
+provider key identity, undelivered control requests and uncertain execution after
+a withdrawal conflict still need explicit recovery. Installation/uninstallation,
+authoritative peer deletion and physical device acceptance remain open.
+
+
+## Permanent withdrawal before execution
+
+Control version two requires the original UUID, complete command digest,
+revision and operation under current identity. A correlated version-two receipt
+query proves support and can report missing evidence; it does not itself authorize
+new work. An explicitly reviewed `withdraw` control atomically refuses every
+existing execution attempt and stores a permanent `withdrawn` record before
+returning its resolution UUID. The original command can no longer be admitted,
+including when its broker delivery arrives later or after service restart.
+
+Withdrawal records contain only bounded receipt metadata, resolution identity,
+recorded time, native boot evidence and sequence index. They use the same private
+atomic publication path and contiguous sequence as execution attempts. Capacity,
+clock rollback, ownership, duplicate/corrupt records and publication failures
+remain enforced. A missing earlier withdrawal cannot become an empty slot before
+a later execution. Old agents reject the unfamiliar record rather than opening
+an empty history. Coherent rollback of the entire protected journal remains
+outside local storage guarantees; do not restore old history to repeat work.
+
+A same-identity withdrawal is idempotent; another resolution UUID or different
+reference metadata conflicts. Version-two receipt queries recover retained
+proof without repeating the mutation, using a renewed current certificate while
+preserving the original digest. Version-one control queries cannot establish this
+new capability. A retained completed or unconfirmed execution cannot be rewritten
+as withdrawn. Journal admission and withdrawal share one mutex, so a simultaneous
+command either starts with permanent attempt evidence or is permanently denied.
+
+Owned race, filesystem and broker tests cover both orderings, response loss,
+late registration delivery, restart, certificate renewal, corrupt and missing
+records, capacity, cancellation, expiry and publication failure. The broker tests
+replace the command runner and verify zero CLI calls for withdrawn registrations.
+Console resolution requires provider key absence before requesting withdrawal
+and matching permanent proof before opening its own admission barrier.

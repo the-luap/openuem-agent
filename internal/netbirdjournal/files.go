@@ -97,6 +97,7 @@ func (f *files) names() (map[string]bool, error) {
 	defer directory.Close()
 	found := map[string]bool{}
 	starts := map[int]bool{}
+	admissions := map[int]bool{}
 	references := map[int]bool{}
 	count := 0
 	for {
@@ -122,11 +123,17 @@ func (f *files) names() (map[string]bool, error) {
 				return nil, ErrUnavailable
 			}
 			valid := false
-			for _, kind := range []string{"start", "result", "release"} {
+			for _, kind := range []string{"start", "result", "release", "withdrawal"} {
 				if name == recordName(index, kind) {
 					valid = true
-					if kind == "start" {
-						starts[index] = true
+					if kind == "start" || kind == "withdrawal" {
+						if admissions[index] {
+							return nil, ErrUnavailable
+						}
+						admissions[index] = true
+						if kind == "start" {
+							starts[index] = true
+						}
 					} else {
 						references[index] = true
 					}
