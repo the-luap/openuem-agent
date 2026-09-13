@@ -277,6 +277,7 @@ func (a *Agent) readConfigFile(configFile string) error {
 	}
 
 	a.applyIndividualConfig()
+	a.netbird.verifyConfig(a.Config)
 	log.Println("[INFO]: agent has read its settings from the INI file")
 	return nil
 }

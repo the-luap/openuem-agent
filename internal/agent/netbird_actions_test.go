@@ -9,7 +9,6 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	openuem "github.com/open-uem/nats"
-	"github.com/open-uem/openuem-agent/internal/commands/netbird"
 )
 
 func TestNetbirdSubscriptionsRejectInvalidRequests(t *testing.T) {
@@ -30,7 +29,7 @@ func TestNetbirdSubscriptionsRejectInvalidRequests(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	a := &Agent{ctx: ctx, Config: Config{UUID: "owned-netbird-device"}, NATSConnection: connection}
-	for _, subscribe := range []func() error{a.RegisterNetBirdSubscribe, a.SwitchProfileNetBirdSubscribe, a.NetBirdUpSubscribe, a.NetBirdDownSubscribe, a.RefreshNetBirdSubscribe} {
+	for _, subscribe := range []func() error{a.InstallNetBirdSubscribe, a.UninstallNetBirdSubscribe, a.RegisterNetBirdSubscribe, a.SwitchProfileNetBirdSubscribe, a.NetBirdUpSubscribe, a.NetBirdDownSubscribe, a.RefreshNetBirdSubscribe} {
 		if err := subscribe(); err != nil {
 			t.Fatal(err)
 		}
@@ -38,8 +37,8 @@ func TestNetbirdSubscriptionsRejectInvalidRequests(t *testing.T) {
 	if err := connection.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	for _, operation := range []string{"register", "switchprofile", "up", "down"} {
-		for _, data := range []string{"{", `{"management_url":"http://invalid.example.test"}`, `{"management_url":"https://example.test","management_url":"https://other.test"}`, `{"management_url":"https://example.test","profile":null}`} {
+	for _, operation := range []string{"install", "uninstall", "register", "switchprofile", "up", "down"} {
+		for _, data := range []string{"", "{", `{"management_url":"https://example.test"}`, `{"management_url":"https://example.test","key":"private-owned-key"}`, `{"management_url":"http://invalid.example.test"}`, `{"management_url":"https://example.test","management_url":"https://other.test"}`, `{"management_url":"https://example.test","profile":null}`} {
 			message, err := connection.Request("agent.netbird."+operation+".owned-netbird-device", []byte(data), 2*time.Second)
 			if err != nil {
 				t.Fatalf("%s did not return a rejection: %v", operation, err)
@@ -48,7 +47,7 @@ func TestNetbirdSubscriptionsRejectInvalidRequests(t *testing.T) {
 			if err := json.Unmarshal(message.Data, &result); err != nil {
 				t.Fatal(err)
 			}
-			if result.Error != netbird.ErrInvalidAction.Error() || result.Installed {
+			if result.Error != errNetbirdLegacy.Error() || result.Installed {
 				t.Fatalf("%s did not reject safely", operation)
 			}
 		}

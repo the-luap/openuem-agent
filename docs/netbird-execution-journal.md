@@ -2,10 +2,10 @@
 
 The agent contains an expiring-command executor, private local journal and joined
 broker service adapter for NetBird `up`, `down` and `switchprofile` operations.
-They are not yet connected to the production agent subscriptions. Native identity
-initialization, coordinated legacy mutation handling and reviewed console routing
-are required before enabling the new subject. Legacy NetBird handlers do not
-acquire this journal and must not be presented as durable operations.
+Native startup now opens this journal and attaches the production managed
+subscriptions. Old mutating NetBird subjects and profile steps are rejected,
+including when the managed runtime is unavailable. They cannot bypass a retained
+uncertainty barrier or be translated into commands with random new UUIDs.
 
 ## Protocol and execution
 
@@ -44,6 +44,21 @@ The immutable anchor binds installation, device, organization/site and enrollmen
 mode. Renewable certificates are checked against the current caller identity,
 while older attempts remain bound to their original command digests. Changing
 scope or installation cannot silently create an empty journal at the same path.
+
+Individual startup derives the installation digest from the validated enrollment
+origin, exact device/scope, certificate public key and broker public key. It uses
+`netbird-journal` under the protected individual identity directory, independent
+of versioned executable paths. Renewal changes the current certificate hash and
+deadline without changing installation ownership. The prior service must join
+before the renewed owner can reopen the same journal.
+
+Legacy startup validates its configured device/scope, client certificate chain,
+key pair, expiry and configuration parent ownership. Its installation digest
+also binds the configured broker authority. Shared legacy credentials still do
+not establish an individual cryptographic device identity. The parent may allow
+public reading, but untrusted write access and final symlinks are rejected;
+the journal child itself stays private. Runtime configuration scope/mode changes
+close the managed service and require a restart with valid retained ownership.
 
 Each attempt has an immutable start record and, when available, an immutable
 result and explicit release record. These contain only identifiers, digests,
@@ -116,7 +131,7 @@ Close atomically stops admission, cancels command contexts and unsubscribes, the
 joins admitted handlers before closing the journal and releasing its OS lease.
 Callers must retain the native identity until Close returns.
 
-## Validation and remaining wiring
+## Validation and remaining integration
 
 Tests use private temporary directories, owned subprocesses and an owned NATS
 server. They cover durable replay, response loss, scope/certificate changes,
@@ -129,10 +144,14 @@ The action runner is replaced with
 an owned test callback; these checks never invoke an installed NetBird client or
 contact a provider.
 
-Production wiring still needs native identity and stable directory selection,
-attachment of the service adapter, coordinated handling of legacy mutations and
-the reviewed console history/release flow. Live readiness, exact wire evidence
-in console attempts and agent resolution RPC are implemented components.
-Registration,
+Native agent shutdown closes and joins managed execution before releasing the
+individual identity or service lease. Native tests cover renewal-stable ownership,
+retired-certificate rejection, configuration changes, legacy certificate/parent
+validation and old-subject/profile rejection. The Linux agent, journal and command
+race suites pass in 28.402, 3.404 and 1.231 seconds.
+
+The console now has review, request, receipt, history and queued cancellation.
+Coordinated console resolution intent/evidence and its reviewed release flow
+remain required. Registration,
 provider key lifecycle, installation/uninstallation, authoritative peer deletion
 and physical device acceptance remain open.
