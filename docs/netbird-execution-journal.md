@@ -1,0 +1,108 @@
+# NetBird execution journal
+
+The agent contains an expiring-command executor and a private local journal for
+NetBird `up`, `down` and `switchprofile` operations. They are not yet connected to
+the production agent subscriptions. Coordinated console admission, current
+identity checks, service shutdown, history and resolution routing are required
+before enabling the new subject. Legacy NetBird handlers do not acquire this
+journal and must not be presented as durable operations.
+
+## Protocol and execution
+
+The shared `netbirdcommand` protocol carries a request UUID, exact device and
+organization/site, enrollment mode, certificate hash, source revision, operation,
+management URL, profile and an issue/expiry interval of at most two minutes.
+Its separate `agent.netbird.command.<device>` subject prevents legacy handlers
+from interpreting an envelope as old settings. The strict codec checks required
+fields, duplicate/unknown/null fields, types, size and operation inputs.
+
+`DurableExecutor` validates the envelope and reads matching retained evidence
+before admitting work. A canonical digest covers all command inputs. It commits
+an attempt before calling the existing fixed-binary NetBird action sequence,
+applies the command expiry and service context, joins that sequence and commits
+its result before returning an execution receipt. A positive result requires the
+sequence and bounded observation to succeed before the deadline.
+
+The executor admits one command at a time. Concurrent work receives a correlated
+busy receipt. An existing UUID with the same digest returns retained evidence;
+different input under the same UUID fails. An expired envelope may retrieve an
+existing receipt but cannot create a new attempt. A failed or cancelled command
+is unconfirmed. Result persistence failure never returns success and makes the
+live journal unavailable. Transport response loss never triggers a repeat CLI
+invocation.
+
+## Private storage and identity
+
+`netbirdjournal.Open` requires a trusted installation parent, a stable installation
+digest, current device identity and native boot evidence. Its child directory
+must be private before any record is written. Existing shared directories fail
+without permission repair. Unix uses private service/root-owned files; Windows
+uses private service/System/Administrators ACLs. This metadata journal does not
+add a plaintext fallback to individual enrollment secret storage.
+
+The immutable anchor binds installation, device, organization/site and enrollment
+mode. Renewable certificates are checked against the current caller identity,
+while older attempts remain bound to their original command digests. Changing
+scope or installation cannot silently create an empty journal at the same path.
+
+Each attempt has an immutable start record and, when available, an immutable
+result and explicit release record. These contain only identifiers, digests,
+status, timestamps and native boot evidence. Command URLs, profile names, provider
+tokens, setup keys and arbitrary subprocess output are absent.
+
+An OS file lock excludes other journal owners across processes. The owner keeps
+the private directory and lock descriptors open and checks their current file
+identities. Records must be bounded private regular files with one link.
+Symlinks, unexpected names, gaps, orphan result/release records, corrupt or
+noncanonical documents and incomplete publication files fail closed. Readers
+never turn incomplete data into an empty slot.
+
+Publication writes a private temporary file, syncs and closes it, then publishes
+without replacing an existing record. Unix links and removes the temporary name
+and syncs the directory; Windows uses a write-through move without replacement.
+An interrupted publication may leave an unavailable journal requiring explicit
+recovery. Do not delete records or restore a coherent older journal snapshot to
+retry a command: local metadata cannot prove what happened outside that retained
+history. The journal has a hard limit of 4,096 attempts and does not prune
+duplicate-protection records automatically.
+
+## Uncertainty and explicit release
+
+| Retained state | New execution | Explicit release |
+| --- | --- | --- |
+| Completed result | Allowed | Not applicable |
+| Joined, unconfirmed result | Blocked | Allowed after authorized review |
+| Attempt without result in the same kernel boot | Blocked | Refused; a CLI process may have survived the agent |
+| Attempt without result after a verified later kernel boot | Blocked | Allowed after authorized review |
+
+Restarting the agent alone never establishes that an orphaned CLI stopped. Linux
+uses the kernel boot UUID; macOS uses its kernel boot-session UUID. Windows
+requires both a later loader sequence and a different original System process
+creation time, distinguishing a reboot from process restart, resume and clock
+changes. A reboot never automatically releases uncertainty or repeats a command.
+Release has its own immutable UUID and preserves the original unconfirmed
+outcome. A retained clock watermark also refuses new work after a substantial
+clock rollback.
+
+Only a live owner that admitted an attempt may finish it. Recovery can report
+that an attempt is unconfirmed; it cannot manufacture a completed result. The
+future resolution endpoint must authenticate the current target, validate an
+expiring resolution request and present uncertainty for operator review before
+calling the journal release API.
+
+## Validation and remaining wiring
+
+Tests use private temporary directories, owned subprocesses and an owned NATS
+server. They cover durable replay, response loss, scope/certificate changes,
+expiry and cancellation, concurrent execution, cross-process exclusion, corrupt
+records and partial restores, permission/link checks, publication failure,
+native boot stability and explicit release. The action runner is replaced with
+an owned test callback; these checks never invoke an installed NetBird client or
+contact a provider.
+
+Production wiring still needs the current local identity and certificate-expiry
+gate, journal ownership through joined service shutdown, capability reporting,
+coordinated handling of legacy mutations, console storage of the actual command
+digest, the reviewed history/release flow and agent resolution RPC. Registration,
+provider key lifecycle, installation/uninstallation, authoritative peer deletion
+and physical device acceptance remain open.
