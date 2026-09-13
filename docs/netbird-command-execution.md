@@ -86,18 +86,19 @@ step order and failure/cancellation barriers. Owned NATS tests execute the actua
 four subscriptions and verify neutral rejection replies before any local action.
 The Linux, macOS and Windows CI package lists include these suites.
 
-Local race suites for `commands/netbird`, `commands/runtime` and the complete
-`agent` package passed on macOS in 1.404/2.693/26.860 seconds and on isolated Linux
-in 1.017/2.182/26.752 seconds. Full Linux arm64, macOS arm64 and Windows amd64
-builds passed. Both added Windows command test packages also cross-compiled;
-their native execution remains a CI/Windows acceptance check.
+Local race suites for `commands/report`, `commands/netbird`, `commands/runtime`
+and the complete `agent` package passed on macOS in 1.796/1.540/4.586/24.891 seconds
+and on isolated Linux in 1.026/1.019/4.402/28.102 seconds. Full Linux arm64, macOS
+arm64 and Windows amd64 builds passed. The report and runtime Windows test
+packages also cross-compiled; native execution remains a CI/Windows acceptance
+check.
 
-The legacy inventory collector called after a successful sequence still has
-unbounded subprocesses and an outdated textual profile-list parser. Consequently,
-these changes do not claim an end-to-end deadline for the legacy synchronous
-broker response. That collector needs a bounded, tested replacement before it is
-used by durable command recovery. Unix installation/uninstallation still uses
-remote shell scripts and needs release trust and cancellation work. Windows
+The post-command collector now shares the retained session and original deadline;
+see [bounded NetBird observations](netbird-observations.md). Broker connection
+commands and explicit refresh also inherit the agent service context. Failed
+observations carry a neutral error, and current console/worker writers preserve
+previously confirmed data. Unix installation/uninstallation still uses remote
+shell scripts and needs release trust and cancellation work. Windows
 installation/uninstallation uses the existing bounded package adapter.
 
 Still required: durable UUID-bound requests, current console authorization/source

@@ -1,6 +1,9 @@
 package report
 
-import "time"
+import (
+	nats "github.com/open-uem/nats"
+	"time"
+)
 
 type PeerStateDetailOutput struct {
 	FQDN                   string           `json:"fqdn" yaml:"fqdn"`
@@ -108,9 +111,14 @@ type NetBirdOverview struct {
 
 func (r *Report) getNetbirdInfo() error {
 	data, err := RetrieveNetbirdInfo()
-	if err == nil {
-		r.Netbird = *data
-	}
+	return r.netbirdObservation(data, err)
+}
 
-	return err
+func (r *Report) netbirdObservation(data *nats.Netbird, err error) error {
+	if err != nil || data == nil || data.Error != "" {
+		r.Netbird = nats.Netbird{Error: ErrNetbirdState.Error()}
+		return ErrNetbirdState
+	}
+	r.Netbird = *data
+	return nil
 }

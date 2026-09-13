@@ -994,7 +994,7 @@ func (a *Agent) InstallNetBirdSubscribe() error {
 func (a *Agent) RegisterNetBirdSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.register."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
-		data, err := netbird.Register(msg.Data)
+		data, err := netbird.ExecuteAction(a.ctx, "register", msg.Data)
 		if err != nil {
 			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
 			return
@@ -1033,7 +1033,7 @@ func (a *Agent) UninstallNetBirdSubscribe() error {
 func (a *Agent) SwitchProfileNetBirdSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.switchprofile."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
-		data, err := netbird.SwitchProfileData(msg.Data)
+		data, err := netbird.ExecuteAction(a.ctx, "switchprofile", msg.Data)
 		if err != nil {
 			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
 			return
@@ -1053,7 +1053,7 @@ func (a *Agent) SwitchProfileNetBirdSubscribe() error {
 func (a *Agent) NetBirdUpSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.up."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
-		data, err := netbird.NetbirdUp(msg.Data)
+		data, err := netbird.ExecuteAction(a.ctx, "up", msg.Data)
 		if err != nil {
 			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
 			return
@@ -1072,7 +1072,7 @@ func (a *Agent) NetBirdUpSubscribe() error {
 func (a *Agent) NetBirdDownSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.down."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
-		data, err := netbird.NetbirdDown(msg.Data)
+		data, err := netbird.ExecuteAction(a.ctx, "down", msg.Data)
 		if err != nil {
 			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
 			return
@@ -1091,7 +1091,7 @@ func (a *Agent) NetBirdDownSubscribe() error {
 func (a *Agent) RefreshNetBirdSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.refresh."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
-		data, err := netbird.RefreshInfo(msg.Data)
+		data, err := netbird.RefreshInfoContext(a.ctx, msg.Data)
 		if err != nil {
 			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
 			return

@@ -1,6 +1,7 @@
 package netbird
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 
@@ -22,5 +23,12 @@ func Respond(msg *nats.Msg, n *openuem_nats.Netbird) {
 }
 
 func RefreshInfo(data []byte) (*openuem_nats.Netbird, error) {
-	return report.RetrieveNetbirdInfo()
+	return RefreshInfoContext(context.Background(), data)
+}
+
+func RefreshInfoContext(ctx context.Context, data []byte) (*openuem_nats.Netbird, error) {
+	if len(data) != 0 {
+		return nil, ErrInvalidAction
+	}
+	return report.RetrieveNetbirdInfoContext(ctx)
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"runtime"
 	"strings"
 	"time"
 	"unicode"
@@ -139,6 +138,10 @@ func runAction(ctx context.Context, executable string, steps []actionStep, run a
 }
 
 func performAction(operation string, request nats.NetbirdSettings) (*nats.Netbird, error) {
+	return performActionContext(context.Background(), operation, request)
+}
+
+func performActionContext(parent context.Context, operation string, request nats.NetbirdSettings) (*nats.Netbird, error) {
 	steps, err := actionSteps(operation, request)
 	if err != nil {
 		return nil, err
@@ -147,7 +150,10 @@ func performAction(operation string, request nats.NetbirdSettings) (*nats.Netbir
 	if operation == "switchprofile" {
 		timeout = 2 * time.Minute
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	if parent == nil {
+		return nil, ErrActionUnconfirmed
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	session, err := commandruntime.NewCommandSession(ctx)
 	if err != nil {
@@ -157,7 +163,7 @@ func performAction(operation string, request nats.NetbirdSettings) (*nats.Netbir
 	if err = runAction(ctx, getNetbirdBin(), steps, session.Run); err != nil {
 		return nil, err
 	}
-	result, err := report.RetrieveNetbirdInfo()
+	result, err := report.RetrieveNetbirdInfoWithSession(ctx, session)
 	if err != nil {
 		return nil, ErrActionUnconfirmed
 	}
@@ -182,13 +188,13 @@ func SwitchProfile(request nats.NetbirdSettings) (*nats.Netbird, error) {
 	return performAction("switchprofile", request)
 }
 
-func getNetbirdBin() string {
-	switch runtime.GOOS {
-	case "windows":
-		return `C:\Program Files\NetBird\netbird.exe`
-	case "darwin":
-		return "/usr/local/bin/netbird"
-	default:
-		return "/usr/bin/netbird"
+func getNetbirdBin() string { return report.NetbirdExecutable() }
+
+// ExecuteAction applies the broker service lifetime to execution and observation.
+func ExecuteAction(ctx context.Context, operation string, data []byte) (*nats.Netbird, error) {
+	request, err := decodeAction(data)
+	if err != nil {
+		return nil, err
 	}
+	return performActionContext(ctx, operation, request)
 }

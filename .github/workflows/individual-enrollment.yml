@@ -107,7 +107,7 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Durable enrollment state and bounded HTTPS recovery
-        run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/commands/netbird ./internal/commands/runtime ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware ./internal/burnbundle
+        run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/commands/netbird ./internal/commands/report ./internal/commands/runtime ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware ./internal/burnbundle
       - name: Build the agent
         run: go build ./...
       - name: Bounded Burn PE and UX container inspection
@@ -136,7 +136,7 @@ jobs:
       - name: Isolated noninteractive keychain and separate process recovery
         env:
           CGO_ENABLED: '1'
-        run: go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/commands/netbird ./internal/commands/runtime ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware ./internal/burnbundle
+        run: go test -race -count=1 -tags openuem_keychain_test ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/commands/netbird ./internal/commands/report ./internal/commands/runtime ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware ./internal/burnbundle
       - name: Root-only readiness over isolated native Unix sockets
         run: scripts/check-macos-readiness.sh
       - name: Root filesystem and read-only native activation fixtures
@@ -169,7 +169,7 @@ jobs:
           $packages = @('./internal/enrollmentstore', './internal/agent', './internal/packagesignature',
             './internal/bootstrapinstall', './internal/enrollcommand', './internal/activatecommand',
             './internal/service/...', './internal/commands/sftp', './internal/commands/deploy',
-            './internal/commands/netbird', './internal/commands/runtime',
+            './internal/commands/netbird', './internal/commands/report', './internal/commands/runtime',
             './internal/runtimeoptions', './internal/macbundle', './internal/localready',
             './internal/macservice', './internal/machardware', './internal/macsecurity',
             './internal/windowssoftware', './internal/burnbundle')
