@@ -101,7 +101,7 @@ clock rollback.
 
 Only a live owner that admitted an attempt may finish it. Recovery can report
 that an attempt is unconfirmed; it cannot manufacture a completed result. The
-future resolution endpoint must authenticate the current target, validate an
+console resolution endpoint authenticates the current target, validates an
 expiring resolution request and present uncertainty for operator review before
 calling the journal release API.
 
@@ -151,7 +151,12 @@ validation and old-subject/profile rejection. The Linux agent, journal and comma
 race suites pass in 28.402, 3.404 and 1.231 seconds.
 
 The console now has review, request, receipt, history and queued cancellation.
-Coordinated console resolution intent/evidence and its reviewed release flow
-remain required. Registration,
+Its [reviewed resolution flow](https://github.com/the-luap/openuem-console/blob/7daac02/docs/netbird-resolutions.md)
+persists immutable intent before one release control and requires matching
+retained evidence before opening console admission. Lost replies use read-only
+receipt queries under the current certificate with the same resolution UUID.
+Original unconfirmed outcomes remain unchanged. Missing evidence and an
+undelivered release stay blocked; no automatic resend or journal reset is used.
+Registration,
 provider key lifecycle, installation/uninstallation, authoritative peer deletion
 and physical device acceptance remain open.

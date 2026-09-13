@@ -9,8 +9,8 @@ managed admission; retained low-level helpers are not enabled mutation paths.
 
 Registration, connection, disconnection and profile selection share one command
 implementation across Linux, macOS and Windows. This is an agent execution
-boundary; durable console admission and provider-peer ownership are separate,
-unfinished parts of the NetBird lifecycle.
+boundary; the linked managed journal now integrates durable console admission.
+Provider-peer ownership remains an unfinished part of the NetBird lifecycle.
 
 ## Requests and arguments
 
@@ -110,8 +110,8 @@ installation/uninstallation uses the existing bounded package adapter.
 
 Durable UUID-bound connection requests, current console authorization/source
 locks, agent execution journals and immutable attempt/outcome history are now
-implemented; see the linked journal contract for the current flow. Still required:
-coordinated console resolution of uncertain mutations, staged registration and
+implemented, together with coordinated console resolution of uncertain mutations;
+see the linked journal contract for the current flow. Still required: staged registration and
 installation, and authoritative provider-peer association.
 An agent-reported IP or hostname is not proof of provider ownership. Real NetBird
 daemon, interactive desktop, Windows native process and physical-device acceptance
