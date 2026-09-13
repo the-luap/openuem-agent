@@ -3,9 +3,10 @@
 The [managed journal integration](netbird-execution-journal.md) supersedes the
 legacy wire subscriptions described below. Production connection commands use
 expiring UUID-bound envelopes and permanent attempt/result evidence. Old raw
-mutating subjects and profile steps return an explicit rejection. Registration,
-installation and uninstallation remain temporarily unavailable pending staged
-managed admission; retained low-level helpers are not enabled mutation paths.
+mutating subjects and profile steps return an explicit rejection. The managed
+executor now also accepts version-two registration envelopes after an explicit
+`registration-state` capability check. Console registration UI, installation and
+uninstallation remain unavailable pending the remaining lifecycle integration.
 
 Registration, connection, disconnection and profile selection share one command
 implementation across Linux, macOS and Windows. This is an agent execution
@@ -111,8 +112,10 @@ installation/uninstallation uses the existing bounded package adapter.
 Durable UUID-bound connection requests, current console authorization/source
 locks, agent execution journals and immutable attempt/outcome history are now
 implemented, together with coordinated console resolution of uncertain mutations;
-see the linked journal contract for the current flow. Still required: staged registration and
-installation, and authoritative provider-peer association.
+see the linked journal contract for the current flow. Version-two registration
+shares this permanent journal, binds the one-off key into the command digest, and
+retains no key material in local records. Still required: console registration
+workflow integration, trusted installation, and authoritative provider-peer association.
 An agent-reported IP or hostname is not proof of provider ownership. Real NetBird
 daemon, interactive desktop, Windows native process and physical-device acceptance
 must be recorded separately from these owned fixtures and cross-compilation.

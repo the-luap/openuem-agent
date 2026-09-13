@@ -1,7 +1,8 @@
 # NetBird execution journal
 
 The agent contains an expiring-command executor, private local journal and joined
-broker service adapter for NetBird `up`, `down` and `switchprofile` operations.
+broker service adapter for NetBird `up`, `down`, `switchprofile`, and version-two
+`register` operations.
 Native startup now opens this journal and attaches the production managed
 subscriptions. Old mutating NetBird subjects and profile steps are rejected,
 including when the managed runtime is unavailable. They cannot bypass a retained
@@ -15,6 +16,16 @@ management URL, profile and an issue/expiry interval of at most two minutes.
 Its separate `agent.netbird.command.<device>` subject prevents legacy handlers
 from interpreting an envelope as old settings. The strict codec checks required
 fields, duplicate/unknown/null fields, types, size and operation inputs.
+
+Registration exclusively uses version two and requires a bounded `setup_key`.
+Version-one connection encoding and hashes remain unchanged. Before creating a
+provider key, a console must receive a correlated `registration-state` response;
+an ordinary `state` response does not establish registration support. The agent
+executes the retained fixed-binary sequence with the key only in the `up` child
+environment. The command hash covers that key; journal and control receipts
+retain only the hash. Replay after close/reopen does not repeat registration.
+Registration receipt queries and explicit releases preserve the same original
+uncertainty rules, without claiming provider cleanup or peer ownership.
 
 `DurableExecutor` validates the envelope and reads matching retained evidence
 before admitting work. A canonical digest covers all command inputs. It commits

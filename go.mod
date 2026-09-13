@@ -87,4 +87,4 @@ require (
 	howett.net/plist v1.0.1
 )
 
-replace github.com/open-uem/nats => github.com/the-luap/openuem-nats v0.11.1-0.20260913194200-9c2f07489132
+replace github.com/open-uem/nats => github.com/the-luap/openuem-nats v0.11.1-0.20260913211843-39ea0a3aaeb1

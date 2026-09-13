@@ -25,7 +25,7 @@ func NewDurableExecutor(journal *netbirdjournal.Journal) (*DurableExecutor, erro
 		return nil, ErrInvalidAction
 	}
 	return &DurableExecutor{journal: journal, now: time.Now, run: func(ctx context.Context, c netbirdcommand.Command) error {
-		result, err := performActionContext(ctx, c.Operation, nats.NetbirdSettings{ManagementURL: c.ManagementURL, Profile: c.Profile})
+		result, err := performActionContext(ctx, c.Operation, nats.NetbirdSettings{ManagementURL: c.ManagementURL, Profile: c.Profile, OneOffKey: c.SetupKey})
 		if err != nil || result == nil {
 			return ErrActionUnconfirmed
 		}

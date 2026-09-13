@@ -143,7 +143,7 @@ func recordName(index int, kind string) string { return fmt.Sprintf("%04d-%s.jso
 
 func (s start) valid(device string) bool {
 	return s.DeviceID == device && netbirdcommand.ValidRequestID(s.RequestID) && netbirdcommand.ValidDigest(s.Revision) && netbirdcommand.ValidDigest(s.CommandHash) &&
-		(s.Operation == "up" || s.Operation == "down" || s.Operation == "switchprofile") && s.Boot.Valid() && !s.RecordedAt.IsZero() &&
+		(s.Operation == "up" || s.Operation == "down" || s.Operation == "switchprofile" || s.Operation == "register") && s.Boot.Valid() && !s.RecordedAt.IsZero() &&
 		s.IssuedAt.Year() >= 1970 && s.ExpiresAt.After(s.IssuedAt) && s.ExpiresAt.Sub(s.IssuedAt) <= netbirdcommand.Lifetime &&
 		s.RecordedAt.Before(s.ExpiresAt) && !s.IssuedAt.After(s.RecordedAt.Add(netbirdcommand.ClockAllowance))
 }
