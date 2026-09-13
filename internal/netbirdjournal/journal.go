@@ -12,7 +12,7 @@ import (
 	"github.com/open-uem/nats/netbirdcommand"
 )
 
-const MaxAttempts = 4096
+const MaxAttempts = netbirdcommand.MaxJournalAttempts
 
 var (
 	ErrUnavailable = errors.New("NetBird execution journal is unavailable")
@@ -52,14 +52,15 @@ type entry struct {
 }
 
 type Journal struct {
-	mu       sync.Mutex
-	files    *files
-	identity netbirdcommand.Identity
-	boot     Boot
-	entries  map[string]*entry
-	last     *entry
-	clock    time.Time
-	poisoned bool
+	mu           sync.Mutex
+	files        *files
+	identity     netbirdcommand.Identity
+	installation string
+	boot         Boot
+	entries      map[string]*entry
+	last         *entry
+	clock        time.Time
+	poisoned     bool
 }
 
 // Open owns an exclusive process lease until Close. The parent must be an
@@ -73,7 +74,7 @@ func Open(directory, installation string, identity netbirdcommand.Identity, boot
 	if err != nil {
 		return nil, err
 	}
-	j := &Journal{files: f, identity: identity, boot: boot, entries: map[string]*entry{}}
+	j := &Journal{files: f, installation: installation, identity: identity, boot: boot, entries: map[string]*entry{}}
 	accepted := false
 	defer func() {
 		if !accepted {
@@ -284,6 +285,10 @@ func (j *Journal) Finish(c netbirdcommand.Command, status string, now time.Time)
 func (j *Journal) Release(id, digest, releaseID string, now time.Time) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	return j.releaseLocked(id, digest, releaseID, now)
+}
+
+func (j *Journal) releaseLocked(id, digest, releaseID string, now time.Time) error {
 	if !j.available() || !j.clockValid(now) {
 		return ErrUnavailable
 	}

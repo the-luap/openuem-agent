@@ -1,11 +1,11 @@
 # NetBird execution journal
 
-The agent contains an expiring-command executor and a private local journal for
-NetBird `up`, `down` and `switchprofile` operations. They are not yet connected to
-the production agent subscriptions. Coordinated console admission, current
-identity checks, service shutdown, history and resolution routing are required
-before enabling the new subject. Legacy NetBird handlers do not acquire this
-journal and must not be presented as durable operations.
+The agent contains an expiring-command executor, private local journal and joined
+broker service adapter for NetBird `up`, `down` and `switchprofile` operations.
+They are not yet connected to the production agent subscriptions. Native identity
+initialization, coordinated legacy mutation handling and reviewed console routing
+are required before enabling the new subject. Legacy NetBird handlers do not
+acquire this journal and must not be presented as durable operations.
 
 ## Protocol and execution
 
@@ -90,19 +90,49 @@ future resolution endpoint must authenticate the current target, validate an
 expiring resolution request and present uncertainty for operator review before
 calling the journal release API.
 
+## Live control and service lifetime
+
+`Journal.Control` validates exact current identity, service cancellation and a
+ten-second control expiry after acquiring the journal mutex. State queries are
+read-only. Their stable revision binds the installation, identity, boot, attempt
+count and last attempt/result/release. Queries report remaining capacity,
+pending command identity and whether explicit release is currently possible.
+Clock rollback, closed ownership and unavailable storage never report readiness.
+
+Receipt queries use the original command UUID and complete digest under a fresh
+current identity. Certificate renewal therefore preserves access to historical
+evidence without redelivering the old command. Release and its response are
+serialized with journal access. A lost release reply can be recovered by a
+read-only receipt query, which returns the immutable resolution UUID. The original
+unconfirmed receipt stays unconfirmed.
+
+`DurableService` owns its journal on successful construction. Its caller supplies
+a validated identity and certificate expiry and must exclude legacy/profile
+mutations before binding subscriptions. The service rejects commands or controls
+that outlive that certificate. It creates exact command/control subscriptions,
+bounds their pending queues, and preserves the executor/journal when replacing a
+connection. A binding token rejects callbacks from superseded subscriptions.
+Close atomically stops admission, cancels command contexts and unsubscribes, then
+joins admitted handlers before closing the journal and releasing its OS lease.
+Callers must retain the native identity until Close returns.
+
 ## Validation and remaining wiring
 
 Tests use private temporary directories, owned subprocesses and an owned NATS
 server. They cover durable replay, response loss, scope/certificate changes,
 expiry and cancellation, concurrent execution, cross-process exclusion, corrupt
 records and partial restores, permission/link checks, publication failure,
-native boot stability and explicit release. The action runner is replaced with
+native boot stability and explicit release. Control/service tests additionally
+cover certificate changes, lost release replies, live release refusal,
+connection replacement and shutdown while a command has not yet joined.
+The action runner is replaced with
 an owned test callback; these checks never invoke an installed NetBird client or
 contact a provider.
 
-Production wiring still needs the current local identity and certificate-expiry
-gate, journal ownership through joined service shutdown, capability reporting,
-coordinated handling of legacy mutations, console storage of the actual command
-digest, the reviewed history/release flow and agent resolution RPC. Registration,
+Production wiring still needs native identity and stable directory selection,
+attachment of the service adapter, coordinated handling of legacy mutations and
+the reviewed console history/release flow. Live readiness, exact wire evidence
+in console attempts and agent resolution RPC are implemented components.
+Registration,
 provider key lifecycle, installation/uninstallation, authoritative peer deletion
 and physical device acceptance remain open.
