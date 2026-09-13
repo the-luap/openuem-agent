@@ -102,7 +102,7 @@ clock rollback.
 Only a live owner that admitted an attempt may finish it. Recovery can report
 that an attempt is unconfirmed; it cannot manufacture a completed result. The
 console resolution endpoint authenticates the current target, validates an
-expiring resolution request and present uncertainty for operator review before
+expiring resolution request and presents uncertainty for operator review before
 calling the journal release API.
 
 ## Live control and service lifetime
