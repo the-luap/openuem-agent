@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -26,8 +27,10 @@ func TestNetbirdSubscriptionsRejectInvalidRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer connection.Close()
-	a := &Agent{Config: Config{UUID: "owned-netbird-device"}, NATSConnection: connection}
-	for _, subscribe := range []func() error{a.RegisterNetBirdSubscribe, a.SwitchProfileNetBirdSubscribe, a.NetBirdUpSubscribe, a.NetBirdDownSubscribe} {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a := &Agent{ctx: ctx, Config: Config{UUID: "owned-netbird-device"}, NATSConnection: connection}
+	for _, subscribe := range []func() error{a.RegisterNetBirdSubscribe, a.SwitchProfileNetBirdSubscribe, a.NetBirdUpSubscribe, a.NetBirdDownSubscribe, a.RefreshNetBirdSubscribe} {
 		if err := subscribe(); err != nil {
 			t.Fatal(err)
 		}
@@ -48,6 +51,26 @@ func TestNetbirdSubscriptionsRejectInvalidRequests(t *testing.T) {
 			if result.Error != netbird.ErrInvalidAction.Error() || result.Installed {
 				t.Fatalf("%s did not reject safely", operation)
 			}
+		}
+	}
+	cancel()
+	for operation, body := range map[string]string{
+		"up":            `{"management_url":"https://example.test"}`,
+		"down":          `{"management_url":"https://example.test"}`,
+		"register":      `{"management_url":"https://example.test","key":"owned-key"}`,
+		"switchprofile": `{"management_url":"https://example.test","profile":"owned-profile"}`,
+		"refresh":       "",
+	} {
+		message, err := connection.Request("agent.netbird."+operation+".owned-netbird-device", []byte(body), 2*time.Second)
+		if err != nil {
+			t.Fatal("stopped service did not reject NetBird command", err)
+		}
+		var result openuem.Netbird
+		if err := json.Unmarshal(message.Data, &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.Error == "" || result.Installed {
+			t.Fatal("stopped service accepted a NetBird action or observation")
 		}
 	}
 }
