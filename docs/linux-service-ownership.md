@@ -2,9 +2,9 @@
 
 `enrollmentstore.AcquireServiceLease` provides the Linux process-ownership
 primitive for a private individual installation. It is independent of identity
-storage, package trust and service activation. Linux `OpenNative` remains
-unsupported until protected credential storage is implemented; a lease alone
-cannot enroll an endpoint or enable the individual service.
+storage, package trust and service activation. The separate
+[Linux encrypted backend](linux-identity-storage.md) now implements `OpenNative`;
+a lease alone cannot enroll an endpoint or enable the individual service.
 
 The caller must be root and supply an existing canonical absolute installation
 directory with mode 0700 and root ownership. Every ancestor from `/` must also be

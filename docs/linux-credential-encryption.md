@@ -1,10 +1,9 @@
 # Native Linux credential encryption component
 
 The private `linuxCredentialCipher` provides bounded authenticated encryption for
-future Linux individual-identity storage. It is not yet connected to `OpenNative`:
-Linux durable record publication, restoration checks and enrollment/installation
-admission remain to be implemented. This component cannot enroll an endpoint or
-activate an individual service.
+the [durable Linux identity backend](linux-identity-storage.md), now connected to
+`OpenNative`. Linux enrollment/installation admission and individual-service
+activation remain separate integration requirements.
 
 ## Native protection and scope
 
@@ -31,7 +30,7 @@ retain equivalent timestamps. The native process executes through the retained
 program descriptor. An OS upgrade or key replacement requires opening a fresh
 provider; an existing provider never silently adopts it.
 
-The credential name hashes a versioned domain, canonical installation directory
+The credential name hashes a versioned domain, canonical credential directory
 and valid immutable record name. Encryption also embeds that exact context in the
 protected plaintext envelope. A caller cannot reuse a pending credential as an
 identity or move it into another installation namespace. The envelope is required
@@ -80,8 +79,8 @@ Linux process-ownership and common enrollment-state tests run in the same fixtur
 No workstation key, host service or real endpoint enrollment is used.
 
 The dedicated `linux-credential-encryption` CI job runs this owned fixture after
-caching dependencies. Full native storage and Linux enrollment integration are
-separate subsequent work; these results establish only this encryption component.
+caching dependencies. It now also exercises the complete durable Linux backend;
+Linux enrollment integration remains separate from these storage results.
 
 The complete owned Linux enrollment-store race run passed in 73.904 seconds.
 The native fixture used systemd 252.39 on Linux ARM64; CI exercises Linux AMD64.

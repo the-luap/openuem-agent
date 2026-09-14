@@ -362,6 +362,10 @@ func (s *Store) loadOriginalIdentity(p *pending) (*Identity, error) {
 // Native read errors also fail closed; no surviving data is rewritten or removed.
 // Extend this inventory whenever another protected lifecycle record is introduced.
 func (s *Store) securityRecordsAbsent() bool {
+	if inventory, ok := s.backend.(interface{ hasSecurityRecords() (bool, error) }); ok {
+		present, err := inventory.hasSecurityRecords()
+		return err == nil && !present
+	}
 	if !s.softwareRecordsAbsent() {
 		return false
 	}

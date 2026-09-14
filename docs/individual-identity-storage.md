@@ -1,8 +1,9 @@
 # Individual endpoint identity storage
 
-The `internal/enrollmentstore` package starts the protected endpoint-storage work
-for individual Windows/Mac enrollment. Both native backends are implemented;
-the durable enrollment state machine connects them to the bounded HTTPS client.
+The `internal/enrollmentstore` package implements protected native storage on
+Windows, macOS and Linux. The durable enrollment state machine connects the
+Windows/Mac enrollment paths to the bounded HTTPS client; Linux platform admission
+remains a separate integration requirement.
 The [opt-in service runtime](individual-agent-runtime.md) now loads that identity
 before legacy certificate configuration. The [native enrollment command](native-enrollment-command.md)
 now connects explicit bootstrap authorization and verified installer/executable
@@ -91,14 +92,15 @@ lease; worker and console authorization remain required integration boundaries.
 
 ## Linux integration boundary
 
-The [Linux service lease](linux-service-ownership.md) now excludes competing root
-services and validates a pinned private installation namespace. Linux native
-credential storage remains unsupported; no plaintext fallback is enabled. Native
-package trust, enrollment admission and service activation still need their own
-Linux integration. The lease provides only process ownership.
-The private [native credential encryption component](linux-credential-encryption.md)
-now binds a record and installation context to a preprovisioned systemd host key.
-It remains separate from the not-yet-implemented Linux durable backend.
+The [Linux encrypted backend](linux-identity-storage.md) now publishes immutable
+private records in a dedicated `credentials-v1` child, using a preprovisioned
+systemd host key and record/directory context binding. It validates protected
+ancestry, exclusive publication, bounded authenticated reads and partial-restore
+barriers. Runtime journals coexist in the installation parent and prevent missing
+credentials from being treated as an empty installation. The independent
+[Linux service lease](linux-service-ownership.md) excludes competing root services.
+Native package trust, Linux enrollment admission and service activation remain
+required integration steps; storage does not enable them implicitly.
 
 ## Windows storage boundary
 
