@@ -17,6 +17,9 @@ type DurableExecutor struct {
 	mu      sync.Mutex
 	journal *netbirdjournal.Journal
 	run     func(context.Context, netbirdcommand.Command) error
+	// Installation must acquire its own native runner and prepared package.
+	// A nil runner rejects new installation attempts before journal admission.
+	install func(context.Context, netbirdcommand.Command) error
 	now     func() time.Time
 }
 
@@ -57,6 +60,13 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 	if parent.Err() != nil {
 		return netbirdcommand.Receipt{}, ErrActionUnconfirmed
 	}
+	run := e.run
+	if c.Version == netbirdcommand.InstallationVersion {
+		run = e.install
+	}
+	if run == nil {
+		return netbirdcommand.ReceiptFor(c, "rejected")
+	}
 	admitted, receipt, err := e.journal.Begin(c, e.now())
 	if err != nil {
 		return netbirdcommand.Receipt{}, ErrActionUnconfirmed
@@ -71,7 +81,7 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 	defer cancel()
 	status := "unconfirmed"
 	if ctx.Err() == nil {
-		if err = e.run(ctx, c); err == nil && ctx.Err() == nil {
+		if err = run(ctx, c); err == nil && ctx.Err() == nil {
 			status = "completed"
 		}
 	}

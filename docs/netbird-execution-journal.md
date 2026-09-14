@@ -3,6 +3,9 @@
 The agent contains an expiring-command executor, private local journal and joined
 broker service adapter for NetBird `up`, `down`, `switchprofile`, and version-two
 `register` operations.
+The journal also recognizes exact version-three Unix installation attempts and
+their recovery evidence. The production installation runner is not connected;
+new installation commands are explicitly rejected before an attempt is written.
 Native startup now opens this journal and attaches the production managed
 subscriptions. Old mutating NetBird subjects and profile steps are rejected,
 including when the managed runtime is unavailable. They cannot bypass a retained
@@ -26,6 +29,33 @@ environment. The command hash covers that key; journal and control receipts
 retain only the hash. Replay after close/reopen does not repeat registration.
 Registration receipt queries and explicit releases preserve the same original
 uncertainty rules, without claiming provider cleanup or peer ownership.
+
+Installation exclusively uses version three, an individual device/certificate
+identity and the complete approved Unix package descriptor. It has no management
+URL, profile or setup key, and its organization must match the recipient. Its
+ten-minute deadline bounds native execution after separate package preparation.
+The journal persists only the complete command digest and ordinary attempt/result
+metadata; private sources are never written to it. Retained installation records
+cannot appear under a legacy shared-identity journal anchor.
+
+The executor uses a separate installation runner within the same serialization,
+permanent UUID namespace and uncertainty barrier as connection and registration.
+There is no fallback to the connection CLI runner. An absent installation runner
+rejects new work, while an exact existing result remains readable after restart,
+expiry or runner removal. Ordinary/registration state does not advertise an
+installer capability. Authenticated preparation, current approval/revocation
+checks, a protected prepared package and native resulting-state verification must
+be integrated before the production runner can be supplied.
+
+Owned tests supply inert installation callbacks to verify admission before any
+execution, longer-deadline persistence, package-digest conflicts, concurrent
+connection/registration exclusion, lost replies, explicit withdrawal, restart,
+later-boot recovery and retained source privacy. They do not install NetBird.
+The pinned shared revision is `d0a53880dcbf2ceae01c4484bf9b7f4429ff0281`.
+macOS and Linux journal/command/preparation race suites, native service/broker
+regressions and all three complete agent platform builds pass. The final
+installation-specific suite also tests exclusion in both directions: an uncertain
+connection or registration cannot be bypassed by a new installation command.
 
 `DurableExecutor` validates the envelope and reads matching retained evidence
 before admitting work. A canonical digest covers all command inputs. It commits

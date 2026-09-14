@@ -103,7 +103,7 @@ func Open(directory, installation string, identity netbirdcommand.Identity, boot
 	for index := 1; index <= MaxAttempts; index++ {
 		if names[withdrawalName(index)] {
 			w := &withdrawal{}
-			if index != len(j.entries)+len(j.withdrawals)+1 || f.read(withdrawalName(index), w) != nil || !w.valid(identity.DeviceID) || w.Index != index || j.entries[w.Receipt.RequestID] != nil || j.withdrawals[w.Receipt.RequestID] != nil {
+			if index != len(j.entries)+len(j.withdrawals)+1 || f.read(withdrawalName(index), w) != nil || !w.valid(identity.DeviceID) || w.Receipt.Operation == "install" && !identity.Individual || w.Index != index || j.entries[w.Receipt.RequestID] != nil || j.withdrawals[w.Receipt.RequestID] != nil {
 				return nil, ErrUnavailable
 			}
 			if j.last != nil && j.last.release == nil && (j.last.result == nil || j.last.result.Receipt.Status == "unconfirmed") {
@@ -121,7 +121,7 @@ func Open(directory, installation string, identity netbirdcommand.Identity, boot
 			return nil, ErrUnavailable
 		}
 		e := &entry{index: index}
-		if f.read(name, &e.start) != nil || !e.start.valid(identity.DeviceID) || j.entries[e.start.RequestID] != nil || j.withdrawals[e.start.RequestID] != nil {
+		if f.read(name, &e.start) != nil || !e.start.valid(identity.DeviceID) || e.start.Operation == "install" && !identity.Individual || j.entries[e.start.RequestID] != nil || j.withdrawals[e.start.RequestID] != nil {
 			return nil, ErrUnavailable
 		}
 		if j.last != nil && j.last.result == nil && j.last.release == nil || j.last != nil && j.last.result != nil && j.last.result.Receipt.Status == "unconfirmed" && j.last.release == nil {
@@ -156,8 +156,8 @@ func recordName(index int, kind string) string { return fmt.Sprintf("%04d-%s.jso
 
 func (s start) valid(device string) bool {
 	return s.DeviceID == device && netbirdcommand.ValidRequestID(s.RequestID) && netbirdcommand.ValidDigest(s.Revision) && netbirdcommand.ValidDigest(s.CommandHash) &&
-		(s.Operation == "up" || s.Operation == "down" || s.Operation == "switchprofile" || s.Operation == "register") && s.Boot.Valid() && !s.RecordedAt.IsZero() &&
-		s.IssuedAt.Year() >= 1970 && s.ExpiresAt.After(s.IssuedAt) && s.ExpiresAt.Sub(s.IssuedAt) <= netbirdcommand.Lifetime &&
+		netbirdcommand.OperationLifetime(s.Operation) > 0 && s.Boot.Valid() && !s.RecordedAt.IsZero() &&
+		s.IssuedAt.Year() >= 1970 && s.ExpiresAt.After(s.IssuedAt) && s.ExpiresAt.Sub(s.IssuedAt) <= netbirdcommand.OperationLifetime(s.Operation) &&
 		s.RecordedAt.Before(s.ExpiresAt) && !s.IssuedAt.After(s.RecordedAt.Add(netbirdcommand.ClockAllowance))
 }
 

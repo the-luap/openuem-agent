@@ -5,13 +5,17 @@ legacy wire subscriptions described below. Production connection commands use
 expiring UUID-bound envelopes and permanent attempt/result evidence. Old raw
 mutating subjects and profile steps return an explicit rejection. The managed
 executor now also accepts version-two registration envelopes after an explicit
-`registration-state` capability check. Console registration UI, installation and
-uninstallation remain unavailable pending the remaining lifecycle integration.
+`registration-state` capability check. Console registration and provider-peer
+workflows are documented in the console repository. Unix installation and
+uninstallation remain unavailable pending their remaining lifecycle integration.
+The journal recognizes exact version-three installation commands, but its
+production executor rejects new ones before admission while no native installer
+runner is configured.
 
 Registration, connection, disconnection and profile selection share one command
 implementation across Linux, macOS and Windows. This is an agent execution
 boundary; the linked managed journal now integrates durable console admission.
-Provider-peer ownership remains an unfinished part of the NetBird lifecycle.
+Provider-peer ownership is established separately by retained console evidence.
 
 ## Requests and arguments
 
