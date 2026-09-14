@@ -16,7 +16,8 @@ and recipient identity, reconstructs the complete live preparation and commits
 one fresh version-three attempt before direct delivery. Native attempts exclude
 cancellation; exact completed receipts or read-only receipt recovery open console
 admission. [Reviewed uncertain-operation recovery](https://github.com/the-luap/openuem-console/blob/ab17d569a9a3ea56823b16274503ec0827b6eefc/docs/netbird-installation-resolutions.md) now retains expiring reviews, exact owned controls and release proofs.
-Dispatch and lifecycle UI remain integration work. Its existing connection/registration publisher still rejects that
+[Automatic dispatch](https://github.com/the-luap/openuem-console/blob/dc77e7b878432e99296b6b5a7ca8c5ff1fffde4e/docs/netbird-installation-dispatch.md) now runs the reviewed lifecycle through bounded, joined inventory workers.
+Device lifecycle UI remains integration work. Its existing connection/registration publisher still rejects that
 version. Local package removal remains unavailable.
 
 ## Admission and ownership

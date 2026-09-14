@@ -137,7 +137,8 @@ commits its own attempt before one fresh installation command. Native attempts
 exclude cancellation. Completed receipts can be recovered through read-only
 queries under a renewed current identity without redelivery.
 [Reviewed withdrawal and release](https://github.com/the-luap/openuem-console/blob/ab17d569a9a3ea56823b16274503ec0827b6eefc/docs/netbird-installation-resolutions.md) now use expiring reviews and an owned permanent resolution UUID; lost replies
-reconcile without resending the installer. Dispatch and lifecycle UI remain open.
+reconcile without resending the installer. [Automatic dispatch](https://github.com/the-luap/openuem-console/blob/dc77e7b878432e99296b6b5a7ca8c5ff1fffde4e/docs/netbird-installation-dispatch.md) now continues retained prepared work with fresh admission and excludes uncertain
+attempts from redelivery. Device lifecycle UI remains open.
 Preparation alone remains cancellable and cannot authorize installation. The native macOS installer now
 consumes the exact owned package under atomic current journal admission and
 verifies its resulting state; a preparation response alone cannot authorize it.
