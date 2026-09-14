@@ -60,6 +60,11 @@ func TestJournalDurableResultReplayAndPrivateMetadata(t *testing.T) {
 	if _, _, err = j.Begin(changed, c.IssuedAt.Add(time.Second)); !errors.Is(err, ErrConflict) {
 		t.Fatal("reused UUID changed command", err)
 	}
+	// Windows byte-range locks also exclude read-only metadata inspection.
+	// Close the replay owner before auditing every retained file, including the lock.
+	if err = j.Close(); err != nil {
+		t.Fatal(err)
+	}
 	files, err := os.ReadDir(path)
 	if err != nil {
 		t.Fatal(err)

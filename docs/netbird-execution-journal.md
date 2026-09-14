@@ -257,3 +257,10 @@ native owner and current inspected journal revision. Version-four removal shares
 this permanent UUID namespace, uncertainty barrier and explicit withdrawal/release
 history. Generic command admission cannot bypass the inspection requirement;
 ordinary journal state does not advertise native package ownership.
+
+The cross-platform private-metadata tests close the replay journal before reading
+all retained files. Windows mandatory byte-range locks correctly prevent another
+handle from reading the live `.netbird.lock`; that rejection is not corrupted
+journal evidence. The tests still inspect every file after close and retain their
+restart, exact replay, changed-command and secret-redaction assertions. Production
+locking and journal behavior are unchanged.

@@ -109,6 +109,11 @@ func TestInstallationDurableAttemptBindsPackageAndSurvivesRestart(t *testing.T) 
 	if err != nil || again != first || calls != 1 {
 		t.Fatal("restart, missing runner or expiry lost retained evidence", err)
 	}
+	// Windows byte-range locks also exclude read-only metadata inspection.
+	// Close the replay owner before auditing every retained file, including the lock.
+	if err = reopened.Close(); err != nil {
+		t.Fatal(err)
+	}
 	files, err := os.ReadDir(path)
 	if err != nil {
 		t.Fatal(err)
