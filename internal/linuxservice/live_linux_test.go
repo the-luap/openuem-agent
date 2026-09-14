@@ -215,6 +215,112 @@ func TestLinuxLiveSystemdOwnedEnablement(t *testing.T) {
 	}
 }
 
+func TestLinuxLiveSystemdServiceRegistration(t *testing.T) {
+	liveSystemdFixture(t)
+	for _, scenario := range []string{"fresh", "published-before-reload", "enabled-before-reload"} {
+		t.Run(scenario, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			spec := Spec{Executable: "/fixture/linuxservice.test", IdentityDirectory: "/fixture/identity"}
+			defer cleanupLiveRegistration(t, spec)
+			s, err := Open(ctx, spec)
+			if err != nil {
+				t.Fatal("actual service preflight failed", err)
+			}
+			defer s.Close()
+			if status, err := s.Status(ctx); err != nil || status != NotRegistered {
+				t.Fatal("fresh guest service was already registered", status, err)
+			}
+			if _, err := os.Lstat(UnitPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("preflight published a unit", err)
+			}
+			if scenario != "fresh" {
+				if err := s.unit.publish(ctx); err != nil {
+					t.Fatal(err)
+				}
+				if scenario == "enabled-before-reload" {
+					if err := s.reload(ctx); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := s.connection.call(ctx, managerPath, managerInterface+".EnableUnitFiles", []string{UnitName}, false, false); err != nil {
+						t.Fatal(err)
+					}
+				}
+				s.Close()
+				s, err = Open(ctx, spec)
+				if err != nil {
+					t.Fatal("interrupted registration could not be reopened", err)
+				}
+				defer s.Close()
+			}
+			if err := s.Register(ctx); err != nil {
+				t.Fatal("actual service registration failed", err)
+			}
+			var before unix.Stat_t
+			if unix.Lstat(UnitPath, &before) != nil {
+				t.Fatal("registered unit unavailable")
+			}
+			if err := s.Register(ctx); err != nil {
+				t.Fatal("retained registration retry failed", err)
+			}
+			if status, err := s.Status(ctx); err != nil || status != Enabled {
+				t.Fatal("registration status was not enabled", status, err)
+			}
+			// systemd may collect an enabled but inactive unit between calls.
+			// Resolve it again; a GetUnit cache miss says nothing about activity.
+			definition, err := s.connection.loadDefinition(ctx, spec)
+			state := definition.State
+			if err != nil || !definition.Present || state.Active != "inactive" || state.PID != 0 || state.StartedMonotonic != 0 || state.Invocation != [16]byte{} {
+				t.Fatal("registered service did not retain never-started state", state, err)
+			}
+			s.Close()
+			var after unix.Stat_t
+			if unix.Lstat(UnitPath, &after) != nil || !sameStamp(before, after) {
+				t.Fatal("retry or close modified the installed definition")
+			}
+		})
+	}
+}
+
+func cleanupLiveRegistration(t *testing.T, spec Spec) {
+	t.Helper()
+	// No service is started by these tests. Remove only files admitted again
+	// under the exact owned guest contract, even if its previous owner closed.
+	e, err := openUnitEnablement()
+	if err != nil {
+		t.Error("cannot admit fixture enablement cleanup", err)
+		return
+	}
+	defer e.Close()
+	if enabled, err := e.inspect(); err == nil && enabled {
+		if err := os.Remove(filepath.Join("/etc/systemd/system", wantsDirectory, UnitName)); err != nil {
+			t.Error(err)
+		}
+	}
+	u, err := openUnitFile(spec)
+	if err != nil {
+		t.Error("cannot admit fixture definition cleanup", err)
+		return
+	}
+	defer u.Close()
+	if present, err := u.inspect(); err == nil && present {
+		if err := os.Remove(UnitPath); err != nil {
+			t.Error(err)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, err := connectSystemd(ctx)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer c.Close()
+	if _, err := c.call(ctx, managerPath, managerInterface+".Reload"); err != nil {
+		t.Error("owned registration cleanup reload failed", err)
+	}
+}
+
 func TestLinuxLiveSystemdForeignDefinition(t *testing.T) {
 	liveSystemdFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -240,6 +346,12 @@ func TestLinuxLiveSystemdForeignDefinition(t *testing.T) {
 	}
 	defer os.Remove(vendor)
 	spec := Spec{Executable: "/fixture/linuxservice.test", IdentityDirectory: "/fixture/identity"}
+	if s, err := Open(ctx, spec); !errors.Is(err, ErrUnit) {
+		if s != nil {
+			s.Close()
+		}
+		t.Fatal("controller admitted an existing vendor service", err)
+	}
 	if _, err := c.loadDefinition(ctx, spec); !errors.Is(err, ErrUnit) {
 		t.Fatal("resolved vendor service was not rejected", err)
 	}

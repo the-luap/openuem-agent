@@ -102,6 +102,27 @@ func (u *unitFile) inspect() (bool, error) {
 	return u.inspectLocked()
 }
 
+func (u *unitFile) flush(ctx context.Context) error {
+	if ctx == nil {
+		return ErrUnit
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if present, err := u.inspectLocked(); err != nil || !present {
+		return ErrUnit
+	}
+	if u.file.Sync() != nil || u.directory.root().Sync() != nil {
+		return ErrUnit
+	}
+	if present, err := u.inspectLocked(); err != nil || !present {
+		return ErrUnit
+	}
+	return ctx.Err()
+}
+
 // publish creates and flushes a complete definition, then publishes it with
 // renameat2(NOREPLACE). Existing definitions are never overwritten. Exact
 // concurrent publication is admitted through the normal protected read path.
