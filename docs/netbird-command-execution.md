@@ -121,8 +121,10 @@ implemented, together with coordinated console resolution of uncertain mutations
 see the linked journal contract for the current flow. Version-two registration
 shares this permanent journal, binds the one-off key into the command digest, and
 retains no key material in local records. Console registration and retained
-provider-peer association now have their own reviewed workflows. Trusted native
-installation and local removal still require their remaining lifecycle integration.
+provider-peer association now have their own reviewed workflows.
+[Native installation](https://github.com/the-luap/openuem-console/blob/3199b9ba73fd0b990bbd933727a5cdaebf426d77/docs/netbird-installation-ui.md) now connects reviewed console admission, joined
+dispatch, exact package execution and retained receipt/recovery pages. Local removal
+and Linux individual enrollment/publisher trust remain separate integration work.
 An agent-reported IP or hostname is not proof of provider ownership. Real NetBird
 daemon, interactive desktop, Windows native process and physical-device acceptance
 must be recorded separately from these owned fixtures and cross-compilation.

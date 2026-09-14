@@ -138,12 +138,14 @@ exclude cancellation. Completed receipts can be recovered through read-only
 queries under a renewed current identity without redelivery.
 [Reviewed withdrawal and release](https://github.com/the-luap/openuem-console/blob/ab17d569a9a3ea56823b16274503ec0827b6eefc/docs/netbird-installation-resolutions.md) now use expiring reviews and an owned permanent resolution UUID; lost replies
 reconcile without resending the installer. [Automatic dispatch](https://github.com/the-luap/openuem-console/blob/dc77e7b878432e99296b6b5a7ca8c5ff1fffde4e/docs/netbird-installation-dispatch.md) now continues retained prepared work with fresh admission and excludes uncertain
-attempts from redelivery. Device lifecycle UI remains open.
+attempts from redelivery. The [device lifecycle UI](https://github.com/the-luap/openuem-console/blob/3199b9ba73fd0b990bbd933727a5cdaebf426d77/docs/netbird-installation-ui.md) now connects scoped
+approved-package choices, reviewed admission, retained status/history and explicit
+recovery.
 Preparation alone remains cancellable and cannot authorize installation. The native macOS installer now
 consumes the exact owned package under atomic current journal admission and
 verifies its resulting state; a preparation response alone cannot authorize it.
 
-The current shared contract pin is
+The preparation milestone used shared contract pin
 `v0.11.1-0.20260914044144-fbef45520563`. Its complete race suite passes and the
 preparation decoder fuzz run completes 11,748,164 inputs in 31.401 seconds. Final
 macOS command/preparation/journal race suites pass in 5.638/4.201/7.633 seconds;
