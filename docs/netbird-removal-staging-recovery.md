@@ -209,8 +209,10 @@ together with a distinct executor factory. Unsupported services expose neither.
 The [scoped console lifecycle](https://github.com/the-luap/openuem-console/blob/ad6a3670b485149304276e575fe11a865676c77a/docs/netbird-removal-recovery-ui.md)
 is integrated. The [independent current-absence observer](netbird-removal-current-absence.md)
 now checks the supported layout without fabricating an original manifest. Its
-remote protocol and agent journal admission are integrated; its console lifecycle
-and empty-stage cleanup remain open.
+remote protocol, agent journal admission and [console lifecycle](https://github.com/the-luap/openuem-console/blob/f7f16022281a755b3177fc7a15ceb364d493d8cf/docs/netbird-removal-absence.md)
+are integrated. The separate [native scaffold cleanup](netbird-removal-stage-cleanup.md)
+has its own current review and acquired owner; its remote admission and console
+workflow remain open.
 
 ## Explicit recovery protocol and journal admission
 

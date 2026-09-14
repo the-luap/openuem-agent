@@ -24,3 +24,10 @@ func nativeInspectRemovalRecovery(context.Context, string, packageapi.Removal) (
 
 func nativeInspectRemovalAbsence(context.Context) (string, error)           { return "", ErrRemoval }
 func prepareNativeRemovalAbsence(context.Context, string) (*Removal, error) { return nil, ErrRemoval }
+
+func nativeInspectRemovalStageCleanup(context.Context, string) (RemovalStageCleanupReview, error) {
+	return RemovalStageCleanupReview{}, ErrRemoval
+}
+func prepareNativeRemovalStageCleanup(context.Context, string, RemovalStageCleanupReview) (*Removal, error) {
+	return nil, ErrRemoval
+}

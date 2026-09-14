@@ -9,7 +9,7 @@ The native package layer now provides a separate read-only current-absence
 observer and acquired verification owner. The existing uninstall and manifest
 continuation final checks use the same stricter observer. The agent now joins
 the separate remote verification protocol and journal admission described below.
-The scoped console request, delivery, resolution and user interface remain open.
+The [scoped console request, delivery, resolution and user interface](https://github.com/the-luap/openuem-console/blob/f7f16022281a755b3177fc7a15ceb364d493d8cf/docs/netbird-removal-absence.md) are integrated.
 
 ## Evidence and fixed scope
 
@@ -105,9 +105,10 @@ the new verification confirmed current absence of the fixed supported layout.
 | Unavailable, changing, cancelled or incomplete queries | Refuse absence |
 
 There is no inferred original ownership, synthesized manifest, automatic stage
-cleanup or silent fresh removal. A future empty-stage cleanup policy needs its
-own explicit review and admission. Current absence never rewrites a historical
-unconfirmed receipt.
+cleanup or silent fresh removal. The separate [native scaffold cleanup](netbird-removal-stage-cleanup.md)
+now supports an explicitly reviewed current scope, with its own acquired owner.
+Its remote admission and console lifecycle remain open; the read-only observer
+never invokes it. Current absence never rewrites a historical unconfirmed receipt.
 
 ## Verification
 
