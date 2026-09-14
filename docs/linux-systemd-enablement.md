@@ -34,9 +34,10 @@ checks the actual manager-created link, flushes it, reloads and verifies enabled
 but inactive state with no process. Cleanup removes only the admitted fixture
 link and definition inside the RAM-only guest. No agent is started by this test.
 
-The complete controller still needs to join these file/manager observations with
-configuration admission, registration, startup and authenticated readiness.
-Linux `activate` remains gated until that integration is implemented and tested.
+The [Linux activation command](native-linux-activation.md) joins these
+file/manager observations with configuration admission, registration, startup
+and authenticated readiness. Its additional live families exercise that sequence
+against the owned system manager.
 
 Descriptor-relative symlink reading follows Linux's
 [readlinkat interface](https://man7.org/linux/man-pages/man2/readlink.2.html).

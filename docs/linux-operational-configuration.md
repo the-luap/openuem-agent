@@ -32,14 +32,14 @@ readiness check preserves the fact of already completed registration.
 
 Native filesystem fixtures cover concurrent publication, modified settings,
 foreign types/permissions/owners, symlinks, hardlinks, changed parents and
-cancellation. `scripts/check-linux-activation.sh` additionally runs three required
+cancellation. `scripts/check-linux-activation.sh` additionally runs four required
 provider families with the real INI parser and fixed production paths in private
 container tmpfs mounts. Those tests inject the controller to inspect phase order,
-readiness identity binding and changes between phases; the separate
-[systemd fixture](linux-systemd-start.md) exercises the real manager and signed
-readiness process.
+readiness identity binding, public partial results and changes between phases.
+The [joined activation fixture](native-linux-activation.md) exercises the real
+manager, configuration owner, encrypted identity store, running executable and
+signed readiness process through public activation calls.
 
-The public Linux activation command remains gated pending the combined
-actual-manager activation fixture and command dispatch integration. Production
-publisher provisioning and physical installation/removal acceptance remain
-separate work.
+The [public Linux activation command](native-linux-activation.md) is integrated
+before logger/service startup. Production publisher provisioning and physical
+installation/removal acceptance remain separate work.

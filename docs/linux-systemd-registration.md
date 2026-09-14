@@ -31,5 +31,5 @@ evidence of absence.
 
 Registration alone does not implement the complete Linux activation command.
 The [start controller](linux-systemd-start.md) provides process-bound signed
-readiness. Protected operational configuration and CLI integration must still
-be joined before enabling that platform path.
+readiness. The [Linux activation CLI](native-linux-activation.md) now joins those
+controllers with protected operational configuration and enrolled identity.

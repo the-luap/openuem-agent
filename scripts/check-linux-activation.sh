@@ -29,7 +29,12 @@ docker run --rm --init --cidfile "$activation_test_dir/container-id" --network n
     go test -race -json -count=1 -timeout=2m ./internal/activatecommand > /fixture/results.json || result=$?
     cat /fixture/results.json
     [ "$result" -eq 0 ]
-    for test in TestLinuxActivationUsesProtectedINIAndExactReadinessIdentity TestLinuxActivationRejectsChangedConfigurationBetweenPhases TestLinuxActivationPreflightPreservesForeignConfigurationAndLog; do
+    for test in TestLinuxActivationUsesProtectedINIAndExactReadinessIdentity TestLinuxActivationRejectsChangedConfigurationBetweenPhases TestLinuxActivationPreflightPreservesForeignConfigurationAndLog TestLinuxActivationRunRetainsScopeAndRejectsPartialReadiness; do
       grep -Eq "\"Action\":\"pass\".*\"Test\":\"$test\"" /fixture/results.json
     done
+    go build -buildvcs=false -o /fixture/openuem-agent ./internal/service/linux
+    /fixture/openuem-agent activate -help > /fixture/activation-help.txt
+    grep -q "Linux: run as root on a systemd host" /fixture/activation-help.txt
+    [ -z "$(ls -A /etc/openuem-agent)" ]
+    [ -z "$(ls -A /var/log/openuem-agent)" ]
   '

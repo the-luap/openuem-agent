@@ -112,7 +112,7 @@ jobs:
         run: scripts/check-linux-readiness.sh
       - name: Native systemd unit parsing and authenticated private manager transport
         run: scripts/check-linux-service-unit.sh
-      - name: Native protected operational configuration and activation provider phases
+      - name: Native operational configuration, activation results and early CLI help
         run: scripts/check-linux-activation.sh
       - name: Bounded literal Linux service paths
         # Fixed execution budgets avoid the Go 1.26 fuzz-duration cancellation

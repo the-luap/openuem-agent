@@ -258,3 +258,82 @@ func TestLinuxActivationPreflightPreservesForeignConfigurationAndLog(t *testing.
 		})
 	}
 }
+
+func TestLinuxActivationRunRetainsScopeAndRejectsPartialReadiness(t *testing.T) {
+	for _, scenario := range []string{"amd64", "arm64", "readiness-conflict", "start-failed", "canceled-after-register", "wrong-platform", "missing-checkpoint", "unbound-image", "changed-after-proof"} {
+		t.Run(scenario, func(t *testing.T) {
+			nativeLinuxConfigurationFixture(t)
+			o, d, store, image, _, _ := activationFixture(t)
+			d.platform, store.identity.Platform = "linux", "linux"
+			if scenario == "arm64" {
+				d.architecture, store.identity.Architecture = "arm64", "arm64"
+			}
+			controller := &fakeLinuxController{}
+			public, _ := store.identity.Keys.Broker.PublicKey()
+			filename := filepath.Join(linuxservice.ConfigurationDirectory, "openuem.ini")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			controller.start = func(_ context.Context, identity localready.Identity, key string) error {
+				if key != public || identity.DeviceID != fixtureDeviceID || identity.TenantID != 3 || identity.SiteID != 4 || identity.ReleaseDigest != store.identity.ReleaseDigest || identity.AgentSize != store.identity.AgentSize || identity.AgentSHA256 != store.identity.AgentSHA256 || !identity.ExpiresAt.Equal(store.identity.Response.ExpiresAt) {
+					t.Error("run lost its stored enrollment binding")
+				}
+				switch scenario {
+				case "readiness-conflict":
+					return localready.ErrConflict
+				case "start-failed":
+					return linuxservice.ErrStart
+				case "changed-after-proof":
+					if err := os.WriteFile(filename, []byte("owned changed configuration"), 0600); err != nil {
+						t.Error(err)
+					}
+				}
+				return nil
+			}
+			d.prepare = func(ctx context.Context, executable, directory string, identity *enrollmentstore.Identity) (installation, error) {
+				if executable != image.path || directory != o.IdentityDirectory || identity != store.identity {
+					t.Error("activation changed retained inputs")
+				}
+				return prepareLinux(ctx, executable, directory, identity,
+					func(context.Context, linuxservice.Spec) (linuxController, error) { return controller, nil },
+					func(ctx context.Context, validate func([]byte) bool) (linuxConfiguration, error) {
+						return linuxservice.OpenConfiguration(ctx, validate)
+					})
+			}
+			switch scenario {
+			case "canceled-after-register":
+				controller.register = func(context.Context) error { controller.state = linuxservice.Enabled; cancel(); return nil }
+			case "wrong-platform":
+				store.identity.Platform = "windows"
+			case "missing-checkpoint":
+				store.checkpoint.Sequence = 0
+			case "unbound-image":
+				image.err = ErrAccess
+			}
+			result, err := run(ctx, o, d)
+			switch scenario {
+			case "amd64", "arm64":
+				if err != nil || !result.Registered || !result.Running || result.DeviceID != fixtureDeviceID || result.TenantID != 3 || result.SiteID != 4 || result.ApprovalRequired {
+					t.Fatal("Linux activation did not retain assigned scope", result, err)
+				}
+			case "wrong-platform", "missing-checkpoint", "unbound-image":
+				if err == nil || result.Registered || result.Running || controller.registrations != 0 || controller.starts != 0 {
+					t.Fatal("unadmitted enrollment reached Linux activation", result, err)
+				}
+				if _, err := os.Lstat(filename); !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("unadmitted enrollment published configuration", err)
+				}
+				return
+			default:
+				if err == nil || !result.Registered || result.Running || result.DeviceID != fixtureDeviceID || result.TenantID != 3 || result.SiteID != 4 {
+					t.Fatal("partial Linux activation reported readiness or lost scope", result, err)
+				}
+			}
+			if controller.closes != 1 || store.identity.Keys != nil {
+				t.Fatal("run did not join its installation and identity resources")
+			}
+			if data, err := os.ReadFile(filename); err != nil || len(data) == 0 {
+				t.Fatal("activation lost published configuration", err)
+			}
+		})
+	}
+}

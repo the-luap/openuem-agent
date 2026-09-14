@@ -13,7 +13,7 @@ import (
 
 const usage = `Usage: openuem-agent activate -identity-directory <absolute protected path>
 
-Register and start the installed Windows or macOS agent using its completed enrollment.
+Register and start the installed Windows, macOS or Linux agent using its completed enrollment.
 Run as an elevated administrator/root from the installed signed agent executable.
 The executable, installation directory and every ancestor must already belong
 to the trusted installer. This starts inventory collection and administrator
@@ -36,6 +36,12 @@ SMAppService registration may require administrator approval in System Settings 
 General > Login Items. Allow OpenUEM Agent, then retry this command. A pending
 approval returns public JSON with approval_required: true and exit status 3.
 Readiness requires an authenticated local response from the enrolled daemon.
+
+Linux: run as root on a systemd host from the enrolled installed executable.
+The command prepares private configuration under /etc/openuem-agent and logs under
+/var/log/openuem-agent, registers the automatic openuem-agent.service root service,
+and waits for signed local readiness from its main process. Existing vendor units,
+foreign configuration, aliases and drop-ins cause an error and are preserved.
 
 Existing compatible configuration and the same service are reused. Conflicting
 configuration or service metadata causes an error. Completed identity

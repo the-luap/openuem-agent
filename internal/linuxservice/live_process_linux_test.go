@@ -228,3 +228,15 @@ func cleanupLiveStartedService(t *testing.T, spec Spec) {
 	s.Close()
 	cleanupLiveRegistration(t, spec)
 }
+
+// This separate entry point is selected only by the combined activation fixture,
+// after the ordinary live-manager suite has completed. It is not a service API.
+func TestLinuxOwnedActivationCleanup(t *testing.T) {
+	liveSystemdFixture(t)
+	cleanupLiveStartedService(t, Spec{Executable: "/fixture/linuxservice.test", IdentityDirectory: "/fixture/identity"})
+}
+
+func TestLinuxOwnedActivationCommandCleanup(t *testing.T) {
+	liveSystemdFixture(t)
+	cleanupLiveStartedService(t, Spec{Executable: "/fixture/activatecommand.test", IdentityDirectory: "/fixture/enrolled-identity"})
+}

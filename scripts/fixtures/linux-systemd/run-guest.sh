@@ -2,17 +2,21 @@
 set -euo pipefail
 
 guest=/fixture/guest
-mkdir -p "$guest"/{bin,sbin,usr/lib/systemd,etc/systemd/system,proc,sys,dev,run,tmp,fixture}
+mkdir -p "$guest"/{bin,sbin,usr/bin,usr/lib/systemd,etc/systemd/system,var/log,var/lib/systemd,proc,sys,dev,run,tmp,fixture}
 chmod 0700 "$guest/fixture"
+chmod 0700 "$guest/var/lib/systemd"
 chmod 1777 "$guest/tmp"
 cp /bin/busybox "$guest/bin/busybox"
 cp /usr/lib/systemd/systemd "$guest/usr/lib/systemd/systemd"
-# Copy only the system manager's declared runtime libraries, preserving their
+cp -L /usr/bin/systemd-creds "$guest/usr/bin/systemd-creds"
+# Copy only the manager and credential tool's declared libraries, preserving their
 # absolute locations. The guest has no source/module/host-filesystem mounts.
 while IFS= read -r library; do
   mkdir -p "$guest$(dirname "$library")"
   cp -L "$library" "$guest$library"
-done < <(ldd /usr/lib/systemd/systemd | awk '/=> \/|^[[:space:]]*\// { for (i=1;i<=NF;i++) if ($i ~ /^\//) print $i }')
+done < <(for executable in /usr/lib/systemd/systemd /usr/bin/systemd-creds; do
+  ldd "$executable"
+done | awk '/=> \/|^[[:space:]]*\// { for (i=1;i<=NF;i++) if ($i ~ /^\//) print $i }' | sort -u)
 ln -s ../usr/lib/systemd/systemd "$guest/sbin/init"
 printf '%s\n' 'root:x:0:0:root:/root:/bin/busybox' > "$guest/etc/passwd"
 printf '%s\n' 'root:x:0:' > "$guest/etc/group"
@@ -28,6 +32,7 @@ exec </dev/console >/dev/console 2>&1
 /bin/busybox mount -t tmpfs -o mode=0755 tmpfs /run
 /bin/busybox mkdir -p /sys/fs/cgroup
 /bin/busybox mount -t cgroup2 cgroup2 /sys/fs/cgroup
+/bin/busybox ip link set lo up
 exec /usr/lib/systemd/systemd --system --unit=openuem-fixture.target --log-target=console
 INIT
 chmod 0755 "$guest/init"
@@ -57,10 +62,15 @@ cat > "$guest/fixture/run-tests" <<'TEST'
 #!/bin/busybox sh
 /fixture/linuxservice.test -test.v -test.count=1 -test.timeout=2m -test.run='^TestLinuxLiveSystemd'
 result=$?
+if [ "$result" -eq 0 ]; then
+  /fixture/activatecommand.test -test.v -test.count=1 -test.failfast -test.timeout=2m -test.run='^TestLinuxLiveActivation(Providers|Command)$'
+  result=$?
+fi
 echo "OPENUEM_SYSTEMD_FIXTURE_RESULT=$result"
 /bin/busybox poweroff -f
 TEST
 CGO_ENABLED=0 go test -c -o "$guest/fixture/linuxservice.test" ./internal/linuxservice
+CGO_ENABLED=0 go test -c -o "$guest/fixture/activatecommand.test" ./internal/activatecommand
 (
   cd "$guest"
   find . -print0 | cpio --null --create --format=newc --owner=0:0 --quiet | gzip -1 > /fixture/guest.cpio.gz
@@ -85,4 +95,6 @@ for iteration in 1 2 3; do
   for test in PrivateManager AbsentDefinition OwnedDefinition OwnedEnablement ServiceRegistration ServiceStart ForeignDefinition; do
     grep -q -- "--- PASS: TestLinuxLiveSystemd$test" "/fixture/guest-$iteration.log"
   done
+  grep -q -- '--- PASS: TestLinuxLiveActivationProviders' "/fixture/guest-$iteration.log"
+  grep -q -- '--- PASS: TestLinuxLiveActivationCommand' "/fixture/guest-$iteration.log"
 done

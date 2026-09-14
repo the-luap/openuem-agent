@@ -80,7 +80,7 @@ func run(ctx context.Context, options Options, deps dependencies) (result Result
 	if ctx == nil || !nativepath.Valid(options.IdentityDirectory) {
 		return result, ErrOptions
 	}
-	if (deps.platform != "windows" && deps.platform != "darwin") || (deps.architecture != "amd64" && deps.architecture != "arm64") {
+	if (deps.platform != "windows" && deps.platform != "darwin" && deps.platform != "linux") || (deps.architecture != "amd64" && deps.architecture != "arm64") {
 		return result, ErrUnsupported
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)

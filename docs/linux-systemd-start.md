@@ -36,7 +36,7 @@ operation lock. It preserves the running process, registered unit and identity.
 A canceled manager call invalidates its connection; recovery opens a fresh
 controller and admits the retained state again.
 
-The native race fixture requires 22 test families. Start tests exercise actual
+The native race fixture requires 27 test families. Start tests exercise actual
 Unix/D-Bus codec exchanges and signed root readiness sockets, including startup
 transitions, changed PID/timestamps/invocation/jobs/files/links, foreign identity
 and key, initialization, malformed jobs, and cancellation of withheld manager
@@ -46,6 +46,8 @@ canonical unit, proves signed readiness, rejects mismatched identity and remains
 running after retries, failed readiness, timeout or controller close. Only the
 guest test cleanup stops that freshly admitted helper.
 
-The Linux activation CLI still requires protected operational configuration and
-integration with the enrolled identity and admitted executable. This controller
-does not supply production publisher provisioning or physical device acceptance.
+The [Linux activation CLI](native-linux-activation.md) joins protected operational
+configuration, the enrolled identity and admitted executable with this controller.
+Two additional live families cover the joined providers and public activation
+with a real encrypted identity. This does not supply production publisher
+provisioning or physical device acceptance.

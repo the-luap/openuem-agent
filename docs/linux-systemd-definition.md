@@ -61,9 +61,10 @@ The diagnostic strace attachment and debug logging were removed from the runner.
 All five live tests pass in three fresh ARM64 guests after this change. CI runs
 the same required guest tests on AMD64; its result must be checked independently.
 
-These tests do not yet start the agent. Operational configuration and the
-controller's registration/start/readiness sequence remain
-integration work. Linux `activate` remains gated until those providers are joined.
+These definition tests do not start the agent. The later
+[Linux activation integration](native-linux-activation.md) joins operational
+configuration and registration/start/readiness, with additional live families
+that launch the owned helper through the canonical unit.
 
 The resolution behavior follows systemd's
 [LoadUnit handler](https://github.com/systemd/systemd/blob/v252/src/core/dbus-manager.c)

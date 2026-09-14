@@ -62,9 +62,9 @@ fixtures. These socket tests authenticate a synthetic D-Bus peer. A separate
 [owned virtual machine fixture](linux-systemd-definition.md) now authenticates
 actual systemd PID 1 and checks resolved definitions and canonical publication.
 Protected [enablement](linux-systemd-enablement.md) now has separate native and
-live-manager checks. Configuration, registration, startup and authenticated
-readiness remain controller integration work. Linux `activate` remains
-unavailable until those requirements are joined.
+live-manager checks. The [Linux activation command](native-linux-activation.md)
+now joins configuration, registration, startup and authenticated readiness,
+with additional public-command tests in the owned systemd guest.
 
 The transport follows the Linux [Unix socket credential interface](https://man7.org/linux/man-pages/man7/unix.7.html),
 the kernel's [descriptor namespace](https://man7.org/linux/man-pages/man5/proc_pid_fd.5.html)

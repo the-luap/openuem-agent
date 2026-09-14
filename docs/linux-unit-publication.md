@@ -33,7 +33,7 @@ cover retained retries, foreign text and filesystem metadata, replaced namespace
 cancellation and twelve competing publishers with exactly one complete inode and
 no leftover temporary files. Linux Vet also passes.
 
-This is the filesystem primitive for a future controller. It does not reload,
-enable or start a service. Effective systemd state and drop-ins, protected agent
-configuration, live registration/startup and authenticated readiness still need
-to be joined before Linux `activate` can be enabled.
+This filesystem primitive does not reload, enable or start a service. The
+[Linux activation command](native-linux-activation.md) now joins it with
+effective systemd state and drop-in admission, protected agent configuration,
+registration/startup and authenticated readiness.

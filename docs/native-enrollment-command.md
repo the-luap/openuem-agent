@@ -4,11 +4,12 @@ The installed Windows/macOS/Linux agent handles `enroll` before creating a logge
 starting its service. The command joins independently authorized bootstrap data,
 native installer trust, the installed executable's signed byte binding and native
 protected identity storage. It does not execute the downloaded installer or
-activate the service. Separate [Windows](native-windows-activation.md) and
-[macOS](native-macos-activation.md) activation flows use the completed identity.
+activate the service. Separate [Windows](native-windows-activation.md),
+[macOS](native-macos-activation.md) and [Linux](native-linux-activation.md)
+activation flows use the completed identity.
 The [Linux enrollment integration](native-linux-enrollment.md) joins native ELF,
-DEB/RPM publisher checks and encrypted host credentials; Linux service activation
-is separate work.
+DEB/RPM publisher checks and encrypted host credentials. Its activation command
+uses the same completed identity through the native systemd controller.
 A finished end-user installer, release signing/provisioning pipeline and final
 signed-release acceptance remain required integration work.
 
@@ -87,7 +88,7 @@ a competing different bootstrap rather than replacing its keys or scope.
 Installed admission also persists the signed executable size and SHA-256 in the
 protected pending record. Completed identity loads retain this binding, and the
 individual runtime checks its actual running image on subsequent starts. Older
-unbound records remain readable but cannot use Windows activation; binding
+unbound records remain readable but cannot use native activation; binding
 migration and authorized executable updates are separate required operations.
 
 A failed check after server issuance leaves pending keys intact. Repeating the
