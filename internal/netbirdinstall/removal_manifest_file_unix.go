@@ -30,6 +30,10 @@ func (m *removalManifestEvidence) GoString() string           { return m.String(
 func (*removalManifestEvidence) MarshalJSON() ([]byte, error) { return nil, ErrRemoval }
 
 func readRemovalStageManifest(parent context.Context, root string, owner uint32, requestID string, descriptor packageapi.Removal) (*removalManifestEvidence, error) {
+	return readRemovalStageManifestHeld(parent, root, owner, requestID, descriptor, nil)
+}
+
+func readRemovalStageManifestHeld(parent context.Context, root string, owner uint32, requestID string, descriptor packageapi.Removal, retain *[]*os.File) (*removalManifestEvidence, error) {
 	if parent == nil || parent.Err() != nil || !filepath.IsAbs(root) || filepath.Clean(root) != root || !netbirdcommand.ValidRequestID(requestID) || !descriptor.Valid() {
 		return nil, ErrRemoval
 	}
@@ -103,5 +107,9 @@ func readRemovalStageManifest(parent context.Context, root string, owner uint32,
 	hash := sha256.Sum256(append([]byte("openuem/netbird/removal-manifest/v1\x00"), encoded...))
 	clear(encoded)
 	v.digest = hex.EncodeToString(hash[:])
+	if retain != nil {
+		*retain = append(*retain, held...)
+		held = nil
+	}
 	return v, nil
 }

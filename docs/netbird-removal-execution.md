@@ -96,8 +96,11 @@ inspection still does not rewrite that original receipt.
 A [private retained-manifest reader](netbird-removal-staging-recovery.md) now
 validates original schema-one evidence through protected ancestry and repeated
 object bindings. Its writer preserves prior bytes and rejects invalid graphs
-before creating a stage. Current remaining-file/runtime inspection and explicitly
-admitted recovery still need integration; this reader cannot authorize cleanup.
+before creating a stage. The companion current-file observer recognizes exact
+original objects across interrupted moves, partial purge and scaffold cleanup;
+unknown entries and replacements remain unavailable. Current runtime/OS-receipt
+inspection and explicitly admitted recovery still need integration; file evidence
+alone cannot authorize cleanup.
 
 ## Verification and limits
 
