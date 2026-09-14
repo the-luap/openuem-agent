@@ -8,7 +8,7 @@ and installation acceptance. [Protected package staging](bootstrap-package-stagi
 now joins native verification to exact-origin downloads, file hashes and checkpoints.
 
 Candidates must be regular, nonempty files of at most 512 MiB, with the exact
-supported extension (`exe`/`msi` on Windows, `pkg` on macOS). The immediate staging
+supported extension (`exe`/`msi` on Windows, `pkg` on macOS, `deb`/`rpm` on Linux). The immediate staging
 directory and file must have private ownership/access controls. Final symlinks,
 noncanonical/control-containing paths and Windows UNC/device paths are rejected.
 The caller must keep every ancestor protected, hold the verified file and check
@@ -36,10 +36,17 @@ policy, removes quarantine or imports a certificate. The same two-minute deadlin
 and process join apply. Apple explains the notarization source in
 [WWDC19: All About Notarization](https://developer.apple.com/videos/play/wwdc2019/703/).
 
+On Linux, the root-only provider checks independently provisioned OpenPGP
+publishers with native DEB/RPM tools. It retains protected file and ancestry
+handles, validates exact trust inventories and joins the owned process group.
+See [Linux package signatures](linux-package-signatures.md) for provisioning,
+native policy, isolated verification and the remaining installation gates.
+
 Diagnostics are capped at 16 KiB, discarded after checking and never exposed in
 errors or logs. Failed checks return a generic signature error; caller cancellation
 is preserved. No offline bypass, self-signed exception or unsigned fallback exists.
-Unavailable revocation/notarization services can therefore prevent acceptance.
+Unavailable Windows revocation/macOS notarization services can therefore prevent
+acceptance; Linux uses independently provisioned local publisher trust.
 
 Tests cover real subprocess cancellation/output bounds, private file/route limits,
 unsigned data and malformed helper invocations. Windows CI copies the Go project's

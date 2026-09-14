@@ -92,6 +92,8 @@ func TestNativeSignatureRejectsUnsafeCandidatesAndUnsignedFiles(t *testing.T) {
 	format := "exe"
 	if runtime.GOOS == "darwin" {
 		format = "pkg"
+	} else if runtime.GOOS == "linux" {
+		format = "deb"
 	}
 	directory := privateTestDirectory(t)
 	path := filepath.Join(directory, "unsigned."+format)

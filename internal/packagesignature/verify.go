@@ -49,7 +49,7 @@ func validCandidate(path, format string) bool {
 	if !utf8.ValidString(path) || !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Ext(path) != "."+format {
 		return false
 	}
-	if (runtime.GOOS == "windows" && format != "exe" && format != "msi") || (runtime.GOOS == "darwin" && format != "pkg") || (runtime.GOOS != "windows" && runtime.GOOS != "darwin") {
+	if (runtime.GOOS == "windows" && format != "exe" && format != "msi") || (runtime.GOOS == "darwin" && format != "pkg") || (runtime.GOOS == "linux" && format != "deb" && format != "rpm") || (runtime.GOOS != "windows" && runtime.GOOS != "darwin" && runtime.GOOS != "linux") {
 		return false
 	}
 	if runtime.GOOS == "windows" {
