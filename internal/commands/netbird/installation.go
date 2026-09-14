@@ -27,7 +27,7 @@ func prepareNativeInstallation(ctx context.Context, artifact preparedPackage, de
 // acquireInstallation is called with the executor mutex held. Ownership of the
 // preparation mutex and native plan transfers to the returned lease, excluding
 // expiry cleanup and another command until the native process and cleanup join.
-func (s *DurableService) acquireInstallation(ctx context.Context, c netbirdcommand.Command) (*installationLease, error) {
+func (s *DurableService) acquireInstallation(ctx context.Context, c netbirdcommand.Command) (*nativePackageLease, error) {
 	p := s.preparation
 	if p == nil || s.installation == nil || ctx == nil || ctx.Err() != nil || !c.Executable(s.identity, time.Now()) || c.ExpiresAt.After(s.expires) {
 		return nil, ErrInvalidAction
@@ -63,7 +63,7 @@ func (s *DurableService) acquireInstallation(ctx context.Context, c netbirdcomma
 		return nil, ErrActionUnconfirmed
 	}
 	transferred = true
-	return &installationLease{revision: state.Revision, run: native.Run, release: func() error {
+	return &nativePackageLease{revision: state.Revision, run: native.Run, release: func() error {
 		defer p.mu.Unlock()
 		err := native.Close()
 		p.clearLocked()

@@ -103,7 +103,7 @@ func Open(directory, installation string, identity netbirdcommand.Identity, boot
 	for index := 1; index <= MaxAttempts; index++ {
 		if names[withdrawalName(index)] {
 			w := &withdrawal{}
-			if index != len(j.entries)+len(j.withdrawals)+1 || f.read(withdrawalName(index), w) != nil || !w.valid(identity.DeviceID) || w.Receipt.Operation == "install" && !identity.Individual || w.Index != index || j.entries[w.Receipt.RequestID] != nil || j.withdrawals[w.Receipt.RequestID] != nil {
+			if index != len(j.entries)+len(j.withdrawals)+1 || f.read(withdrawalName(index), w) != nil || !w.valid(identity.DeviceID) || netbirdcommand.RequiresIndividualIdentity(w.Receipt.Operation) && !identity.Individual || w.Index != index || j.entries[w.Receipt.RequestID] != nil || j.withdrawals[w.Receipt.RequestID] != nil {
 				return nil, ErrUnavailable
 			}
 			if j.last != nil && j.last.release == nil && (j.last.result == nil || j.last.result.Receipt.Status == "unconfirmed") {
@@ -121,7 +121,7 @@ func Open(directory, installation string, identity netbirdcommand.Identity, boot
 			return nil, ErrUnavailable
 		}
 		e := &entry{index: index}
-		if f.read(name, &e.start) != nil || !e.start.valid(identity.DeviceID) || e.start.Operation == "install" && !identity.Individual || j.entries[e.start.RequestID] != nil || j.withdrawals[e.start.RequestID] != nil {
+		if f.read(name, &e.start) != nil || !e.start.valid(identity.DeviceID) || netbirdcommand.RequiresIndividualIdentity(e.start.Operation) && !identity.Individual || j.entries[e.start.RequestID] != nil || j.withdrawals[e.start.RequestID] != nil {
 			return nil, ErrUnavailable
 		}
 		if j.last != nil && j.last.result == nil && j.last.release == nil || j.last != nil && j.last.result != nil && j.last.result.Receipt.Status == "unconfirmed" && j.last.release == nil {
@@ -235,6 +235,17 @@ func (j *Journal) BeginPrepared(c netbirdcommand.Command, now time.Time, revisio
 	return j.beginLocked(c, now, revision)
 }
 
+// BeginRemoval binds native removal admission to the exact journal state used
+// by its current native inspection. An old review cannot cross another operation.
+func (j *Journal) BeginRemoval(c netbirdcommand.Command, now time.Time, revision string) (bool, *netbirdcommand.Receipt, error) {
+	if c.Version != netbirdcommand.RemovalVersion || !netbirdcommand.ValidDigest(revision) {
+		return false, nil, ErrConflict
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.beginLocked(c, now, revision)
+}
+
 func (j *Journal) beginLocked(c netbirdcommand.Command, now time.Time, revision string) (bool, *netbirdcommand.Receipt, error) {
 	if !j.available() || !j.clockValid(now) {
 		return false, nil, ErrUnavailable
@@ -256,6 +267,9 @@ func (j *Journal) beginLocked(c netbirdcommand.Command, now time.Time, revision 
 		}
 		r := e.receipt()
 		return false, &r, nil
+	}
+	if c.Version == netbirdcommand.RemovalVersion && revision == "" {
+		return false, nil, ErrConflict
 	}
 	if !c.Executable(j.identity, now) {
 		return false, nil, netbirdcommand.ErrInvalid

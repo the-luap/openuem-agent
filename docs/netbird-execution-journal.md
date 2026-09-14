@@ -251,3 +251,9 @@ invalidates the preparation revision before any installer can run. Exact retaine
 receipts still replay without another native invocation. The
 [native installation contract](netbird-native-installation.md) describes receipt,
 payload and CLI-path verification, joined cleanup and remaining console delivery.
+
+[Native removal admission](netbird-native-removal.md) now requires a separate
+native owner and current inspected journal revision. Version-four removal shares
+this permanent UUID namespace, uncertainty barrier and explicit withdrawal/release
+history. Generic command admission cannot bypass the inspection requirement;
+ordinary journal state does not advertise native package ownership.

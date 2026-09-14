@@ -19,11 +19,13 @@ type DurableExecutor struct {
 	run     func(context.Context, netbirdcommand.Command) error
 	// Installation acquires an exact prepared package before journal admission,
 	// retaining its ownership through execution and joined cleanup.
-	install func(context.Context, netbirdcommand.Command) (*installationLease, error)
-	now     func() time.Time
+	install func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
+	// Removal has its own native state owner and can never use the connection runner.
+	remove func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
+	now    func() time.Time
 }
 
-type installationLease struct {
+type nativePackageLease struct {
 	revision string
 	run      func(context.Context) error
 	release  func() error
@@ -31,7 +33,7 @@ type installationLease struct {
 	closeErr error
 }
 
-func (l *installationLease) close() error {
+func (l *nativePackageLease) close() error {
 	if l != nil && !l.closed {
 		l.closed = true
 		if l.release != nil {
@@ -87,12 +89,16 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 		return netbirdcommand.Receipt{}, ErrActionUnconfirmed
 	}
 	run := e.run
-	var lease *installationLease
-	if c.Version == netbirdcommand.InstallationVersion {
-		if e.install == nil {
+	var lease *nativePackageLease
+	if c.Version == netbirdcommand.InstallationVersion || c.Version == netbirdcommand.RemovalVersion {
+		acquire := e.install
+		if c.Version == netbirdcommand.RemovalVersion {
+			acquire = e.remove
+		}
+		if acquire == nil {
 			return netbirdcommand.ReceiptFor(c, "rejected")
 		}
-		lease, err = e.install(ctx, c)
+		lease, err = acquire(ctx, c)
 		if lease != nil {
 			defer lease.close()
 		}
@@ -106,7 +112,11 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 	}
 	var admitted bool
 	if lease != nil {
-		admitted, receipt, err = e.journal.BeginPrepared(c, e.now(), lease.revision)
+		if c.Version == netbirdcommand.RemovalVersion {
+			admitted, receipt, err = e.journal.BeginRemoval(c, e.now(), lease.revision)
+		} else {
+			admitted, receipt, err = e.journal.BeginPrepared(c, e.now(), lease.revision)
+		}
 	} else {
 		admitted, receipt, err = e.journal.Begin(c, e.now())
 	}

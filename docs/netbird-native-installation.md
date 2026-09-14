@@ -20,7 +20,9 @@ admission. [Reviewed uncertain-operation recovery](https://github.com/the-luap/o
 The [device lifecycle UI](https://github.com/the-luap/openuem-console/blob/3199b9ba73fd0b990bbd933727a5cdaebf426d77/docs/netbird-installation-ui.md) now exposes exact-site package choice,
 reviewed queueing, retained progress/history, pre-native cancellation and explicit
 reviewed recovery. Its existing connection/registration publisher still rejects
-version three. Local package removal remains unavailable.
+version three. [Local removal admission](netbird-native-removal.md) now has a
+separate exact command and durable owner contract; native package removal remains
+unavailable until its observer and remover are configured.
 
 ## Admission and ownership
 

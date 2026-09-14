@@ -146,7 +146,7 @@ func TestInstallationPreparationRaceCannotSkipAtomicJournalRevision(t *testing.T
 	e, journal, c, _ := ownedInstallation(t)
 	before := journal.State(time.Now())
 	runs, releases := 0, 0
-	e.install = func(ctx context.Context, _ netbirdcommand.Command) (*installationLease, error) {
+	e.install = func(ctx context.Context, _ netbirdcommand.Command) (*nativePackageLease, error) {
 		other := connectionAfterInstallation(c)
 		hash, _ := other.Digest()
 		now := time.Now().UTC()
@@ -155,7 +155,7 @@ func TestInstallationPreparationRaceCannotSkipAtomicJournalRevision(t *testing.T
 		if r, err := journal.Control(ctx, data); err != nil || r.Outcome != "ok" {
 			t.Fatal("concurrent withdrawal fixture failed")
 		}
-		return &installationLease{revision: before.Revision, run: func(context.Context) error { runs++; return nil }, release: func() error { releases++; return nil }}, nil
+		return &nativePackageLease{revision: before.Revision, run: func(context.Context) error { runs++; return nil }, release: func() error { releases++; return nil }}, nil
 	}
 	data, _ := netbirdcommand.Encode(c)
 	if _, err := e.Execute(t.Context(), data); err == nil || runs != 0 || releases != 1 {
@@ -168,8 +168,8 @@ func TestInstallationPreparationRaceCannotSkipAtomicJournalRevision(t *testing.T
 
 func TestInstallationCleanupFailureRetainsUncertainty(t *testing.T) {
 	e, journal, c, _ := ownedInstallation(t)
-	e.install = func(context.Context, netbirdcommand.Command) (*installationLease, error) {
-		return &installationLease{revision: journal.State(time.Now()).Revision, run: func(context.Context) error { return nil }, release: func() error { return errors.New("owned cleanup failure") }}, nil
+	e.install = func(context.Context, netbirdcommand.Command) (*nativePackageLease, error) {
+		return &nativePackageLease{revision: journal.State(time.Now()).Revision, run: func(context.Context) error { return nil }, release: func() error { return errors.New("owned cleanup failure") }}, nil
 	}
 	data, _ := netbirdcommand.Encode(c)
 	r, err := e.Execute(t.Context(), data)

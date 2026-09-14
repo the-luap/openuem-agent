@@ -297,8 +297,8 @@ func TestInstallationCannotBypassEarlierConnectionOrRegistrationAttempt(t *testi
 
 // installationFixture supplies an inert native lease while preserving the real
 // atomic journal admission used by production installation.
-func installationFixture(j *netbirdjournal.Journal, run func(context.Context, netbirdcommand.Command) error) func(context.Context, netbirdcommand.Command) (*installationLease, error) {
-	return func(_ context.Context, c netbirdcommand.Command) (*installationLease, error) {
-		return &installationLease{revision: j.State(time.Now()).Revision, run: func(ctx context.Context) error { return run(ctx, c) }, release: func() error { return nil }}, nil
+func installationFixture(j *netbirdjournal.Journal, run func(context.Context, netbirdcommand.Command) error) func(context.Context, netbirdcommand.Command) (*nativePackageLease, error) {
+	return func(_ context.Context, c netbirdcommand.Command) (*nativePackageLease, error) {
+		return &nativePackageLease{revision: j.State(time.Now()).Revision, run: func(ctx context.Context) error { return run(ctx, c) }, release: func() error { return nil }}, nil
 	}
 }
