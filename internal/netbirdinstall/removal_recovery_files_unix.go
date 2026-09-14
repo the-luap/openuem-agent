@@ -33,6 +33,10 @@ func (v *removalRecoveryFiles) GoString() string           { return v.String() }
 func (*removalRecoveryFiles) MarshalJSON() ([]byte, error) { return nil, ErrRemoval }
 
 func inspectRemovalRecoveryFiles(parent context.Context, root string, owner uint32, requestID string, descriptor packageapi.Removal) (*removalRecoveryFiles, error) {
+	return inspectRemovalRecoveryFilesHeld(parent, root, owner, requestID, descriptor, nil)
+}
+
+func inspectRemovalRecoveryFilesHeld(parent context.Context, root string, owner uint32, requestID string, descriptor packageapi.Removal, retain *[]*os.File) (*removalRecoveryFiles, error) {
 	if parent == nil {
 		return nil, ErrRemoval
 	}
@@ -63,6 +67,10 @@ func inspectRemovalRecoveryFiles(parent context.Context, root string, owner uint
 	hash := sha256.Sum256(append([]byte("openuem/netbird/removal-recovery-files/v1\x00"), data...))
 	clear(data)
 	second.digest = hex.EncodeToString(hash[:])
+	if retain != nil {
+		*retain = append(*retain, held...)
+		held = nil
+	}
 	return second, nil
 }
 

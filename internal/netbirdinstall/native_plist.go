@@ -10,7 +10,18 @@ import (
 // nativePlist accepts Apple's XML prologue without resolving an external DTD.
 // Every dictionary, including nested launchd settings, rejects duplicate keys.
 func nativePlist(reader io.Reader, limit int64) (map[string]*xmlNode, error) {
-	if reader == nil || limit < 1 || limit > 64<<10 {
+	if limit < 1 || limit > 64<<10 {
+		return nil, ErrInstallation
+	}
+	value, err := nativePlistValue(reader, limit, 4096)
+	if err != nil {
+		return nil, ErrInstallation
+	}
+	return plistDictionary(value)
+}
+
+func nativePlistValue(reader io.Reader, limit int64, tokens int) (*xmlNode, error) {
+	if reader == nil || limit < 1 || limit > 512<<10 {
 		return nil, ErrInstallation
 	}
 	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
@@ -48,11 +59,11 @@ func nativePlist(reader io.Reader, limit int64) (map[string]*xmlNode, error) {
 	if encoder.Flush() != nil {
 		return nil, ErrInstallation
 	}
-	root, err := boundedXML(bytes.NewReader(clean.Bytes()), limit, false)
+	root, err := boundedXMLTokens(bytes.NewReader(clean.Bytes()), limit, false, tokens)
 	if err != nil || root.name != "plist" || root.attrs["version"] != "1.0" || len(root.attrs) != 1 || len(root.children) != 1 || strings.TrimSpace(root.text) != "" || !validPlistValue(root.children[0]) {
 		return nil, ErrInstallation
 	}
-	return plistDictionary(root.children[0])
+	return root.children[0], nil
 }
 
 func plistDictionary(dict *xmlNode) (map[string]*xmlNode, error) {

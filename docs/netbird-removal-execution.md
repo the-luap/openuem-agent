@@ -80,9 +80,10 @@ outside this operation.
 
 Completion requires all fixed app/link/plist/receipt paths absent through
 protected ancestry, an explicitly unloaded system job, complete process scans
-with no matching original or staged executable and an empty exact package-ID
-query. These native checks repeat. The successful owner removes only its verified
-manifest and empty staging directories, then performs final absence verification
+with no matching original or staged executable and a successful typed package
+list containing no exact `io.netbird.client` ID. These native checks repeat. The
+successful owner removes only its verified manifest and empty staging directories,
+then performs final absence verification
 which also rejects any retained removal stage.
 
 Failure and cancellation preserve remaining staging evidence. `Close` only closes
@@ -98,9 +99,11 @@ validates original schema-one evidence through protected ancestry and repeated
 object bindings. Its writer preserves prior bytes and rejects invalid graphs
 before creating a stage. The companion current-file observer recognizes exact
 original objects across interrupted moves, partial purge and scaffold cleanup;
-unknown entries and replacements remain unavailable. Current runtime/OS-receipt
-inspection and explicitly admitted recovery still need integration; file evidence
-alone cannot authorize cleanup.
+unknown entries and replacements remain unavailable. The combined recovery
+observer now binds current files to repeated typed launchd state, exact original
+or relocated audit-token/code proofs, and native complete/partial/absent receipt
+evidence. Explicit recovery admission and continuation still need integration;
+observation alone cannot authorize cleanup.
 
 ## Verification and limits
 
@@ -110,7 +113,13 @@ exclusive destination collisions, restored changed subtrees, altered staging,
 receipt races, retained receipts, cancellation, running processes, later source
 replacement, failed native results and retained-stage exclusion. Native process
 tests ad-hoc sign an inert helper and verify that a signal for a changed audit
-generation cannot hit it, while a genuine token terminates and joins that helper.
+generation cannot hit it, while an exact token terminates and joins that helper.
+The same native proof survives relocation only at the helper's exact new path.
+An isolated volume with a unique owned package verifies native receipt listing
+for complete, plist-only, BOM-only and absent records. This also reproduces the
+nonzero exit status of an empty regexp search. Absence therefore uses bounded
+`--pkgs-plist` output: only a successful complete typed list can prove the exact
+package ID missing. Tool failures still cannot become absence.
 No host NetBird process, package, daemon or installed device is mutated by tests.
 
 Real-broker service tests cover paired capability publication, stable inspection,

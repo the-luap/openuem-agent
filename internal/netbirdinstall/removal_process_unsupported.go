@@ -10,3 +10,6 @@ func nativeRemovalPIDPath(context.Context, int) (string, error) { return "", err
 func nativeRemovalProcess(context.Context, int, string) (removalProcess, error) {
 	return removalProcess{}, errRemovalProcesses
 }
+func nativeRemovalRecoveryProcess(context.Context, string, int, string) (removalProcess, error) {
+	return removalProcess{}, errRemovalProcesses
+}

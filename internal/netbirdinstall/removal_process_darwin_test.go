@@ -130,6 +130,14 @@ func TestNativeRemovalProcessBindsAuditGenerationAndRunningCode(t *testing.T) {
 	if err := os.Rename(path, path+"-retained"); err != nil {
 		t.Fatal(err)
 	}
+	// Recovery must be able to prove the same running code at its exact current
+	// relocated path, without a PID or stale original-path fallback.
+	relocated, err := captureRemovalProcess(ctx, pid, path+"-retained", requirement)
+	expectedRelocated := proof
+	expectedRelocated.Path = path + "-retained"
+	if err != nil || relocated != expectedRelocated {
+		t.Fatal("relocated running image lost its exact audit/code identity", err)
+	}
 	if err := os.WriteFile(path, []byte("owned replacement file"), 0700); err != nil {
 		t.Fatal(err)
 	}

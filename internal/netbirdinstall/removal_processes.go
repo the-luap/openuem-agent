@@ -78,7 +78,15 @@ func inspectRemovalProcesses(parent context.Context, backend removalProcessBacke
 }
 
 func removalProcessSnapshot(ctx context.Context, backend removalProcessBackend) ([]removalProcess, error) {
-	if ctx.Err() != nil {
+	return removalProcessSnapshotAt(ctx, backend, func(path string) bool {
+		return path == removalCLIExecutable || path == removalUIExecutable
+	})
+}
+
+// Callers choose only the fixed original paths or the four exact paths derived
+// from one canonical retained-removal identity. Candidate names never suffice.
+func removalProcessSnapshotAt(ctx context.Context, backend removalProcessBackend, matches func(string) bool) ([]removalProcess, error) {
+	if ctx == nil || ctx.Err() != nil || backend.list == nil || backend.path == nil || backend.inspect == nil || matches == nil {
 		return nil, errRemovalProcesses
 	}
 	pids, err := backend.list(ctx)
@@ -102,11 +110,11 @@ func removalProcessSnapshot(ctx context.Context, backend removalProcessBackend) 
 		if err != nil || path == "" {
 			return nil, errRemovalProcesses
 		}
-		if path != removalCLIExecutable && path != removalUIExecutable {
+		if !matches(path) {
 			continue
 		}
 		proof, err := backend.inspect(ctx, pid, path)
-		if err != nil || !proof.valid() || proof.PID != uint32(pid) || proof.Path != path || len(result) >= 128 {
+		if err != nil || !proof.validAt(path) || proof.PID != uint32(pid) || len(result) >= 128 {
 			return nil, errRemovalProcesses
 		}
 		result = append(result, proof)
@@ -127,6 +135,12 @@ func removalProcessSnapshot(ctx context.Context, backend removalProcessBackend) 
 }
 
 func (p removalProcess) valid() bool {
+	return (p.Path == removalCLIExecutable || p.Path == removalUIExecutable) && p.validAt(p.Path)
+}
+
+// This verifies the kernel/code fields and exact path equality. It does not
+// admit a path; callers must first select a fixed original or recovery path.
+func (p removalProcess) validAt(path string) bool {
 	hash, err := hex.DecodeString(p.CodeHash)
-	return p.PID > 1 && p.PID <= 2147483647 && p.Audit[5] == p.PID && p.Audit[7] != 0 && p.StartedSeconds > 0 && p.StartedMicroseconds < 1_000_000 && (p.Path == removalCLIExecutable || p.Path == removalUIExecutable) && err == nil && (len(hash) == 20 || len(hash) == 32) && hex.EncodeToString(hash) == p.CodeHash
+	return path != "" && p.Path == path && p.PID > 1 && p.PID <= 2147483647 && p.Audit[5] == p.PID && p.Audit[7] != 0 && p.StartedSeconds > 0 && p.StartedMicroseconds < 1_000_000 && err == nil && (len(hash) == 20 || len(hash) == 32) && hex.EncodeToString(hash) == p.CodeHash
 }

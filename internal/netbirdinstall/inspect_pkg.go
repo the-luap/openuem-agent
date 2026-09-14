@@ -68,6 +68,13 @@ func packageXML(reader io.Reader) (*xmlNode, error) {
 }
 
 func boundedXML(reader io.Reader, limit int64, xarSignature bool) (*xmlNode, error) {
+	return boundedXMLTokens(reader, limit, xarSignature, 4096)
+}
+
+func boundedXMLTokens(reader io.Reader, limit int64, xarSignature bool, tokens int) (*xmlNode, error) {
+	if tokens < 1 || tokens > 32796 {
+		return nil, ErrMetadata
+	}
 	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
 	if err != nil || len(data) == 0 || int64(len(data)) > limit {
 		return nil, ErrMetadata
@@ -76,7 +83,7 @@ func boundedXML(reader io.Reader, limit int64, xarSignature bool) (*xmlNode, err
 	var root *xmlNode
 	var stack []*xmlNode
 	declaration := false
-	for count := 0; count < 4096; count++ {
+	for count := 0; count < tokens; count++ {
 		token, err := decoder.Token()
 		if err == io.EOF && root != nil && len(stack) == 0 {
 			return root, nil

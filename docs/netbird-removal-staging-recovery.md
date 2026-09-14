@@ -58,11 +58,55 @@ objects and hashes. Both present, both absent and partial receipt state remain
 distinct; filesystem absence does not prove an OS receipt query or removal
 completion. These observations never delete files or remove the original barrier.
 
-Current process/service ownership, native receipt-state interpretation, explicit
-recovery commands and journal admission, native continuation and scoped console
-integration remain open. An eligible file snapshot alone cannot authorize any of
-those actions. Missing-manifest or wholly empty-stage recovery also needs a
-separate explicit evidence policy.
+## Current runtime and native receipt observer
+
+The combined private observer now binds two complete rounds of current files,
+native receipt state, typed system-job configuration and exact process instances.
+First-round file descriptors stay open across both rounds. Any changed component
+refuses a recovery fingerprint. The fingerprint binds the original request and
+descriptor without exposing private paths, inode metadata or service settings.
+
+Process inspection accepts only the original CLI/UI executable paths and their
+two exact relocated paths under the canonical original request's stage. Complete
+bounded process scans must agree on kernel audit token, generation, start time,
+path and dynamically validated vendor code. Unrelated names, foreign stages and
+path aliases never acquire process ownership. Fresh-removal process validation
+continues to accept only the original two paths. Native inert-process tests
+verify the same audit/code identity after an actual path relocation.
+
+The fixed `system/netbird` job must retain an owned typed configuration. Its
+original CLI link may already have moved, so configuration validation uses the
+manifest's original link presence. Staged program aliases remain unavailable.
+A loaded PID must match a proven CLI process with root effective and real users,
+including an exact relocated process. A loaded job without a PID stays loaded.
+
+Native receipt observation uses successful bounded `pkgutil --volume /
+--pkgs-plist` output, with exact ID matching, a 512 KiB byte limit and at most
+8,192 unique typed strings. The previous regexp absence query returns exit status
+1 for an empty result on macOS; it cannot distinguish successful absence through
+the existing strict process reader. The structured list returns a successful
+empty array while preserving actual tool failures as errors.
+
+Remaining receipt files must still match their original manifest objects. Native
+list presence must agree with the surviving BOM. Complete receipts also require
+the exact native package version and root volume; any surviving BOM must enumerate
+the complete original payload paths, independently of a partial staged purge.
+Native list presence repeats after these queries. Four states remain separate:
+
+- `present`: both original receipt files, recognized native ID, exact metadata
+  and original file list;
+- `bom-only`: original BOM and recognized ID/file list, without an invented
+  current package version;
+- `plist-only`: original orphan plist and successful native ID absence;
+- `absent`: neither receipt file and successful native ID absence.
+
+An owned disposable-volume fixture verifies all four native listing behaviors
+using a unique nonvendor package ID. Observing an orphan does not remove it or
+claim completion. Explicit recovery commands and journal admission, native
+continuation (including orphan receipt handling), and scoped console integration
+remain open. Missing-manifest or wholly empty-stage recovery also needs a
+separate explicit evidence policy. This observer advertises no recovery
+capability and never releases the original journal barrier.
 
 ## Verification
 
@@ -80,6 +124,15 @@ scaffold cleanup. Negative fixtures preserve changed/incomplete source trees,
 changed/replaced/added staged payloads, unsafe modes, extra scaffold entries,
 symlinked scaffolds, replaced receipts, duplicated source roots, foreign stages
 and missing manifests. Repeated stable inspection keeps the same fingerprint.
+
+Combined fixtures cover original and relocated loaded daemons, loaded waiting
+jobs, partial purge, and all receipt states. Changed files, source/receipt
+replacements, foreign original references/descriptors, changing audit generations,
+unavailable processes, wrong daemon users, UI-as-daemon, staged job programs,
+inconsistent native lists, wrong metadata/file lists and cancellation refuse
+evidence while preserving staging. Typed-list fixtures reject truncation,
+duplicate/invalid entries, namespaces, external DTDs, trailing documents and
+native failures, and accept a complete 8,192-entry inventory.
 
 macOS races and the owned Linux ARM64 filesystem fixture pass. Full native
 installation/removal, journal and command-service races remain successful, as do

@@ -5,7 +5,6 @@ package netbirdinstall
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -224,13 +223,7 @@ func verifyNativeRemovalAbsence(ctx context.Context, root string, owner uint32, 
 		if removalSourcesAbsent(ctx, root, owner, true) != nil || quiet(ctx, "") != nil {
 			return ErrRemoval
 		}
-		if read(ctx, "/usr/sbin/pkgutil", []string{"--volume", "/", "--pkgs=^io[.]netbird[.]client$"}, 4096, func(reader io.Reader) error {
-			data, err := io.ReadAll(io.LimitReader(reader, 4097))
-			if err != nil || len(data) != 0 {
-				return ErrRemoval
-			}
-			return nil
-		}) != nil {
+		if present, err := nativeRemovalReceiptPresent(ctx, read); err != nil || present {
 			return ErrRemoval
 		}
 	}

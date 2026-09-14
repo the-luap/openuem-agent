@@ -171,7 +171,20 @@ func nativeRemovalProcess(ctx context.Context, pid int, path string) (removalPro
 	return proof, nil
 }
 
-// The only production caller supplies fixed NetBird paths and requirements.
+func nativeRemovalRecoveryProcess(ctx context.Context, requestID string, pid int, path string) (removalProcess, error) {
+	identifier := removalRecoveryProcessIdentifier(requestID, path)
+	if identifier == "" {
+		return removalProcess{}, errRemovalProcesses
+	}
+	proof, err := captureRemovalProcess(ctx, pid, path, netbirdDeveloperRequirement+` and identifier "`+identifier+`"`)
+	if err != nil || !proof.validRecovery(requestID) {
+		return removalProcess{}, errRemovalProcesses
+	}
+	return proof, nil
+}
+
+// Production callers supply only fixed NetBird paths and requirements, including
+// the two exact relocated executables derived from an original removal UUID.
 // Owned native tests use their own ad-hoc signed inert process to verify the
 // kernel identity boundary without executing any vendor code.
 func captureRemovalProcess(ctx context.Context, pid int, path, requirement string) (removalProcess, error) {

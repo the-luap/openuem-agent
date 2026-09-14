@@ -289,15 +289,15 @@ func TestRemovalAbsenceRequiresProtectedPathsReceiptsAndNativeQueries(t *testing
 			queries, quiet := 0, 0
 			err := verifyNativeRemovalAbsence(t.Context(), root, uint32(os.Geteuid()), func(ctx context.Context, path string, args []string, limit int64, consume func(io.Reader) error) error {
 				queries++
-				if path != "/usr/sbin/pkgutil" || !reflect.DeepEqual(args, []string{"--volume", "/", "--pkgs=^io[.]netbird[.]client$"}) || limit != 4096 {
+				if path != "/usr/sbin/pkgutil" || !reflect.DeepEqual(args, []string{"--volume", "/", "--pkgs-plist"}) || limit != maxRemovalReceiptList {
 					t.Fatal("unbounded or foreign receipt query")
 				}
 				if kind == "query-error" {
 					return ErrRemoval
 				}
-				data := ""
+				data := `<plist version="1.0"><array/></plist>`
 				if kind == "query-present" {
-					data = "io.netbird.client\n"
+					data = `<plist version="1.0"><array><string>io.netbird.client</string></array></plist>`
 				}
 				if kind == "query-whitespace" {
 					data = "\n"
