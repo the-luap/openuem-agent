@@ -3,8 +3,10 @@
 Individually enrolled root macOS agents now configure native removal inspection
 and execution together. Support requires CGO, native ACL/code validation, macOS
 11.3 or later and the audit-token signal and typed system-job APIs. Other builds
-keep removal unavailable. The console still needs its separate reviewed removal
-request, dispatch, recovery and UI lifecycle.
+keep removal unavailable. The [reviewed console lifecycle](https://github.com/the-luap/openuem-console/blob/4d6ca6369a003597e7b602b4b5ea1c1548e1dc74/docs/netbird-removal-ui.md)
+now provides scoped native review, immutable request admission, joined dispatch,
+coherent history and explicit withdrawal/release with read-only reconciliation.
+Original uncertain removal results remain distinct from later recovery proofs.
 
 ## Admission and execution ownership
 
