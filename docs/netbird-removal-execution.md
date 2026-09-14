@@ -78,6 +78,12 @@ outside this operation.
 
 ## Positive absence and interruption
 
+The [current-absence observer](netbird-removal-current-absence.md) now holds
+protected ancestry across both native query rounds and rechecks files after each
+round. Any process in the removal-stage namespace vetoes absence, including
+after its stage was deleted. The same observer serves the final uninstall and
+manifest-continuation checks. It never changes an earlier uncertain outcome.
+
 Completion requires all fixed app/link/plist/receipt paths absent through
 protected ancestry, an explicitly unloaded system job, complete process scans
 with no matching original or staged executable and a successful typed package

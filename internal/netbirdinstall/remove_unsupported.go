@@ -21,3 +21,6 @@ func prepareNativeRemovalRecovery(context.Context, string, packageapi.Removal, s
 func nativeInspectRemovalRecovery(context.Context, string, packageapi.Removal) (string, error) {
 	return "", ErrRemoval
 }
+
+func nativeInspectRemovalAbsence(context.Context) (string, error)           { return "", ErrRemoval }
+func prepareNativeRemovalAbsence(context.Context, string) (*Removal, error) { return nil, ErrRemoval }

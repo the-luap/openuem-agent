@@ -105,8 +105,9 @@ using a unique nonvendor package ID. Observing an orphan does not remove it or
 claim completion. The private native owner below now continues manifest-backed
 removal, including orphan receipt handling. The service now joins the separate
 recovery protocol, journal admission and native owner described below. Scoped
-console integration and missing-manifest or wholly empty-stage recovery remain
-open. The observer alone advertises no capability and never releases a barrier.
+console integration now provides reviewed continuation, dispatch and retained
+history. Missing-manifest or wholly empty-stage recovery remains separate. The
+observer alone advertises no capability and never releases a barrier.
 
 ## Recovery runtime stop primitive
 
@@ -205,7 +206,10 @@ Final-query failure can occur after the stage has been removed. It remains
 unconfirmed and cannot rewrite the original command's outcome. Supported native
 services now configure `InspectRemovalRecovery` and `PrepareRemovalRecovery`
 together with a distinct executor factory. Unsupported services expose neither.
-The scoped console lifecycle and absent-manifest policy remain open.
+The [scoped console lifecycle](https://github.com/the-luap/openuem-console/blob/ad6a3670b485149304276e575fe11a865676c77a/docs/netbird-removal-recovery-ui.md)
+is integrated. The [independent current-absence observer](netbird-removal-current-absence.md)
+now checks the supported layout without fabricating an original manifest. Its
+separate remote verification lifecycle and empty-stage cleanup remain open.
 
 ## Explicit recovery protocol and journal admission
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/open-uem/nats/netbirdcommand"
@@ -205,7 +206,10 @@ func removalNoProcesses(ctx context.Context, stagedApp string, list func(context
 		if err == errRemovalProcessGone {
 			continue
 		}
-		if err != nil || name == "" || name == removalCLIExecutable || name == removalUIExecutable || stagedApp != "" && (name == filepath.Join(stagedApp, "Contents/MacOS/netbird") || name == filepath.Join(stagedApp, "Contents/MacOS/netbird-ui")) {
+		// A deleted stage can still own a running executable. Reject every path
+		// in that namespace, even without a manifest or a canonical stage UUID.
+		// This is only an absence veto; it never grants process ownership.
+		if err != nil || name == "" || name == removalCLIExecutable || name == removalUIExecutable || strings.HasPrefix(name, "/Applications/"+removalStagePrefix) || stagedApp != "" && (name == filepath.Join(stagedApp, "Contents/MacOS/netbird") || name == filepath.Join(stagedApp, "Contents/MacOS/netbird-ui")) {
 			return ErrRemoval
 		}
 	}
@@ -216,19 +220,6 @@ func removalNoProcesses(ctx context.Context, stagedApp string, list func(context
 }
 
 func verifyNativeRemovalAbsence(ctx context.Context, root string, owner uint32, read packageReader, quiet func(context.Context, string) error) error {
-	if ctx == nil || ctx.Err() != nil || read == nil || quiet == nil {
-		return ErrRemoval
-	}
-	for round := 0; round < 2; round++ {
-		if removalSourcesAbsent(ctx, root, owner, true) != nil || quiet(ctx, "") != nil {
-			return ErrRemoval
-		}
-		if present, err := nativeRemovalReceiptPresent(ctx, read); err != nil || present {
-			return ErrRemoval
-		}
-	}
-	if ctx.Err() != nil {
-		return ErrRemoval
-	}
-	return nil
+	_, err := inspectRemovalAbsence(ctx, root, owner, removalAbsenceBackend{read, quiet}, nil)
+	return err
 }

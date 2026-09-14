@@ -4,7 +4,6 @@ package netbirdinstall
 
 import (
 	"context"
-	"errors"
 	"io"
 	"maps"
 	"os"
@@ -428,48 +427,8 @@ func (s *removalStaging) close() error {
 // Check each existing ancestor before accepting a missing leaf. In particular,
 // ENOENT reached through an untrusted symlink is never positive absence.
 func removalSourcesAbsent(ctx context.Context, root string, owner uint32, stages bool) error {
-	if ctx == nil || ctx.Err() != nil || !filepath.IsAbs(root) || filepath.Clean(root) != root {
-		return ErrRemoval
-	}
-	check := removalSnapshotFor(ctx, root, owner, map[string]removalObject{})
-	if _, err := check.object(".", false, true); err != nil {
-		return ErrRemoval
-	}
-	for _, name := range []string{removalApp, removalCLI, removalDaemon, removalReceipt + ".plist", removalReceipt + ".bom"} {
-		parts := strings.Split(name, "/")
-		missing := false
-		for i := 1; i < len(parts); i++ {
-			ancestor := strings.Join(parts[:i], "/")
-			obj, err := check.object(ancestor, true, true)
-			if err != nil {
-				return ErrRemoval
-			}
-			if obj.Missing {
-				missing = true
-				break
-			}
-		}
-		if missing {
-			continue
-		}
-		parent, err := check.parent(name)
-		if err != nil {
-			return ErrRemoval
-		}
-		var info unix.Stat_t
-		err = unix.Fstatat(int(parent.Fd()), filepath.Base(name), &info, unix.AT_SYMLINK_NOFOLLOW)
-		closeErr := parent.Close()
-		if !errors.Is(err, unix.ENOENT) || closeErr != nil {
-			return ErrRemoval
-		}
-	}
-	if stages && removalNoStages(ctx, root, owner) != nil {
-		return ErrRemoval
-	}
-	if ctx.Err() != nil {
-		return ErrRemoval
-	}
-	return nil
+	_, err := removalAbsenceFileSnapshot(ctx, root, owner, stages, nil)
+	return err
 }
 
 func removalNoStages(ctx context.Context, root string, owner uint32) error {
