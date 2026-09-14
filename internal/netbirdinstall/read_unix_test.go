@@ -166,7 +166,25 @@ func TestOfficialNativePackageMetadata(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					return inspectMacArchive(ctx, reader, info.Size(), p)
+					files := make(map[string]installedFile)
+					if err := inspectMacArchiveEvidence(ctx, reader, info.Size(), p, files); err != nil {
+						return err
+					}
+					if len(files) != 10 {
+						return ErrMetadata
+					}
+					// Independently captured from the exact public v0.78.1 payload
+					// using an owned read-only CPIO reader; no executable is run.
+					for name, want := range map[string]string{
+						"netbird":    "aad83f2e496c8cb9a61c408c1aa184ff5cd2ebace7c554f539a0162c2335c9b8",
+						"netbird-ui": "5311acbf30e887a4321f77362d9f1296020f426adedd113dcfb12f878bd55b1f",
+					} {
+						file := files["Applications/NetBird.app/Contents/MacOS/"+name]
+						if hex.EncodeToString(file.hash[:]) != want {
+							return ErrMetadata
+						}
+					}
+					return nil
 				}
 			}
 			require.NoError(t, inspect(t.Context(), file, p, readNativePackage))

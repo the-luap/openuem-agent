@@ -19,13 +19,17 @@ const maxXARTOC = 128 << 10
 // outer package's approved SHA-256 and native signature bind these bytes; this
 // parser is an identity check, not an alternative signature implementation.
 func inspectMacArchive(parent context.Context, reader io.ReaderAt, size int64, descriptor packageapi.Package) error {
+	return inspectMacArchiveEvidence(parent, reader, size, descriptor, nil)
+}
+
+func inspectMacArchiveEvidence(parent context.Context, reader io.ReaderAt, size int64, descriptor packageapi.Package, evidence map[string]installedFile) error {
 	ctx, cancel := context.WithTimeout(parent, time.Minute)
 	defer cancel()
 	entries, err := readXARTOC(ctx, reader, size)
 	if err != nil {
 		return ErrMetadata
 	}
-	err = inspectMac(ctx, descriptor, func(name string, limit int64, consume func(io.Reader) error) error {
+	err = inspectMacEvidence(ctx, descriptor, func(name string, limit int64, consume func(io.Reader) error) error {
 		entry, exists := entries[name]
 		if !exists || entry.size > limit || entry.length > limit {
 			return ErrMetadata
@@ -49,7 +53,7 @@ func inspectMacArchive(parent context.Context, reader io.ReaderAt, size int64, d
 			return ErrMetadata
 		}
 		return nil
-	})
+	}, evidence)
 	return contextError(ctx, err)
 }
 

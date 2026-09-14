@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/xml"
 	"io"
@@ -18,6 +19,10 @@ const maxPackageXML = 32 << 10
 const maxPackagePayload = 256 << 20
 
 func inspectMac(ctx context.Context, descriptor packageapi.Package, member func(string, int64, func(io.Reader) error) error) error {
+	return inspectMacEvidence(ctx, descriptor, member, nil)
+}
+
+func inspectMacEvidence(ctx context.Context, descriptor packageapi.Package, member func(string, int64, func(io.Reader) error) error, evidence map[string]installedFile) error {
 	var component string
 	err := member("Distribution", maxPackageXML, func(reader io.Reader) error {
 		root, err := packageXML(reader)
@@ -35,13 +40,16 @@ func inspectMac(ctx context.Context, descriptor packageapi.Package, member func(
 		if err != nil || root.name != "pkg-info" || root.attrs["identifier"] != descriptor.PackageID || root.attrs["version"] != descriptor.Version {
 			return ErrMetadata
 		}
+		if evidence != nil && (root.attrs["install-location"] != "" && root.attrs["install-location"] != "/" || root.attrs["relocatable"] != "false" || root.attrs["postinstall-action"] != "none") {
+			return ErrMetadata
+		}
 		return nil
 	})
 	if err != nil {
 		return ErrMetadata
 	}
 	return member(component+"/Payload", 512<<20, func(reader io.Reader) error {
-		return inspectPayload(ctx, reader, descriptor.Architecture)
+		return inspectPayloadEvidence(ctx, reader, descriptor.Architecture, evidence)
 	})
 }
 
@@ -204,6 +212,10 @@ func distributionComponent(root *xmlNode, descriptor packageapi.Package) (string
 // ordinary, unlinked Mach-O executable for both the client and UI. Universal,
 // differently encoded or ambiguous packages fail closed for explicit review.
 func inspectPayload(ctx context.Context, reader io.Reader, architecture string) error {
+	return inspectPayloadEvidence(ctx, reader, architecture, nil)
+}
+
+func inspectPayloadEvidence(ctx context.Context, reader io.Reader, architecture string, evidence map[string]installedFile) error {
 	zipped, err := gzip.NewReader(contextReader{ctx, reader})
 	if err != nil {
 		return ErrMetadata
@@ -260,10 +272,18 @@ func inspectPayload(ctx context.Context, reader io.Reader, architecture string) 
 			return ErrMetadata
 		}
 		kind := mode & 0170000
+		if evidence != nil && (number(24, 30) != 0 || mode&06002 != 0 || mode&0020 != 0 && number(30, 36) != 80) {
+			return ErrMetadata
+		}
 		if kind != 0100000 && kind != 0040000 || kind == 0100000 && links != 1 || kind == 0040000 && size != 0 {
 			return ErrMetadata
 		}
 		seen[key] = true
+		hash := sha256.New()
+		originalSize := size
+		if evidence != nil && kind == 0100000 && !strings.HasPrefix(name, "Applications/NetBird.app/") {
+			return ErrMetadata
+		}
 		if _, target := targets[name]; target {
 			var code [32]byte
 			if size < int64(len(code)) || mode&0170000 != 0100000 || mode&0111 == 0 || links != 1 {
@@ -273,10 +293,22 @@ func inspectPayload(ctx context.Context, reader io.Reader, architecture string) 
 				return ErrMetadata
 			}
 			targets[name] = true
+			if evidence != nil {
+				_, _ = hash.Write(code[:])
+			}
 			size -= int64(len(code))
 		}
-		if _, err := io.CopyN(io.Discard, raw, size); err != nil || raw.N <= 0 {
+		var destination io.Writer = io.Discard
+		if evidence != nil && kind == 0100000 {
+			destination = hash
+		}
+		if _, err := io.CopyN(destination, raw, size); err != nil || raw.N <= 0 {
 			return ErrMetadata
+		}
+		if evidence != nil && kind == 0100000 {
+			var sum [32]byte
+			copy(sum[:], hash.Sum(nil))
+			evidence[name] = installedFile{size: originalSize, hash: sum, executable: mode&0111 != 0}
 		}
 	}
 	return ErrMetadata

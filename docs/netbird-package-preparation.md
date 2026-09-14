@@ -74,12 +74,12 @@ with encrypted sources, explicit review, current software authority, atomic audi
 and permanent revocation. This remains an implementation component, not a completed
 installer feature. The [version-three command and common journal](netbird-execution-journal.md)
 now preserve the exact package and current individual recipient in an immutable
-command digest; journal records omit the private source. The production runner
-remains disconnected. Authenticated preparation is now bound to the native agent
-service as described below. Installer command/capability delivery must
-consume the current approval and retain console durable attempts. Install/remove processes, exact resulting state and
-uncertainty recovery remain required before enabling installation or local
-uninstallation. Read-only checks of exact official v0.78.1 artifacts now pass;
+command digest; journal records omit the private source. The
+[native macOS installer](netbird-native-installation.md) now consumes this owner
+under atomic journal admission and verifies exact native resulting state.
+Authenticated preparation is bound to the service as described below. Console
+command/capability delivery must still recheck the current approval and retain
+durable attempts. Local removal and console uncertainty recovery need integration. Read-only checks of exact official v0.78.1 artifacts now pass;
 physical/native installation acceptance remains separate from those checks.
 
 ## Authenticated service ownership
@@ -97,7 +97,8 @@ the active broker binding and service certificate lifetime. It retains one priva
 artifact, holds the common executor mutex during preparation and rechecks a ready,
 unchanged journal after native inspection. Controls remain available during the
 download; a withdrawal or other journal change invalidates the result. No journal
-execution attempt is created and the production installer remains disabled.
+execution attempt is created by preparation itself. Native installation requires
+a separate matching command and journal admission.
 
 Exact request replay rechecks the retained file without another download. A
 changed source, approval, revision or deadline under that UUID conflicts; another
@@ -129,9 +130,9 @@ installer, daemon or provider is run by these tests.
 
 Console delivery is not enabled by this agent endpoint. Its durable preparation
 attempt, current approval/revocation checks, cancellation guard and final fresh
-installation command still require integration. The eventual installer must
-consume the exact owned package under atomic current journal admission and verify
-the resulting native state; a preparation response alone cannot authorize it.
+installation command still require integration. The native macOS installer now
+consumes the exact owned package under atomic current journal admission and
+verifies its resulting state; a preparation response alone cannot authorize it.
 
 The current shared contract pin is
 `v0.11.1-0.20260914044144-fbef45520563`. Its complete race suite passes and the

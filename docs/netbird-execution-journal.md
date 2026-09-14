@@ -240,3 +240,14 @@ records, capacity, cancellation, expiry and publication failure. The broker test
 replace the command runner and verify zero CLI calls for withdrawn registrations.
 Console resolution requires provider key absence before requesting withdrawal
 and matching permanent proof before opening its own admission barrier.
+
+## Prepared native installation admission
+
+`BeginPrepared` adds an atomic ready-revision check for new version-three
+installation attempts. The service acquires the exact private preparation and
+performs native preflight before calling it, while retaining the common executor
+and preparation ownership. A withdrawal between inspection and journal admission
+invalidates the preparation revision before any installer can run. Exact retained
+receipts still replay without another native invocation. The
+[native installation contract](netbird-native-installation.md) describes receipt,
+payload and CLI-path verification, joined cleanup and remaining console delivery.

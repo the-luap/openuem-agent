@@ -20,6 +20,10 @@ func ownedZlib(data []byte) []byte {
 }
 
 func ownedXAR(change func(string) string) []byte {
+	return ownedXARInfo(change, `<pkg-info identifier="io.netbird.client" version="0.78.1"/>`)
+}
+
+func ownedXARInfo(change func(string) string, packageInfo string) []byte {
 	var heap bytes.Buffer
 	entry := func(name string, data []byte, compress bool) string {
 		offset, size, encoding := heap.Len(), len(data), "application/octet-stream"
@@ -31,7 +35,7 @@ func ownedXAR(change func(string) string) []byte {
 		return fmt.Sprintf(`<file><name>%s</name><type>file</type><data><offset>%d</offset><length>%d</length><size>%d</size><encoding style="%s"/></data></file>`, name, offset, len(data), size, encoding)
 	}
 	distribution := entry("Distribution", []byte(ownedDistribution), true)
-	info := entry("PackageInfo", []byte(`<pkg-info identifier="io.netbird.client" version="0.78.1"/>`), true)
+	info := entry("PackageInfo", []byte(packageInfo), true)
 	payload := entry("Payload", ownedPayload(ownedExecutables(), 0), false)
 	toc := `<xar><toc>` + distribution + `<file><name>netbird_arm64.pkg</name><type>directory</type>` + info + payload + `</file></toc></xar>`
 	if change != nil {

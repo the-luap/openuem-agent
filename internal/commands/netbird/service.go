@@ -25,6 +25,7 @@ type DurableService struct {
 	journal       *netbirdjournal.Journal
 	executor      *DurableExecutor
 	preparation   *preparationOwner
+	installation  installationPlanner
 	connection    *nats.Conn
 	binding       *netbirdServiceBinding
 	subscriptions []*nats.Subscription
@@ -139,7 +140,7 @@ func (s *DurableService) handler(control bool, subject string, binding *netbirdS
 			ctx, cancel := context.WithDeadline(s.ctx, c.ExpiresAt)
 			defer cancel()
 			var r netbirdcommand.ControlResponse
-			if c.Kind == "preparation-state" {
+			if c.Kind == "preparation-state" || c.Kind == "installation-state" {
 				r = s.preparationState(c)
 			} else {
 				r, err = s.journal.Control(ctx, msg.Data)

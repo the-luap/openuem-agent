@@ -68,7 +68,7 @@ func TestInstallationDurableAttemptBindsPackageAndSurvivesRestart(t *testing.T) 
 		t.Error("installation reached the connection runner")
 		return ErrInvalidAction
 	}
-	e.install = func(ctx context.Context, got netbirdcommand.Command) error {
+	e.install = installationFixture(e.journal, func(ctx context.Context, got netbirdcommand.Command) error {
 		calls++
 		if got != c {
 			t.Error("installation intent changed")
@@ -80,7 +80,7 @@ func TestInstallationDurableAttemptBindsPackageAndSurvivesRestart(t *testing.T) 
 			t.Error("installation ran before its permanent attempt")
 		}
 		return nil
-	}
+	})
 	data, _ := netbirdcommand.Encode(c)
 	first, err := e.Execute(t.Context(), data)
 	if err != nil || !first.Matches(c) || first.Status != "completed" {
@@ -132,7 +132,7 @@ func TestInstallationSharesConnectionAndRegistrationUncertaintyBarrier(t *testin
 	defer cancel()
 	entered, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	e.install = func(ctx context.Context, got netbirdcommand.Command) error {
+	e.install = installationFixture(e.journal, func(ctx context.Context, got netbirdcommand.Command) error {
 		calls.Add(1)
 		close(entered)
 		select {
@@ -141,7 +141,7 @@ func TestInstallationSharesConnectionAndRegistrationUncertaintyBarrier(t *testin
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-	}
+	})
 	e.run = func(context.Context, netbirdcommand.Command) error { calls.Add(1); return nil }
 	raw, _ := netbirdcommand.Encode(c)
 	done := make(chan error, 1)
@@ -189,7 +189,7 @@ func TestInstallationBrokerRejectsWithoutRunnerAndRecoversLostReply(t *testing.T
 			e, j, c, _ := ownedInstallation(t)
 			var calls atomic.Int32
 			if enabledFixture {
-				e.install = func(context.Context, netbirdcommand.Command) error { calls.Add(1); return ErrActionUnconfirmed }
+				e.install = installationFixture(e.journal, func(context.Context, netbirdcommand.Command) error { calls.Add(1); return ErrActionUnconfirmed })
 			}
 			nc := serviceBroker(t)
 			s, err := NewDurableService(t.Context(), j, c.Identity, c.ExpiresAt.Add(time.Minute))
@@ -240,7 +240,7 @@ func TestInstallationBrokerRejectsWithoutRunnerAndRecoversLostReply(t *testing.T
 func TestInstallationWithdrawalBeforeDeliveryPreventsExecution(t *testing.T) {
 	e, j, c, _ := ownedInstallation(t)
 	calls := 0
-	e.install = func(context.Context, netbirdcommand.Command) error { calls++; return nil }
+	e.install = installationFixture(e.journal, func(context.Context, netbirdcommand.Command) error { calls++; return nil })
 	q := serviceControl(c, "withdraw")
 	q.Version, q.Revision, q.Operation = netbirdcommand.RecoveryVersion, c.Revision, c.Operation
 	control, _ := netbirdcommand.EncodeControl(q)
@@ -271,7 +271,7 @@ func TestInstallationCannotBypassEarlierConnectionOrRegistrationAttempt(t *testi
 			}
 			calls := 0
 			e.run = func(context.Context, netbirdcommand.Command) error { return ErrActionUnconfirmed }
-			e.install = func(context.Context, netbirdcommand.Command) error { calls++; return nil }
+			e.install = installationFixture(e.journal, func(context.Context, netbirdcommand.Command) error { calls++; return nil })
 			data, _ := netbirdcommand.Encode(prior)
 			result, err := e.Execute(t.Context(), data)
 			if err != nil || result.Status != "unconfirmed" {
@@ -292,5 +292,13 @@ func TestInstallationCannotBypassEarlierConnectionOrRegistrationAttempt(t *testi
 				t.Fatal("blocked installation mutated the journal")
 			}
 		})
+	}
+}
+
+// installationFixture supplies an inert native lease while preserving the real
+// atomic journal admission used by production installation.
+func installationFixture(j *netbirdjournal.Journal, run func(context.Context, netbirdcommand.Command) error) func(context.Context, netbirdcommand.Command) (*installationLease, error) {
+	return func(_ context.Context, c netbirdcommand.Command) (*installationLease, error) {
+		return &installationLease{revision: j.State(time.Now()).Revision, run: func(ctx context.Context) error { return run(ctx, c) }, release: func() error { return nil }}, nil
 	}
 }

@@ -61,6 +61,10 @@ func NewDurableServiceWithPreparation(parent context.Context, journal *netbirdjo
 		return p, nil
 	}}
 	s.startPreparationCleanup()
+	if netbirdinstall.InstallationSupported() {
+		s.installation = prepareNativeInstallation
+		s.executor.install = s.acquireInstallation
+	}
 	return s, nil
 }
 
@@ -105,6 +109,9 @@ func (s *DurableService) preparationState(c netbirdcommand.ControlRequest) netbi
 		return r
 	}
 	defer p.mu.Unlock()
+	if c.Kind == "installation-state" && s.installation == nil {
+		return r
+	}
 	if p.poisoned || s.ctx.Err() != nil || !c.Executable(s.identity, time.Now()) {
 		return r
 	}

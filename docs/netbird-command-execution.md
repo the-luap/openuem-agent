@@ -6,11 +6,11 @@ expiring UUID-bound envelopes and permanent attempt/result evidence. Old raw
 mutating subjects and profile steps return an explicit rejection. The managed
 executor now also accepts version-two registration envelopes after an explicit
 `registration-state` capability check. Console registration and provider-peer
-workflows are documented in the console repository. Unix installation and
-uninstallation remain unavailable pending their remaining lifecycle integration.
-The journal recognizes exact version-three installation commands, but its
-production executor rejects new ones before admission while no native installer
-runner is configured.
+workflows are documented in the console repository. The [native macOS installation owner](netbird-native-installation.md) now accepts
+exact version-three commands after matching private preparation and atomic
+journal admission. Console package-aware delivery and local removal still need
+integration. Agents without this native owner reject new installations before
+admission.
 
 Registration, connection, disconnection and profile selection share one command
 implementation across Linux, macOS and Windows. This is an agent execution
@@ -111,8 +111,8 @@ commands and explicit refresh also inherit the agent service context. Failed
 observations carry a neutral error, and current console/worker writers preserve
 previously confirmed data. The old Unix remote-shell installers have been removed.
 Authenticated [private package preparation](netbird-package-preparation.md) is
-available under individual native ownership; installation and local removal
-remain disabled pending durable delivery and native execution integration.
+available under individual native ownership. Native macOS execution now consumes
+that owner; console durable delivery and local removal remain unconnected.
 Windows retains its separate approved software workflow.
 
 Durable UUID-bound connection requests, current console authorization/source

@@ -220,6 +220,22 @@ func (j *Journal) Lookup(c netbirdcommand.Command) (*netbirdcommand.Receipt, err
 func (j *Journal) Begin(c netbirdcommand.Command, now time.Time) (bool, *netbirdcommand.Receipt, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	return j.beginLocked(c, now, "")
+}
+
+// BeginPrepared atomically binds new installation admission to the journal
+// revision under which its private artifact was prepared. Retained exact results
+// remain readable; a changed journal can never grant a new installation attempt.
+func (j *Journal) BeginPrepared(c netbirdcommand.Command, now time.Time, revision string) (bool, *netbirdcommand.Receipt, error) {
+	if c.Version != netbirdcommand.InstallationVersion || !netbirdcommand.ValidDigest(revision) {
+		return false, nil, ErrConflict
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.beginLocked(c, now, revision)
+}
+
+func (j *Journal) beginLocked(c netbirdcommand.Command, now time.Time, revision string) (bool, *netbirdcommand.Receipt, error) {
 	if !j.available() || !j.clockValid(now) {
 		return false, nil, ErrUnavailable
 	}
@@ -243,6 +259,12 @@ func (j *Journal) Begin(c netbirdcommand.Command, now time.Time) (bool, *netbird
 	}
 	if !c.Executable(j.identity, now) {
 		return false, nil, netbirdcommand.ErrInvalid
+	}
+	if revision != "" {
+		state := j.stateLocked(now)
+		if state.Status != "ready" || state.Revision != revision {
+			return false, nil, ErrConflict
+		}
 	}
 	if j.last != nil && j.last.release == nil && (j.last.result == nil || j.last.result.Receipt.Status == "unconfirmed") {
 		return false, nil, ErrPending
