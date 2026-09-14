@@ -44,6 +44,11 @@ type renewalFixture struct {
 
 func newRenewalFixture(t *testing.T, backend NativeBackend, platform string) *renewalFixture {
 	t.Helper()
+	return newTargetRenewalFixture(t, backend, platform, "amd64")
+}
+
+func newTargetRenewalFixture(t *testing.T, backend NativeBackend, platform, architecture string) *renewalFixture {
+	t.Helper()
 	f := &renewalFixture{backend: backend, issuer: newFixtureIssuer(t), now: time.Now().UTC(), prepared: make(map[string]*enrollment.PreparedIdentityRenewal), targets: make(map[string]*enrollment.RenewalConfirmationTarget), confirmed: make(map[string]*enrollment.ConfirmedIdentityRenewal), resolved: make(map[string]*enrollment.ResolvedIdentityRenewal)}
 	// Extend only the synthetic issuer so historical-generation tests can cross
 	// the original leaf's expiry without expiring their independently owned CA.
@@ -161,7 +166,7 @@ func newRenewalFixture(t *testing.T, backend NativeBackend, platform string) *re
 	f.roots.AddCert(f.server.Certificate())
 	f.store = f.restarted()
 	bootstrap := testBootstrap()
-	bootstrap.Platform, bootstrap.Origin = platform, f.server.URL
+	bootstrap.Platform, bootstrap.Architecture, bootstrap.Origin = platform, architecture, f.server.URL
 	f.original, err = f.store.enroll(t.Context(), bootstrap, func(_ context.Context, request enrollment.Request) (*enrollment.Response, error) {
 		return f.issuer.claim(bootstrap.Origin, request)
 	})
@@ -264,7 +269,12 @@ func (f *renewalFixture) confirm(ctx context.Context, request enrollment.Renewal
 
 func runDurableIdentityRenewal(t *testing.T, backend NativeBackend) {
 	t.Helper()
-	f := newRenewalFixture(t, backend, "macos")
+	runTargetDurableIdentityRenewal(t, backend, "macos", "amd64")
+}
+
+func runTargetDurableIdentityRenewal(t *testing.T, backend NativeBackend, platform, architecture string) {
+	t.Helper()
+	f := newTargetRenewalFixture(t, backend, platform, architecture)
 	checkpoint, err := f.store.Checkpoint()
 	if err != nil {
 		t.Fatal(err)
@@ -321,7 +331,7 @@ func runDurableIdentityRenewal(t *testing.T, backend NativeBackend) {
 		t.Fatal("handoff changed identity or repeated activation")
 	}
 	loaded, err := f.restarted().Load()
-	if err != nil || loaded.Response != active.Response {
+	if err != nil || loaded.Response != active.Response || loaded.Platform != platform || loaded.Architecture != architecture {
 		t.Fatal("durable active generation was not selected", err)
 	}
 	loaded.Close()

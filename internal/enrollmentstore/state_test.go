@@ -146,8 +146,12 @@ func (f *fixtureIssuer) claim(origin string, request enrollment.Request) (*enrol
 
 func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 	t.Helper()
+	runTargetDurableEnrollmentRecovery(t, backend, testBootstrap())
+}
+
+func runTargetDurableEnrollmentRecovery(t *testing.T, backend NativeBackend, bootstrap Bootstrap) {
+	t.Helper()
 	issuer := newFixtureIssuer(t)
-	bootstrap := testBootstrap()
 	var count atomic.Int32
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor != 2 || r.Method != http.MethodPost || r.URL.Path != "/enroll/desktop/"+bootstrap.Invitation+"/claim" {
@@ -158,6 +162,10 @@ func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 		var request enrollment.Request
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Error(err)
+			return
+		}
+		if request.Platform != bootstrap.Platform || request.Architecture != bootstrap.Architecture {
+			t.Error("native enrollment changed its authorized target")
 			return
 		}
 		// Inspect the protected winning keys at the exact first-network boundary.
@@ -231,7 +239,7 @@ func runDurableEnrollmentRecovery(t *testing.T, backend NativeBackend) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Response != identity.Response {
+	if loaded.Response != identity.Response || loaded.Platform != bootstrap.Platform || loaded.Architecture != bootstrap.Architecture {
 		t.Fatal("runtime load changed the issued identity")
 	}
 	loaded.Close()
@@ -281,6 +289,9 @@ func signedConfigurationWithAgentFixture(t *testing.T, b Bootstrap, bindAgent bo
 	format := "msi"
 	if b.Platform == "macos" {
 		format = "pkg"
+	}
+	if b.Platform == "linux" {
+		format = "deb"
 	}
 	artifact := artifacts.Artifact{Platform: b.Platform, Architecture: b.Architecture, Format: format, Filename: "openuem-agent-0.12.0-" + b.Platform + "-" + b.Architecture + "." + format, Size: int64(len(content)), SHA256: hex.EncodeToString(digest[:])}
 	if bindAgent {

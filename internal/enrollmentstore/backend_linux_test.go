@@ -254,6 +254,42 @@ func TestLinuxEncryptedBackendRetainsNativeStateMachineContracts(t *testing.T) {
 	}
 }
 
+func TestLinuxEncryptedBackendRecoversLinuxEnrollmentAndRenewalOverNativeHTTPS(t *testing.T) {
+	for _, architecture := range []string{"amd64", "arm64"} {
+		for _, workflow := range []string{"signed enrollment", "renewal handoff"} {
+			t.Run(architecture+"/"+workflow, func(t *testing.T) {
+				backend, directory := linuxBackendFixture(t)
+				if workflow == "signed enrollment" {
+					bootstrap := testBootstrap()
+					bootstrap.Platform, bootstrap.Architecture = "linux", architecture
+					runTargetDurableEnrollmentRecovery(t, backend, bootstrap)
+				} else {
+					runTargetDurableIdentityRenewal(t, backend, "linux", architecture)
+				}
+				if err := backend.Close(); err != nil {
+					t.Fatal(err)
+				}
+				reopened, err := Open(directory)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer reopened.Close()
+				identity, err := reopened.Load()
+				if err != nil || identity.Platform != "linux" || identity.Architecture != architecture || identity.Response.TenantID != 3 || identity.Response.SiteID != 4 {
+					if identity != nil {
+						identity.Close()
+					}
+					t.Fatal("native restart lost the Linux target or scope", err)
+				}
+				identity.Close()
+				if checkpoint, err := reopened.Checkpoint(); err != nil || checkpoint.Sequence != 42 || checkpoint.Digest == "" {
+					t.Fatal("native restart lost its release checkpoint", err)
+				}
+			})
+		}
+	}
+}
+
 func TestLinuxEncryptedBackendPublishesPrivateImmutableBoundedRecords(t *testing.T) {
 	b, directory := linuxBackendFixture(t)
 	for _, record := range []string{pendingRecord, identityRecord, recipientRecord} {

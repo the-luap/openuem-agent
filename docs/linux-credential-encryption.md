@@ -2,8 +2,8 @@
 
 The private `linuxCredentialCipher` provides bounded authenticated encryption for
 the [durable Linux identity backend](linux-identity-storage.md), now connected to
-`OpenNative`. Linux enrollment/installation admission and individual-service
-activation remain separate integration requirements.
+`OpenNative`. The installed Linux enrollment command, native package trust and
+individual-service activation remain separate integration requirements.
 
 ## Native protection and scope
 
@@ -80,7 +80,7 @@ No workstation key, host service or real endpoint enrollment is used.
 
 The dedicated `linux-credential-encryption` CI job runs this owned fixture after
 caching dependencies. It now also exercises the complete durable Linux backend;
-Linux enrollment integration remains separate from these storage results.
+native package trust and service activation remain separate from these results.
 
 The complete owned Linux enrollment-store race run passed in 73.904 seconds.
 The native fixture used systemd 252.39 on Linux ARM64; CI exercises Linux AMD64.

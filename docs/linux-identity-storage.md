@@ -3,8 +3,10 @@
 Linux `enrollmentstore.OpenNative` now implements the durable encrypted record
 backend. It uses the [native systemd credential provider](linux-credential-encryption.md)
 and preserves the common enrollment, recipient, rotation, software and renewal
-state-machine contracts. Linux release/bootstrap admission, native installer
-trust and individual-service activation remain separate integration work.
+state-machine contracts. The shared Linux release/bootstrap protocol is now
+connected to protected enrollment and renewal on AMD64/ARM64. Native installer
+trust, the installed enrollment command and individual-service activation remain
+separate integration work.
 
 ## Installation and encryption boundary
 
@@ -89,5 +91,16 @@ The final complete Linux race suite passed in 116.771 seconds, including the
 prerequisite and partial-write fixtures. The macOS enrollment-store race suite
 passed in 63.807 seconds and the full Linux agent build passes; the Windows storage
 test binary cross-compiles. Native Windows execution remains separate evidence.
-The reused signed workflow fixtures retain their established Windows/Mac
-metadata: they prove Linux storage contracts, not Linux-platform admission.
+After integrating shared Linux protocol version `2dbc458eb28c`, the complete
+native Linux store race suite passes in 135.166 seconds. macOS storage, installed
+command, package staging and runtime-option regression suites also pass, as do
+complete Linux and Windows agent builds. Native Linux package and installed-command
+admission are still explicitly unavailable.
+The original cross-platform workflow fixtures retain their Windows/Mac metadata.
+Additional native fixtures now use actual Linux platform/architecture metadata,
+independently signed configuration and the bounded HTTP/2 client. They lose an
+issuance reply, recover the same protected keys, preserve the release checkpoint,
+lose renewal preparation/confirmation replies and recover the exact committed
+handoff. Reopening native storage retains the resulting Linux identity and scope.
+Their package bytes remain synthetic; these results do not establish native
+package-signature trust or authorize service installation.

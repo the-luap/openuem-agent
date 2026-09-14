@@ -1,9 +1,9 @@
 # Individual endpoint identity storage
 
 The `internal/enrollmentstore` package implements protected native storage on
-Windows, macOS and Linux. The durable enrollment state machine connects the
-Windows/Mac enrollment paths to the bounded HTTPS client; Linux platform admission
-remains a separate integration requirement.
+Windows, macOS and Linux. The durable enrollment state machine connects exact
+platform/architecture metadata to the bounded HTTPS client. The installed Linux
+enrollment command and service activation remain separate integration requirements.
 The [opt-in service runtime](individual-agent-runtime.md) now loads that identity
 before legacy certificate configuration. The [native enrollment command](native-enrollment-command.md)
 now connects explicit bootstrap authorization and verified installer/executable
@@ -99,8 +99,10 @@ ancestry, exclusive publication, bounded authenticated reads and partial-restore
 barriers. Runtime journals coexist in the installation parent and prevent missing
 credentials from being treated as an empty installation. The independent
 [Linux service lease](linux-service-ownership.md) excludes competing root services.
-Native package trust, Linux enrollment admission and service activation remain
-required integration steps; storage does not enable them implicitly.
+The signed Linux release/bootstrap protocol now connects to this storage and its
+renewal state machine on AMD64/ARM64. Native package trust, the installed Linux
+enrollment command and service activation remain required integration steps;
+storage does not enable them implicitly.
 
 ## Windows storage boundary
 

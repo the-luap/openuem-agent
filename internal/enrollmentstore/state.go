@@ -51,7 +51,7 @@ func (b Bootstrap) valid() bool {
 	agentDigest, agentErr := hex.DecodeString(b.AgentSHA256)
 	agentValid := b.AgentSize == 0 && b.AgentSHA256 == "" || b.AgentSize > 0 && b.AgentSize <= artifacts.MaxPackageSize && agentErr == nil && len(agentDigest) == sha256.Size && hex.EncodeToString(agentDigest) == b.AgentSHA256
 	return enrollment.ValidOrigin(b.Origin) && enrollment.ValidToken(b.Invitation) &&
-		(b.Platform == "windows" || b.Platform == "macos") &&
+		(b.Platform == "windows" || b.Platform == "macos" || b.Platform == "linux") &&
 		(b.Architecture == "amd64" || b.Architecture == "arm64") &&
 		len(b.DeviceName) <= 255 && utf8.ValidString(b.DeviceName) && !strings.ContainsAny(b.DeviceName, "\x00\r\n") &&
 		err == nil && len(digest) == sha256.Size && hex.EncodeToString(digest) == b.ReleaseDigest &&
