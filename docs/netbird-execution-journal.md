@@ -43,15 +43,19 @@ permanent UUID namespace and uncertainty barrier as connection and registration.
 There is no fallback to the connection CLI runner. An absent installation runner
 rejects new work, while an exact existing result remains readable after restart,
 expiry or runner removal. Ordinary/registration state does not advertise an
-installer capability. Authenticated preparation, current approval/revocation
-checks, a protected prepared package and native resulting-state verification must
-be integrated before the production runner can be supplied.
+installer capability. [Authenticated private preparation](netbird-package-preparation.md#authenticated-service-ownership)
+now shares the service lifetime and executor exclusion. Current console
+approval/revocation checks, atomic consumption of the exact prepared package and
+native resulting-state verification remain required before supplying the
+production installation runner.
 
 Owned tests supply inert installation callbacks to verify admission before any
 execution, longer-deadline persistence, package-digest conflicts, concurrent
 connection/registration exclusion, lost replies, explicit withdrawal, restart,
 later-boot recovery and retained source privacy. They do not install NetBird.
-The pinned shared revision is `d0a53880dcbf2ceae01c4484bf9b7f4429ff0281`.
+The installation-command checkpoint used shared revision
+`d0a53880dcbf2ceae01c4484bf9b7f4429ff0281`; the later authenticated preparation
+contract is pinned at `fbef45520563fa80ee2809ca815cd2e8a1c549bd`.
 macOS and Linux journal/command/preparation race suites, native service/broker
 regressions and all three complete agent platform builds pass. The final
 installation-specific suite also tests exclusion in both directions: an uncertain

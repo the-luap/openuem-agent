@@ -75,8 +75,69 @@ and permanent revocation. This remains an implementation component, not a comple
 installer feature. The [version-three command and common journal](netbird-execution-journal.md)
 now preserve the exact package and current individual recipient in an immutable
 command digest; journal records omit the private source. The production runner
-remains disconnected. Authenticated installer command/capability delivery must
+remains disconnected. Authenticated preparation is now bound to the native agent
+service as described below. Installer command/capability delivery must
 consume the current approval and retain console durable attempts. Install/remove processes, exact resulting state and
 uncertainty recovery remain required before enabling installation or local
 uninstallation. Read-only checks of exact official v0.78.1 artifacts now pass;
 physical/native installation acceptance remains separate from those checks.
+
+## Authenticated service ownership
+
+`NewDurableServiceWithPreparation` adds an individually addressed preparation RPC
+and explicit `preparation-state` control. Native Unix startup selects the fixed
+`netbird-preparation` sibling of `netbird-journal` beneath the validated individual
+identity directory. Shared enrollment and Windows do not enable this staging
+owner. Linux still requires the separate individual enrollment implementation;
+package preparation is not evidence of independent Linux publisher trust.
+
+The strict request binds the current certificate/device/scope, exact descriptor,
+reviewed revision, live journal revision, UUID and deadline. The handler requires
+the active broker binding and service certificate lifetime. It retains one private
+artifact, holds the common executor mutex during preparation and rechecks a ready,
+unchanged journal after native inspection. Controls remain available during the
+download; a withdrawal or other journal change invalidates the result. No journal
+execution attempt is created and the production installer remains disabled.
+
+Exact request replay rechecks the retained file without another download. A
+changed source, approval, revision or deadline under that UUID conflicts; another
+request cannot evict a live preparation. Readiness and responses expose no package
+URL or local path. Replacement broker connections keep the same owner and cache;
+stale callbacks cannot start work. Service cancellation reaches the stage, joins
+its work and removes late artifacts before journal ownership is released.
+
+A joined maintenance worker cleans expired or invalidated preparation within one
+second when no inspection is active, and clears it on service cancellation. A
+cleanup error poisons preparation readiness. Startup `ResetRoot`, called under
+the exclusive installation journal lease, removes at most one abandoned stage
+with an exact UUID directory and fixed package filename. It checks private
+ownership and original file identity, bounds directory enumeration and refuses
+unknown entries or symlinks. It never recursively removes a directory, repairs
+permissions or touches the execution journal. Abandoned files carry no reusable
+preparation authority after restart.
+After a live stage fails, the owner only checks that its root is empty. Remaining
+files stop preparation and are preserved; failed cleanup cannot invoke startup
+recovery to delete a replacement path.
+
+Owned broker fixtures cover exact replay, private correlation, changed authority,
+connection replacement, command exclusion, journal changes during download,
+expiration, cleanup failure and shutdown joining. Filesystem fixtures cover
+partial downloads, bounded crash cleanup, extra files/directories, symlinks and
+unprotected ancestors. The real native binding also receives the preparation RPC
+and rejects an incompatible native target before HTTP access. No real NetBird
+installer, daemon or provider is run by these tests.
+
+Console delivery is not enabled by this agent endpoint. Its durable preparation
+attempt, current approval/revocation checks, cancellation guard and final fresh
+installation command still require integration. The eventual installer must
+consume the exact owned package under atomic current journal admission and verify
+the resulting native state; a preparation response alone cannot authorize it.
+
+The current shared contract pin is
+`v0.11.1-0.20260914044144-fbef45520563`. Its complete race suite passes and the
+preparation decoder fuzz run completes 11,748,164 inputs in 31.401 seconds. Final
+macOS command/preparation/journal race suites pass in 5.638/4.201/7.633 seconds;
+native agent binding regressions pass in 2.574 seconds. Linux journal/command/
+preparation race suites pass in 5.208/3.793/3.820 seconds. All six complete builds
+pass: Linux console, Linux/macOS/Windows agent and Linux/Windows worker, using
+the same published shared revision rather than a local module replacement.

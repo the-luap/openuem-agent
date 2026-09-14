@@ -109,17 +109,20 @@ The post-command collector now shares the retained session and original deadline
 see [bounded NetBird observations](netbird-observations.md). Broker connection
 commands and explicit refresh also inherit the agent service context. Failed
 observations carry a neutral error, and current console/worker writers preserve
-previously confirmed data. Unix installation/uninstallation still uses remote
-shell scripts and needs release trust and cancellation work. Windows
-installation/uninstallation uses the existing bounded package adapter.
+previously confirmed data. The old Unix remote-shell installers have been removed.
+Authenticated [private package preparation](netbird-package-preparation.md) is
+available under individual native ownership; installation and local removal
+remain disabled pending durable delivery and native execution integration.
+Windows retains its separate approved software workflow.
 
 Durable UUID-bound connection requests, current console authorization/source
 locks, agent execution journals and immutable attempt/outcome history are now
 implemented, together with coordinated console resolution of uncertain mutations;
 see the linked journal contract for the current flow. Version-two registration
 shares this permanent journal, binds the one-off key into the command digest, and
-retains no key material in local records. Still required: console registration
-workflow integration, trusted installation, and authoritative provider-peer association.
+retains no key material in local records. Console registration and retained
+provider-peer association now have their own reviewed workflows. Trusted native
+installation and local removal still require their remaining lifecycle integration.
 An agent-reported IP or hostname is not proof of provider ownership. Real NetBird
 daemon, interactive desktop, Windows native process and physical-device acceptance
 must be recorded separately from these owned fixtures and cross-compilation.

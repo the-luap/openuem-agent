@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	openuem "github.com/open-uem/nats"
 	"github.com/open-uem/nats/enrollment/keyfile"
 	"github.com/open-uem/nats/netbirdcommand"
+	packageapi "github.com/open-uem/nats/netbirdinstall"
 	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	"github.com/open-uem/openuem-agent/internal/netbirdjournal"
 )
@@ -32,6 +34,9 @@ func TestNativeNetbirdBindingRenewalAndLivePrivateControl(t *testing.T) {
 	}
 	if first.Directory != filepath.Join(a.individual.directory, "netbird-journal") || !first.Identity.Individual || !first.Identity.Valid() {
 		t.Fatal("journal did not use native installation identity")
+	}
+	if runtime.GOOS != "windows" && first.PreparationDirectory != filepath.Join(a.individual.directory, "netbird-preparation") {
+		t.Fatal("preparation escaped native individual ownership")
 	}
 	response := &a.individual.identity.Response
 	block, _ := pem.Decode([]byte(response.Certificate))
@@ -80,6 +85,46 @@ func TestNativeNetbirdBindingRenewalAndLivePrivateControl(t *testing.T) {
 	r, err := netbirdcommand.DecodeControlResponse(msg.Data, control)
 	if err != nil || r.Outcome != "ok" || r.State.Status != "ready" || r.State.Remaining != netbirdjournal.MaxAttempts {
 		t.Fatal("native private subscription did not return live state", err)
+	}
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		preparation := control
+		preparation.RequestID, preparation.Kind = uuid.NewString(), "preparation-state"
+		raw, _ := netbirdcommand.EncodeControl(preparation)
+		msg, err := console.Request(subject, raw, 2*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		capability, err := netbirdcommand.DecodeControlResponse(msg.Data, preparation)
+		if err != nil || capability.Outcome != "ok" || capability.State != r.State {
+			t.Fatal("native preparation was not bound to the same journal", err)
+		}
+		if keyfile.CheckDirectory(renewed.PreparationDirectory) != nil {
+			t.Fatal("native staging directory is not private")
+		}
+		// A wrong native target must reach the authenticated preparation handler
+		// but fail before any HTTP request or native installer can run.
+		pkg := packageapi.Package{Schema: 1, ApprovalID: uuid.NewString(), TenantID: control.TenantID, Platform: "linux", Architecture: "arm64", Format: "deb", PackageID: "netbird", Version: "0.78.1", URL: "https://never-request.example.test/netbird.deb", Size: 100, SHA256: strings.Repeat("d", 64)}
+		if runtime.GOOS == "linux" {
+			pkg.Platform, pkg.Format, pkg.PackageID, pkg.URL = "macos", "pkg", "io.netbird.client", "https://never-request.example.test/netbird.pkg"
+		}
+		request := netbirdcommand.PreparationRequest{Version: netbirdcommand.PreparationVersion, Identity: control.Identity, RequestID: uuid.NewString(), Revision: strings.Repeat("a", 64), JournalRevision: r.State.Revision, Package: pkg, IssuedAt: now, ExpiresAt: now.Add(10 * time.Second)}
+		encoded, err := netbirdcommand.EncodePreparation(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		preparationSubject, _ := netbirdcommand.PreparationSubject(control.DeviceID)
+		msg, err = console.Request(preparationSubject, encoded, 2*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		answer, err := netbirdcommand.DecodePreparationResponse(msg.Data, request)
+		if err != nil || answer.Outcome != "unavailable" {
+			t.Fatal("wrong native target entered preparation", err)
+		}
+		entries, err := os.ReadDir(renewed.PreparationDirectory)
+		if err != nil || len(entries) != 0 {
+			t.Fatal("rejected native package left private staging files")
+		}
 	}
 	// Renewal never authorizes controls addressed to the retired certificate.
 	old := control

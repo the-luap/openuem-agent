@@ -24,6 +24,7 @@ type DurableService struct {
 	expires       time.Time
 	journal       *netbirdjournal.Journal
 	executor      *DurableExecutor
+	preparation   *preparationOwner
 	connection    *nats.Conn
 	binding       *netbirdServiceBinding
 	subscriptions []*nats.Subscription
@@ -49,7 +50,7 @@ func NewDurableService(parent context.Context, journal *netbirdjournal.Journal, 
 
 // Bind installs exact direct subscriptions on a current connection. Ordinary
 // reconnects retain those subscriptions; replacing the connection removes the
-// prior pair. The journal/executor remain the same across connection changes.
+// prior subscriptions. The journal/executor remain the same across connection changes.
 func (s *DurableService) Bind(connection *nats.Conn) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -68,9 +69,18 @@ func (s *DurableService) Bind(connection *nats.Conn) error {
 	s.binding = binding
 	command, _ := netbirdcommand.Subject(s.identity.DeviceID)
 	control, _ := netbirdcommand.ControlSubject(s.identity.DeviceID)
-	for _, subject := range []string{command, control} {
+	subjects := []string{command, control}
+	prepare, err := netbirdcommand.PreparationSubject(s.identity.DeviceID)
+	if s.identity.Individual && err == nil {
+		subjects = append(subjects, prepare)
+	}
+	for _, subject := range subjects {
 		kind := subject == control
-		sub, err := connection.Subscribe(subject, s.handler(kind, subject, binding))
+		handler := s.handler(kind, subject, binding)
+		if subject == prepare {
+			handler = s.preparationHandler(subject, binding)
+		}
+		sub, err := connection.Subscribe(subject, handler)
 		if err == nil {
 			err = sub.SetPendingLimits(16, 16*netbirdcommand.MaxMessage)
 		}
@@ -128,7 +138,12 @@ func (s *DurableService) handler(control bool, subject string, binding *netbirdS
 			}
 			ctx, cancel := context.WithDeadline(s.ctx, c.ExpiresAt)
 			defer cancel()
-			r, err := s.journal.Control(ctx, msg.Data)
+			var r netbirdcommand.ControlResponse
+			if c.Kind == "preparation-state" {
+				r = s.preparationState(c)
+			} else {
+				r, err = s.journal.Control(ctx, msg.Data)
+			}
 			if err != nil {
 				reject()
 				return
@@ -174,6 +189,9 @@ func (s *DurableService) Close() error {
 		s.mu.Unlock()
 		s.work.Wait()
 		s.closeErr = s.journal.Close()
+		if s.preparation != nil && s.preparation.poisoned {
+			s.closeErr = ErrActionUnconfirmed
+		}
 	})
 	return s.closeErr
 }

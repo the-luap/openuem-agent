@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ type nativeNetbirdRuntime struct {
 type netbirdLocalBinding struct {
 	Identity                netbirdcommand.Identity
 	Directory, Installation string
+	PreparationDirectory    string
 	ExpiresAt               time.Time
 }
 
@@ -134,7 +136,11 @@ func (a *Agent) netbirdBinding(configPath string, now time.Time) (netbirdLocalBi
 		return netbirdLocalBinding{}, errNetbirdRuntime
 	}
 	digest := sha256.Sum256(data)
-	return netbirdLocalBinding{Identity: i, Directory: filepath.Join(parent, "netbird-journal"), Installation: hex.EncodeToString(digest[:]), ExpiresAt: leaf.NotAfter}, nil
+	binding := netbirdLocalBinding{Identity: i, Directory: filepath.Join(parent, "netbird-journal"), Installation: hex.EncodeToString(digest[:]), ExpiresAt: leaf.NotAfter}
+	if i.Individual && (runtime.GOOS == "darwin" || runtime.GOOS == "linux") {
+		binding.PreparationDirectory = filepath.Join(parent, "netbird-preparation")
+	}
+	return binding, nil
 }
 
 func (a *Agent) configureNetbird() error {
@@ -160,7 +166,16 @@ func (a *Agent) openNetbird(binding netbirdLocalBinding, boot netbirdjournal.Boo
 	if err != nil {
 		return errNetbirdRuntime
 	}
-	service, err := netbird.NewDurableService(a.ctx, journal, binding.Identity, binding.ExpiresAt)
+	var service *netbird.DurableService
+	if binding.PreparationDirectory != "" {
+		if !binding.Identity.Individual || binding.PreparationDirectory != filepath.Join(filepath.Dir(binding.Directory), "netbird-preparation") {
+			journal.Close()
+			return errNetbirdRuntime
+		}
+		service, err = netbird.NewDurableServiceWithPreparation(a.ctx, journal, binding.Identity, binding.ExpiresAt, binding.PreparationDirectory)
+	} else {
+		service, err = netbird.NewDurableService(a.ctx, journal, binding.Identity, binding.ExpiresAt)
+	}
 	if err != nil {
 		journal.Close()
 		return errNetbirdRuntime
