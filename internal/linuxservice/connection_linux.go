@@ -18,6 +18,7 @@ import (
 )
 
 var ErrManager = errors.New("the protected Linux system service manager is unavailable")
+var errUnitNotLoaded = errors.New("the Linux agent service is not loaded in the system manager")
 
 const (
 	systemdSocket                       = "/run/systemd/private"
@@ -174,6 +175,10 @@ func (c *systemdConnection) call(ctx context.Context, object dbus.ObjectPath, me
 		return nil, ErrManager
 	}
 	if reply.Err != nil {
+		var remote dbus.Error
+		if object == managerPath && method == managerInterface+".GetUnit" && errors.As(reply.Err, &remote) && remote.Name == "org.freedesktop.systemd1.NoSuchUnit" {
+			return nil, errUnitNotLoaded
+		}
 		return nil, managerError(ctx, reply.Err)
 	}
 	return reply.Body, nil

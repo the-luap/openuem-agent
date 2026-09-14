@@ -58,7 +58,7 @@ func Render(s Spec) ([]byte, error) {
 		"[Service]\nType=exec\nUser=root\nGroup=root\n" +
 		"ExecStart=:" + quote(s.Executable) + " serve -identity-directory " + quote(s.IdentityDirectory) + "\n" +
 		"Restart=on-failure\nRestartSec=5s\nTimeoutStopSec=120s\nKillMode=mixed\nUMask=0077\n" +
-		"Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n\n" +
+		"Environment=\"" + serviceEnvironment + "\"\n\n" +
 		"[Install]\nWantedBy=multi-user.target\n")
 	if len(data) > MaxUnitSize {
 		return nil, ErrUnit

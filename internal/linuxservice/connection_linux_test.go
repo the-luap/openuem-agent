@@ -182,7 +182,7 @@ func sendManagerReply(w io.Writer, call *dbus.Message, errorName string, body ..
 	data := encoded.Bytes()
 	// The codec's constructed message has no exported serial setter. Assign
 	// the test peer's serial in the standard fixed D-Bus header after encoding.
-	binary.LittleEndian.PutUint32(data[8:12], 1)
+	binary.LittleEndian.PutUint32(data[8:12], call.Serial())
 	_, err := w.Write(data)
 	return err
 }
