@@ -37,22 +37,32 @@ and actual root systemd PID 1. The outer container is read-only, has no network
 and drops all capabilities. No host cgroup, device or filesystem is mounted into
 the guest. No privileged container or host service mutation is required.
 
-Each fresh guest must pass all four tests: actual private-manager authentication,
+Each fresh guest must pass all five tests: actual private-manager authentication,
 resolved absence, publication/loading of the canonical never-started definition,
-and rejection of an actual vendor definition without creating an override. A
+actual persistent [enablement](linux-systemd-enablement.md), and rejection of an
+actual vendor definition without creating an override. Authentication uses twenty
+new connections per guest, each with an immediate first property call. A
 failed boot or test stops the runner; the three boots are required repetitions,
 not automatic retries. Guest mutation tests additionally require the explicit
 environment, file and kernel markers, a RAM root filesystem and systemd PID 1.
 
-All three local ARM64 guests passed using Debian systemd 252.39 and Linux 6.1.
-An earlier fixture run had one five-second lookup timeout; its precise cause was
-not established. The runner now uses `Type=exec` so manager startup can finish
-while tests execute, and errors include a static RPC phase without peer payloads.
-The production timeout has not changed. CI runs the same required guest tests on
-AMD64; its result must be checked independently.
+Local ARM64 guests use Debian systemd 252.39 and Linux 6.1. Initial local and AMD64
+CI runs exposed intermittent first-call timeouts. An owned PID-1 syscall trace
+showed `BEGIN` and the first binary message arriving in one `recvmsg`; systemd
+then waited in epoll until the client closed five seconds later. Debug logging
+alone had misleadingly suggested a stall during unit resolution.
 
-These tests do not yet start the agent. Protected enablement, operational
-configuration and the controller's registration/start/readiness sequence remain
+The [connection](linux-systemd-connection.md) now waits for kernel-confirmed
+consumption of `BEGIN` before releasing authentication. It sends no additional
+protocol bytes or method calls and retains the existing five-second bound.
+Native fixtures independently verify that unread bytes block completion, actual
+consumption releases it, and cancellation, close and deadline interrupt it.
+The diagnostic strace attachment and debug logging were removed from the runner.
+All five live tests pass in three fresh ARM64 guests after this change. CI runs
+the same required guest tests on AMD64; its result must be checked independently.
+
+These tests do not yet start the agent. Operational configuration and the
+controller's registration/start/readiness sequence remain
 integration work. Linux `activate` remains gated until those providers are joined.
 
 The resolution behavior follows systemd's

@@ -102,7 +102,7 @@ func connectPrivateManager(ctx context.Context, socketPath string, pid int32) (_
 	if c.wire.SetDeadline(deadline) != nil {
 		return nil, ErrManager
 	}
-	c.bus, err = dbus.NewConn(&managerTransport{UnixConn: c.wire, remaining: authenticationLimit}, dbus.WithContext(lifetime))
+	c.bus, err = dbus.NewConn(&managerTransport{UnixConn: c.wire, remaining: authenticationLimit, ctx: lifetime, deadline: deadline}, dbus.WithContext(lifetime))
 	if err != nil {
 		return nil, managerError(ctx, err)
 	}
@@ -228,6 +228,8 @@ type managerTransport struct {
 	*net.UnixConn
 	binary    atomic.Bool
 	remaining int
+	ctx       context.Context
+	deadline  time.Time
 }
 
 func (t *managerTransport) Read(p []byte) (int, error) {
@@ -247,7 +249,8 @@ func (t *managerTransport) Read(p []byte) (int, error) {
 
 func (t *managerTransport) Write(p []byte) (int, error) {
 	wasBinary := t.binary.Load()
-	if bytes.Equal(p, []byte("BEGIN\r\n")) {
+	begin := !wasBinary && bytes.Equal(p, []byte("BEGIN\r\n"))
+	if begin {
 		t.binary.Store(true)
 	}
 	if wasBinary {
@@ -255,5 +258,47 @@ func (t *managerTransport) Write(p []byte) (int, error) {
 			return 0, err
 		}
 	}
-	return t.UnixConn.Write(p)
+	n, err := t.UnixConn.Write(p)
+	if err == nil && begin && n == len(p) {
+		err = t.drainAuthentication()
+	}
+	return n, err
+}
+
+// Some systemd peers can leave a first binary message in their auth buffer when
+// recvmsg consumes it together with BEGIN, then wait for another socket event.
+// Wait for the kernel to report that BEGIN has actually been consumed before
+// godbus may send binary messages. This adds no protocol bytes or method call,
+// and shares the existing authentication deadline and cancellation lifetime.
+func (t *managerTransport) drainAuthentication() error {
+	if t.ctx == nil || t.deadline.IsZero() {
+		return ErrManager
+	}
+	raw, err := t.UnixConn.SyscallConn()
+	if err != nil {
+		return ErrManager
+	}
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		if err := t.ctx.Err(); err != nil {
+			return err
+		}
+		if !time.Now().Before(t.deadline) {
+			return context.DeadlineExceeded
+		}
+		var queued int
+		var queueErr error
+		if err := raw.Control(func(fd uintptr) { queued, queueErr = unix.IoctlGetInt(int(fd), unix.TIOCOUTQ) }); err != nil || queueErr != nil || queued < 0 {
+			return ErrManager
+		}
+		if queued == 0 {
+			return nil
+		}
+		select {
+		case <-t.ctx.Done():
+			return t.ctx.Err()
+		case <-tick.C:
+		}
+	}
 }

@@ -21,6 +21,14 @@ the dependency's codec and bounds; the authentication limit is not a claim about
 binary property message size. Peer-controlled authentication and method error
 bodies are not exposed to callers.
 
+After writing `BEGIN`, authentication waits for Linux `TIOCOUTQ` to report that
+the Unix stream's queued bytes have been consumed. This prevents the first binary
+message from arriving in the same authentication read, an observed systemd 252
+event-loop stall. The check uses the existing authentication deadline and caller
+lifetime; it adds no protocol bytes, bus `Hello`, fixed sleep or speculative call.
+The one-millisecond poll only schedules another kernel queue check. A stalled,
+canceled or closed peer cannot extend the five-second authentication ceiling.
+
 Internal calls recheck the retained socket and ancestry before sending and after
 receiving a result. Each call has a five-second ceiling and honors earlier caller
 cancellation. Cancellation closes the raw stream independently of the library's
@@ -46,12 +54,15 @@ test families exercise:
   peer errors; call deadlines, lifetime cancellation and concurrent close.
 - A blocked binary write to a peer that remains open and does not read until
   after the client has returned, proving cancellation independently of peer exit.
+- An unread `BEGIN` marker that prevents authentication completion until actual
+  peer consumption; deadline, cancellation and closed-stream interruption.
 
 The alternate socket/PID helper is package-private and used only by owned native
 fixtures. These socket tests authenticate a synthetic D-Bus peer. A separate
 [owned virtual machine fixture](linux-systemd-definition.md) now authenticates
 actual systemd PID 1 and checks resolved definitions and canonical publication.
-Protected enablement, configuration, registration, startup and authenticated
+Protected [enablement](linux-systemd-enablement.md) now has separate native and
+live-manager checks. Configuration, registration, startup and authenticated
 readiness remain controller integration work. Linux `activate` remains
 unavailable until those requirements are joined.
 

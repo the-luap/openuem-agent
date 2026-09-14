@@ -74,6 +74,15 @@ func TestLinuxLiveSystemdAbsentDefinition(t *testing.T) {
 
 func TestLinuxLiveSystemdPrivateManager(t *testing.T) {
 	liveSystemdFixture(t)
+	// Every connection exercises the auth-to-binary boundary with an immediate
+	// first call; one successful warm connection cannot hide the former stall.
+	for range 20 {
+		checkLiveSystemdManager(t)
+	}
+}
+
+func checkLiveSystemdManager(t *testing.T) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	c, err := connectSystemd(ctx)
@@ -129,6 +138,80 @@ func TestLinuxLiveSystemdOwnedDefinition(t *testing.T) {
 	}
 	if present, err := u.inspect(); err != nil || !present {
 		t.Fatal("loading the definition changed its file", err)
+	}
+}
+
+func TestLinuxLiveSystemdOwnedEnablement(t *testing.T) {
+	liveSystemdFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	c, err := connectSystemd(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	spec := Spec{Executable: "/fixture/linuxservice.test", IdentityDirectory: "/fixture/identity"}
+	definition, err := c.loadDefinition(ctx, spec)
+	if err != nil || definition.Present {
+		t.Fatal("fixture definition was not absent", definition, err)
+	}
+	u, err := openUnitFile(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer u.Close()
+	e, err := openUnitEnablement()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if enabled, err := e.inspect(); err != nil || enabled {
+		t.Fatal("fixture link was not absent", enabled, err)
+	}
+	defer func() {
+		if enabled, err := e.inspect(); err == nil && enabled {
+			if err := os.Remove(filepath.Join("/etc/systemd/system", wantsDirectory, UnitName)); err != nil {
+				t.Error(err)
+			}
+		}
+		if present, err := u.inspect(); err == nil && present {
+			if err := os.Remove(UnitPath); err != nil {
+				t.Error(err)
+			}
+			if _, err := c.call(ctx, managerPath, managerInterface+".Reload"); err != nil {
+				t.Error("owned fixture reload failed", err)
+			}
+		}
+	}()
+	if err := u.publish(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.call(ctx, managerPath, managerInterface+".Reload"); err != nil {
+		t.Fatal(err)
+	}
+	definition, err = c.loadDefinition(ctx, spec)
+	if err != nil || !definition.Present || definition.State.Enabled || definition.State.PID != 0 {
+		t.Fatal("fixture unit was not canonically disabled", definition, err)
+	}
+	body, err := c.call(ctx, managerPath, managerInterface+".EnableUnitFiles", []string{UnitName}, false, false)
+	if err != nil || len(body) != 2 || body[0] != true {
+		t.Fatal("actual persistent enablement failed", err)
+	}
+	if enabled, err := e.inspect(); err != nil || !enabled {
+		t.Fatal("actual manager-created link was not admitted", enabled, err)
+	}
+	if err := e.flush(ctx); err != nil {
+		t.Fatal("actual manager-created link was not durably verified", err)
+	}
+	if _, err := c.call(ctx, managerPath, managerInterface+".Reload"); err != nil {
+		t.Fatal(err)
+	}
+	definition, err = c.loadDefinition(ctx, spec)
+	if err != nil || !definition.Present || !definition.State.Enabled || definition.State.Active != "inactive" || definition.State.PID != 0 {
+		t.Fatal("actual enabled unit state was not admitted", definition, err)
+	}
+	if present, err := u.inspect(); err != nil || !present {
+		t.Fatal("enablement changed the owned definition", err)
 	}
 }
 
