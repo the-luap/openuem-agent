@@ -73,7 +73,7 @@ func purgeRemovalRecoveryPayload(ctx context.Context, root string, owner uint32,
 		if err != nil {
 			return nil, ErrRemoval
 		}
-		err = unlinkRemovalRecoveryPayload(ctx, stagePath, owner, name, object, ancestry, full, parent)
+		err = unlinkRemovalRecoveryObject(ctx, stagePath, owner, name, object, ancestry, full, parent)
 		closeErr := parent.Close()
 		if err != nil || closeErr != nil {
 			return nil, ErrRemoval
@@ -113,7 +113,7 @@ func removalRecoveryDirectory(obj removalObject) removalObject {
 	return obj
 }
 
-func unlinkRemovalRecoveryPayload(ctx context.Context, stage string, owner uint32, name string, expected removalObject, ancestry *removalSnapshot, full string, parent *os.File) error {
+func unlinkRemovalRecoveryObject(ctx context.Context, stage string, owner uint32, name string, expected removalObject, ancestry *removalSnapshot, full string, parent *os.File) error {
 	dir := os.FileMode(expected.Mode).IsDir()
 	check := removalSnapshotFor(ctx, stage, owner, map[string]removalObject{})
 	defer clearRemovalData(check)

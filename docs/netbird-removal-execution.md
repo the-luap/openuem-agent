@@ -102,8 +102,12 @@ original objects across interrupted moves, partial purge and scaffold cleanup;
 unknown entries and replacements remain unavailable. The combined recovery
 observer now binds current files to repeated typed launchd state, exact original
 or relocated audit-token/code proofs, and native complete/partial/absent receipt
-evidence. Explicit recovery admission and continuation still need integration;
-observation alone cannot authorize cleanup.
+evidence. A private single-use recovery owner now continues remaining source
+moves, exact staged purge, native/orphan receipt completion and empty-scaffold
+cleanup, preserving original references and unknown objects. Explicit recovery
+commands, journal admission and console integration remain required; observation
+alone cannot authorize cleanup. Absent-manifest recovery still needs its separate
+evidence policy.
 
 ## Verification and limits
 

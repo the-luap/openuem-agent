@@ -102,10 +102,10 @@ Native list presence repeats after these queries. Four states remain separate:
 
 An owned disposable-volume fixture verifies all four native listing behaviors
 using a unique nonvendor package ID. Observing an orphan does not remove it or
-claim completion. Explicit recovery commands and journal admission, native
-continuation (including orphan receipt handling), and scoped console integration
-remain open. Missing-manifest or wholly empty-stage recovery also needs a
-separate explicit evidence policy. This observer advertises no recovery
+claim completion. The private native owner below now continues manifest-backed
+removal, including orphan receipt handling. Explicit recovery commands, journal
+admission and scoped console integration remain open. Missing-manifest or wholly
+empty-stage recovery also needs a separate explicit evidence policy. This observer advertises no recovery
 capability and never releases the original journal barrier.
 
 ## Recovery runtime stop primitive
@@ -120,8 +120,29 @@ Only the bounded graceful-stop timeout can enable the fixed forced signal, which
 revalidates the same proof again. Cancellation, changed code/path, inaccessible
 runtime evidence and other errors cannot escalate. Completion requires a full
 native scan with no original or selected-stage executable and an unloaded job.
-This primitive is not published as a command or capability. Its caller still
-needs explicit journal admission and an owner for the remaining filesystem work.
+This primitive is not published as a command or capability. The private native
+owner below joins it with the remaining filesystem work; its caller still needs
+explicit journal admission.
+
+## Remaining source moves
+
+The private move primitive reobserves the exact reviewed remaining-file state and
+requires complete quiescence before and after its moves. Only original roots
+still present at their source are moved, exclusively, into the same original UUID
+stage. It creates only missing required scaffold parents, as exclusive owned
+0700 directories, and retains their observed descriptors.
+
+Each source root and both protected parents are checked before rename. The
+source root descriptor, including a symlink descriptor, remains open to prevent
+inode reuse. The complete moved root is captured against original manifest
+ownership; only the moved root's rename-induced ctime can change. A rejected
+subtree is restored only when the same original root still occupies the staged
+slot and its original source parent remains protected and empty. Existing
+destinations and source replacements are never overwritten.
+
+The final observer must show every source root absent, unchanged original
+manifest/receipts/ancestors, and unchanged previously staged payload. Already
+purged files and unrelated missing scaffolds are not recreated.
 
 ## Remaining staged-payload purge primitive
 
@@ -145,6 +166,46 @@ receipts and the same original manifest. Changed/replaced files and parents,
 unexpected entries, new source packages, receipt changes, cancellation and lost
 quiescence retain remaining evidence and refuse completion. Already purged
 payload and partially removed scaffolds are accepted without recreating them.
+
+## Receipt and scaffold completion
+
+Receipt completion starts only after source and staged payload are absent. It
+holds original file descriptors, requires exact repeated file evidence and
+quiescence, observes native receipt state, and rechecks files immediately before
+mutation. Complete and BOM-only recognized records use the fixed native
+`pkgutil --volume / --forget io.netbird.client` command once. Native failure
+preserves an unconfirmed result; it is never automatically retried.
+
+For a plist-only orphan, two successful typed package lists must show the native
+ID absent. Since native `--forget` does not recognize this state, only the exact
+original manifest-bound plist is removed through its protected parent descriptor,
+using the same hash, ancestry and opened-inode checks as payload deletion. No
+receipt is manufactured or restored to make `pkgutil` recognize it. Already
+absent receipts need no mutation. Two later rounds must confirm file absence,
+native ID absence, unchanged remaining evidence and complete quiescence.
+
+Scaffold completion then rechecks exact current evidence and repeated native
+absence. It removes only existing known empty scaffold directories, deepest
+first; missing directories stay missing. The original manifest remains until
+reinspection succeeds and the stage contains exactly that manifest. After one
+more native absence check it removes the exact manifest and empty original stage,
+then repeats full native absence verification including the retained-stage
+exclusion. Unknown entries and replacements survive and refuse completion.
+
+## Private native recovery owner
+
+The private owner combines current observation, runtime stop, remaining source
+moves, staged purge, receipt completion and scaffold completion. Preparation is
+read-only and retains file descriptors. `Run` requires the same original UUID,
+descriptor and current combined fingerprint before any mutation; its future
+caller must durably admit a separate recovery command first. The owner is single
+use, and `Close` joins `Run` and closes descriptors without deleting staging.
+
+Final-query failure can occur after the stage has been removed. It remains
+unconfirmed and cannot rewrite the original command's outcome. This native owner
+is not yet exposed through the public service or console. Explicit independent
+recovery commands, journal-reference/release checks and the reviewed console
+lifecycle remain required, as does a separate policy for absent manifests.
 
 ## Verification
 
@@ -182,6 +243,18 @@ and partial scaffolds. Replacement-parent tests retain the original nested file
 inodes and bytes beneath an unreviewed parent, which still prevents deletion.
 Other negative fixtures preserve changed leaves, unknown children, replacement
 sources and receipts, and retain the manifest on every failure.
+
+Move and complete-owner fixtures cover pre-move, app-only move, partial purge,
+already purged payload, all four receipt states, optional absent roots and
+partial/missing scaffolds. Rejected changed subtrees are restored without losing
+unknown children. Changed reviews/runtime, failed inspection/stop/forget,
+partially forgotten receipts, replacement sources, final-query failure,
+cancellation and closed/reused owners cannot acquire confirmed completion.
+Independent completion fixtures preserve unknown root/scaffold entries and
+replaced manifests. A native disposable-volume fixture verifies actual complete
+and BOM-only `pkgutil --forget` success, plist-only refusal/preservation, and
+unchanged inert payload. Native tests use unique nonvendor IDs on disposable
+volumes.
 
 macOS races and the owned Linux ARM64 filesystem fixture pass. Full native
 installation/removal, journal and command-service races remain successful, as do

@@ -63,6 +63,28 @@ func TestNativeRemovalReceiptListUsesOwnedVolumeAndHandlesEmptyDatabase(t *testi
 				t.Fatal("native receipt list did not preserve explicit complete/partial/absent state", err)
 			}
 			if phase != "absent" {
+				// Native recovery uses pkgutil for recognized records. An orphan
+				// plist is not recognized and cannot be forgotten by that command.
+				before, beforeErr := os.ReadFile(plist)
+				err := runNativeInstaller(t.Context(), "/usr/sbin/pkgutil", []string{"--volume", root, "--forget", packageID})
+				if phase == "plist-only" {
+					after, afterErr := os.ReadFile(plist)
+					if err == nil || beforeErr != nil || afterErr != nil || string(after) != string(before) {
+						t.Fatal("native orphan receipt unexpectedly became a recognized forget operation")
+					}
+				} else {
+					if err != nil {
+						t.Fatal("owned native receipt forget failed", err)
+					}
+					for _, name := range []string{plist, bom} {
+						if _, err := os.Lstat(name); !os.IsNotExist(err) {
+							t.Fatal("native receipt forget retained an owned receipt", err)
+						}
+					}
+				}
+				if data, err := os.ReadFile(filepath.Join(payload, "inert.txt")); err != nil || string(data) != "owned inert receipt fixture" {
+					t.Fatal("native receipt forget mutated installed payload", err)
+				}
 				return
 			}
 			// Reproduce the old empty-search failure using only the owned ID.
