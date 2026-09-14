@@ -89,6 +89,14 @@ runtime holds storage open through its capability-gated rotation loop and joins
 that loop before releasing keys. Its bounded OS driver holds the private process
 lease; worker and console authorization remain required integration boundaries.
 
+## Linux integration boundary
+
+The [Linux service lease](linux-service-ownership.md) now excludes competing root
+services and validates a pinned private installation namespace. Linux native
+credential storage remains unsupported; no plaintext fallback is enabled. Native
+package trust, enrollment admission and service activation still need their own
+Linux integration. The lease provides only process ownership.
+
 ## Windows storage boundary
 
 `OpenNative` receives an absolute directory beneath an installer-controlled parent.

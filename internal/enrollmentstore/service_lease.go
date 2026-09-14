@@ -19,6 +19,7 @@ type ServiceLease struct {
 	mu         sync.RWMutex
 	directory  string
 	file, root *os.File
+	parents    []*os.File
 	owner      uint32
 }
 
@@ -39,6 +40,12 @@ func (l *ServiceLease) Close() error {
 		}
 		l.root = nil
 	}
+	for i := len(l.parents) - 1; i >= 0; i-- {
+		if closeErr := l.parents[i].Close(); err == nil {
+			err = closeErr
+		}
+	}
+	l.parents = nil
 	if err != nil {
 		return ErrUnavailable
 	}
