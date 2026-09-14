@@ -51,7 +51,7 @@ the exact review and ancestry. `Close` joins execution and closes descriptors.
 
 The owner has no mutation callback. It cannot stop a process, forget a receipt,
 unlink payloads, remove a stage, rerun an old command or change a journal. A
-future caller must admit a distinct verification operation and interpret success
+caller admits a distinct verification operation and interprets success
 as a new current-state observation, preserving every earlier uncertain result.
 Supported individual native services now configure these exports as the paired
 observer and acquired owner for the separate verification protocol below.
