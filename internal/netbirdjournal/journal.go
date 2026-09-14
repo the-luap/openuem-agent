@@ -268,7 +268,7 @@ func (j *Journal) beginLocked(c netbirdcommand.Command, now time.Time, revision 
 		r := e.receipt()
 		return false, &r, nil
 	}
-	if (c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion || c.Version == netbirdcommand.RemovalAbsenceVersion) && revision == "" {
+	if (c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion || c.Version == netbirdcommand.RemovalAbsenceVersion || c.Version == netbirdcommand.RemovalStageCleanupVersion) && revision == "" {
 		return false, nil, ErrConflict
 	}
 	if !c.Executable(j.identity, now) {
@@ -289,6 +289,15 @@ func (j *Journal) beginLocked(c netbirdcommand.Command, now time.Time, revision 
 			return false, nil, err
 		}
 		if c.RemovalAbsence.JournalRevision != state.Revision || revision != state.Revision {
+			return false, nil, ErrConflict
+		}
+	}
+	if c.Version == netbirdcommand.RemovalStageCleanupVersion {
+		state, err := j.removalStageCleanupStateLocked(c.Identity, c.RemovalStageCleanup.Original, now)
+		if err != nil {
+			return false, nil, err
+		}
+		if c.RemovalStageCleanup.JournalRevision != state.Revision || revision != state.Revision {
 			return false, nil, ErrConflict
 		}
 	}

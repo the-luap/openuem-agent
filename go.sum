@@ -145,6 +145,8 @@ github.com/the-luap/openuem-nats v0.11.1-0.20260914130448-3606e2d2e6bd h1:irYKkr
 github.com/the-luap/openuem-nats v0.11.1-0.20260914130448-3606e2d2e6bd/go.mod h1:GWRchq7CFK1F+ELrC4N7OeOptBGvaJbBwjdR6JS1aQc=
 github.com/the-luap/openuem-nats v0.11.1-0.20260914151935-517b4fe927dc h1:NWBxMaB3VGIXSPT0Wdc/B0BJejQJxg5H1tVDtjn8gJ4=
 github.com/the-luap/openuem-nats v0.11.1-0.20260914151935-517b4fe927dc/go.mod h1:GWRchq7CFK1F+ELrC4N7OeOptBGvaJbBwjdR6JS1aQc=
+github.com/the-luap/openuem-nats v0.11.1-0.20260914160809-8685f28fa959 h1:cnQ4PQKORF8x6kUMZWEG7ebT7tvhzkArb4iw4TUHQFs=
+github.com/the-luap/openuem-nats v0.11.1-0.20260914160809-8685f28fa959/go.mod h1:GWRchq7CFK1F+ELrC4N7OeOptBGvaJbBwjdR6JS1aQc=
 github.com/tklauser/go-sysconf v0.3.16 h1:frioLaCQSsF5Cy1jgRBrzr6t502KIIwQ0MArYICU0nA=
 github.com/tklauser/go-sysconf v0.3.16/go.mod h1:/qNL9xxDhc7tx3HSRsLWNnuzbVfh3e7gh/BmM179nYI=
 github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9RXw=

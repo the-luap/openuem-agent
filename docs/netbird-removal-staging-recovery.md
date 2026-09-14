@@ -211,8 +211,8 @@ is integrated. The [independent current-absence observer](netbird-removal-curren
 now checks the supported layout without fabricating an original manifest. Its
 remote protocol, agent journal admission and [console lifecycle](https://github.com/the-luap/openuem-console/blob/f7f16022281a755b3177fc7a15ceb364d493d8cf/docs/netbird-removal-absence.md)
 are integrated. The separate [native scaffold cleanup](netbird-removal-stage-cleanup.md)
-has its own current review and acquired owner; its remote admission and console
-workflow remain open.
+has its own current review, acquired owner and remote journal admission; its
+console workflow remains open.
 
 ## Explicit recovery protocol and journal admission
 

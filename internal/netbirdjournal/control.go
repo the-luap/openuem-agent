@@ -120,7 +120,7 @@ func (j *Journal) Control(ctx context.Context, data []byte) (netbirdcommand.Cont
 		r.Outcome = "unavailable"
 		return r, nil
 	}
-	if c.Kind == "removal-state" || c.Kind == "removal-recovery-state" || c.Kind == "removal-absence-state" {
+	if c.Kind == "removal-state" || c.Kind == "removal-recovery-state" || c.Kind == "removal-absence-state" || c.Kind == "removal-stage-cleanup-state" {
 		// Only a configured native observer can advertise current native evidence.
 		r.Outcome = "unavailable"
 		return r, nil

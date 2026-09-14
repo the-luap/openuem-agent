@@ -6,12 +6,13 @@ private scaffold. This is a current filesystem operation, separate from
 manifest continuation and read-only current absence verification. It never
 claims that the original uninstall succeeded.
 
-The native component does not itself prove a journal release or advertise a
-remote capability. Its caller must first validate the exact original released
-unconfirmed uninstall, bind current individual identity and ready-journal state,
-obtain explicit operator confirmation and durably admit a new command before
-running the acquired owner. The remote protocol, journal/service admission and
-console cleanup lifecycle still need integration.
+The native component does not itself prove a journal release. The separate
+[version-seven protocol](https://github.com/the-luap/openuem-nats/blob/8685f28fa959d05a0c9bd300dc2c79c5195bbd4b/docs/netbird-removal-stage-cleanup.md)
+and agent journal/service admission now validate the exact original released
+unconfirmed uninstall, current individual identity and ready-journal state before
+acquiring the native owner. The console still needs to durably store scoped
+operator confirmation and its exact attempt through the complete cleanup
+request, delivery, observation, resolution and history workflow.
 
 ## Eligible current scope
 
@@ -82,4 +83,45 @@ The final full native package race suite passed on macOS in 35.273 seconds.
 The full native package suite passed in an isolated Linux container without
 networking. The dedicated cleanup race selection passed in 2.877 seconds.
 macOS CGO, Linux and Windows agent builds passed with the exported review and
-acquisition APIs. The remote service does not yet advertise cleanup capability.
+acquisition APIs. Supported native services configure inspection and the complete acquired cleanup
+owner together; unsupported services advertise neither.
+
+
+## Remote admission and independent result
+
+`RemovalStageCleanupState` checks the exact original released unconfirmed
+uninstall and common current journal under its mutex. It shares only retained
+original proof with manifest continuation and read-only absence verification;
+native cleanup separately proves the current selected scaffold. Missing,
+withdrawn, completed, active or unreleased originals are ineligible. An earlier
+original release cannot bypass a later pending or uncertain operation.
+
+Control version six, `removal-stage-cleanup-state`, brackets the native inspector
+with the same current identity, deadline, original proof and ready journal.
+Only a paired inspector, acquired owner and dedicated executor can return a
+complete current summary. A bare journal returns unavailable. Malformed native
+counts or manifest metadata cannot become a successful inspection response.
+
+The dedicated executor reads exact retained results and permanent withdrawal
+before acquisition. New work brackets read-only native preparation with the same
+proof and requires the command's reviewed journal revision. It passes the exact
+original UUID and complete displayed summary to the native owner, then
+`BeginRemovalStageCleanup` persists a distinct minimal attempt. Generic,
+installation, removal, continuation and absence admission cannot start cleanup.
+
+`Run` and joined `Close` precede its new completed/unconfirmed result. Neither
+phase calls another operation's runner. Cancellation or failure retains the new
+uncertainty and common barrier. Crash recovery still requires later boot proof
+and explicit release before a fresh reviewed attempt. Identity renewal preserves
+the original retained proof but invalidates an old current journal review.
+Concurrent cleanup, manifest continuation and absence verification cannot all
+admit against one reviewed journal revision. Original receipt and release remain
+unchanged after cleanup, restart, exact replay and withdrawal.
+
+The integrated full native package, journal and command-service race suites
+passed in 41.105, 12.677 and 16.243 seconds. Full journal and command suites also
+passed in isolated Linux containers without networking. macOS CGO, Linux and
+Windows agent builds passed. Owned broker tests cover the new inspection,
+summary binding, one native owner, original outcome retention, post-expiry
+replay, permanent withdrawal without acquisition, lost/failed acquisition,
+paired capability refusal and cancellation joining before retained uncertainty.

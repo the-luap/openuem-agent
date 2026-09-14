@@ -71,6 +71,8 @@ func NewDurableServiceWithPreparation(parent context.Context, journal *netbirdjo
 		s.executor.remove = s.acquireRemoval
 		s.removalAbsence = &removalAbsenceOwner{inspect: netbirdinstall.InspectRemovalAbsence, prepare: prepareNativeRemovalAbsence}
 		s.executor.verifyRemovalAbsence = s.acquireRemovalAbsence
+		s.removalStageCleanup = &removalStageCleanupOwner{inspect: netbirdinstall.InspectRemovalStageCleanup, prepare: prepareNativeRemovalStageCleanup}
+		s.executor.cleanupRemovalStage = s.acquireRemovalStageCleanup
 	}
 	if netbirdinstall.RemovalRecoverySupported() {
 		s.removalRecovery = &removalRecoveryOwner{inspect: netbirdinstall.InspectRemovalRecovery, prepare: prepareNativeRemovalRecovery}

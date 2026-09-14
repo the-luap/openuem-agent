@@ -26,6 +26,7 @@ type DurableExecutor struct {
 	recoverRemoval func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
 	// Independent absence uses a read-only owner, never a native removal runner.
 	verifyRemovalAbsence func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
+	cleanupRemovalStage  func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
 	now                  func() time.Time
 }
 
@@ -94,7 +95,7 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 	}
 	run := e.run
 	var lease *nativePackageLease
-	if c.Version == netbirdcommand.InstallationVersion || c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion || c.Version == netbirdcommand.RemovalAbsenceVersion {
+	if c.Version == netbirdcommand.InstallationVersion || c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion || c.Version == netbirdcommand.RemovalAbsenceVersion || c.Version == netbirdcommand.RemovalStageCleanupVersion {
 		acquire := e.install
 		if c.Version == netbirdcommand.RemovalVersion {
 			acquire = e.remove
@@ -104,6 +105,9 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 		}
 		if c.Version == netbirdcommand.RemovalAbsenceVersion {
 			acquire = e.verifyRemovalAbsence
+		}
+		if c.Version == netbirdcommand.RemovalStageCleanupVersion {
+			acquire = e.cleanupRemovalStage
 		}
 		if acquire == nil {
 			return netbirdcommand.ReceiptFor(c, "rejected")
@@ -126,6 +130,8 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 			admitted, receipt, err = e.journal.BeginRemoval(c, e.now(), lease.revision)
 		} else if c.Version == netbirdcommand.RemovalRecoveryVersion {
 			admitted, receipt, err = e.journal.BeginRemovalRecovery(c, e.now(), lease.revision)
+		} else if c.Version == netbirdcommand.RemovalStageCleanupVersion {
+			admitted, receipt, err = e.journal.BeginRemovalStageCleanup(c, e.now(), lease.revision)
 		} else if c.Version == netbirdcommand.RemovalAbsenceVersion {
 			admitted, receipt, err = e.journal.BeginRemovalAbsence(c, e.now(), lease.revision)
 		} else {

@@ -26,8 +26,9 @@ func (j *Journal) removalRecoveryStateLocked(identity netbirdcommand.Identity, o
 	return j.removalAbsenceStateLocked(identity, netbirdcommand.RemovalAbsenceReference{RequestID: original.RequestID, CommandHash: original.CommandHash, Revision: original.Revision, ReleaseID: original.ReleaseID}, now)
 }
 
-// The original descriptor belongs to native manifest validation. Both workflows
-// share only this retained released-attempt proof under the journal mutex.
+// The original descriptor belongs to native manifest validation. Continuation,
+// absence verification and scaffold cleanup share only this retained original
+// released-attempt proof under the journal mutex.
 func (j *Journal) removalAbsenceStateLocked(identity netbirdcommand.Identity, original netbirdcommand.RemovalAbsenceReference, now time.Time) (netbirdcommand.State, error) {
 	if !j.available() || !j.clockValid(now) {
 		return netbirdcommand.State{}, ErrUnavailable

@@ -107,8 +107,8 @@ the new verification confirmed current absence of the fixed supported layout.
 There is no inferred original ownership, synthesized manifest, automatic stage
 cleanup or silent fresh removal. The separate [native scaffold cleanup](netbird-removal-stage-cleanup.md)
 now supports an explicitly reviewed current scope, with its own acquired owner.
-Its remote admission and console lifecycle remain open; the read-only observer
-never invokes it. Current absence never rewrites a historical unconfirmed receipt.
+Its remote admission is integrated; its console lifecycle remains open. The
+read-only observer never invokes it. Current absence never rewrites a historical unconfirmed receipt.
 
 ## Verification
 
