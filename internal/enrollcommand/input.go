@@ -27,7 +27,11 @@ func readProtectedInput(path string, limit int64) ([]byte, error) {
 }
 
 func loadInvitation(path string) (string, error) {
-	data, err := readProtectedInput(path, 64)
+	return loadInvitationWithReader(path, readProtectedInput)
+}
+
+func loadInvitationWithReader(path string, read func(string, int64) ([]byte, error)) (string, error) {
+	data, err := read(path, 64)
 	if err != nil {
 		return "", ErrInvitation
 	}
@@ -46,7 +50,11 @@ func loadInvitation(path string) (string, error) {
 // Keys are public, but their origin and file integrity are trust decisions. Only
 // a private installer-provisioned PEM file can authorize the release pipeline.
 func loadReleaseKeys(path string) ([]ed25519.PublicKey, error) {
-	data, err := readProtectedInput(path, 8192)
+	return loadReleaseKeysWithReader(path, readProtectedInput)
+}
+
+func loadReleaseKeysWithReader(path string, read func(string, int64) ([]byte, error)) ([]ed25519.PublicKey, error) {
+	data, err := read(path, 8192)
 	if err != nil {
 		return nil, ErrKeys
 	}

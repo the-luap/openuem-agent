@@ -43,26 +43,37 @@ func TestMain(m *testing.M) {
 }
 
 type commandFixture struct {
-	options        Options
-	roots          *x509.CertPool
-	server         *httptest.Server
-	config         bootstrap.Config
-	release        *artifacts.Verified
-	releaseKey     ed25519.PrivateKey
-	bootstrapKey   ed25519.PrivateKey
-	packageBytes   []byte
-	agentBytes     []byte
-	configOverride []byte
-	beforeConfig   func()
-	mu             sync.Mutex
-	requests       []string
-	claimBinding   string
-	issued         *enrollment.Response
-	ca             *x509.Certificate
-	caKey          *ecdsa.PrivateKey
+	options             Options
+	roots               *x509.CertPool
+	server              *httptest.Server
+	config              bootstrap.Config
+	release             *artifacts.Verified
+	releaseKey          ed25519.PrivateKey
+	bootstrapKey        ed25519.PrivateKey
+	packageBytes        []byte
+	agentBytes          []byte
+	packageFormat       string
+	configOverride      []byte
+	beforeConfig        func()
+	beforeClaimResponse func()
+	mu                  sync.Mutex
+	requests            []string
+	claimBinding        string
+	issued              *enrollment.Response
+	ca                  *x509.Certificate
+	caKey               *ecdsa.PrivateKey
 }
 
 func newCommandFixture(t *testing.T) *commandFixture {
+	t.Helper()
+	platform, format := "windows", "exe"
+	if runtime.GOOS == "darwin" {
+		platform, format = "macos", "pkg"
+	}
+	return newTargetCommandFixture(t, platform, format)
+}
+
+func newTargetCommandFixture(t *testing.T, platform, format string) *commandFixture {
 	t.Helper()
 	public, releaseKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -76,11 +87,7 @@ func newCommandFixture(t *testing.T) *commandFixture {
 	if err := keyfile.CreateDirectory(directory); err != nil {
 		t.Fatal(err)
 	}
-	f := &commandFixture{releaseKey: releaseKey, bootstrapKey: configKey, packageBytes: []byte("isolated installer bytes; never executed"), agentBytes: []byte("separate installed executable bytes")}
-	platform := "windows"
-	if runtime.GOOS == "darwin" {
-		platform = "macos"
-	}
+	f := &commandFixture{releaseKey: releaseKey, bootstrapKey: configKey, packageBytes: []byte("isolated installer bytes; never executed"), agentBytes: []byte("separate installed executable bytes"), packageFormat: format}
 	f.config = bootstrap.Config{Schema: 1, Organization: "Isolated organization", Site: "Isolated site", TenantID: 3, SiteID: 4, Invitation: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{17}, 32)), Platform: platform, Architecture: runtime.GOARCH}
 	f.server = httptest.NewUnstartedServer(http.HandlerFunc(f.serve))
 	f.server.EnableHTTP2 = true
@@ -123,10 +130,7 @@ func (f *commandFixture) signRelease(t *testing.T) {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Second)
 	digest, agentDigest := sha256.Sum256(f.packageBytes), sha256.Sum256(f.agentBytes)
-	format := "exe"
-	if f.config.Platform == "macos" {
-		format = "pkg"
-	}
+	format := f.packageFormat
 	envelope, err := artifacts.Sign(artifacts.Manifest{Schema: 1, Sequence: 42, Version: "0.12.0", PublishedAt: now.Add(-time.Hour), ExpiresAt: now.Add(24 * time.Hour), Artifacts: []artifacts.Artifact{{Platform: f.config.Platform, Architecture: f.config.Architecture, Format: format, Filename: "openuem-agent-0.12.0-" + f.config.Platform + "-" + f.config.Architecture + "." + format, Size: int64(len(f.packageBytes)), SHA256: hex.EncodeToString(digest[:]), AgentSize: int64(len(f.agentBytes)), AgentSHA256: hex.EncodeToString(agentDigest[:])}}}, f.releaseKey, now)
 	if err != nil {
 		t.Fatal(err)
@@ -180,6 +184,9 @@ func (f *commandFixture) serve(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "changed keys", 409)
 				return
 			}
+			if f.beforeClaimResponse != nil {
+				f.beforeClaimResponse()
+			}
 			json.NewEncoder(w).Encode(f.issued)
 			return
 		}
@@ -193,6 +200,9 @@ func (f *commandFixture) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.issued = &enrollment.Response{Version: 1, DeviceID: id, TenantID: f.config.TenantID, SiteID: f.config.SiteID, Endpoint: "wss" + strings.TrimPrefix(f.options.Origin, "https") + "/agent-channel", Certificate: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), Authority: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: f.ca.Raw})), ExpiresAt: leaf.NotAfter}
+		if f.beforeClaimResponse != nil {
+			f.beforeClaimResponse()
+		}
 		json.NewEncoder(w).Encode(f.issued)
 	default:
 		http.NotFound(w, r)

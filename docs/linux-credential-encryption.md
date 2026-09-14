@@ -2,8 +2,9 @@
 
 The private `linuxCredentialCipher` provides bounded authenticated encryption for
 the [durable Linux identity backend](linux-identity-storage.md), now connected to
-`OpenNative`. The installed Linux enrollment command, native package trust and
-individual-service activation remain separate integration requirements.
+`OpenNative`. The [installed Linux enrollment command](native-linux-enrollment.md)
+now connects native package trust and encrypted state. Individual-service
+activation remains a separate integration requirement.
 
 ## Native protection and scope
 

@@ -8,9 +8,10 @@ verified, its native publisher is accepted, and the same opened bytes are checke
 again against the protected release checkpoint and lifetime.
 
 This prepares a package. It does not install it, run package scripts, claim an
-identity, persist an invitation or activate a service. The installed Linux
-enrollment/activation commands and production installation acceptance remain
-separate work. The [running-image provider](linux-running-executable.md) verifies
+identity, persist an invitation or activate a service. The [Linux enrollment
+command](native-linux-enrollment.md) now uses this provider for installed admission.
+Service activation and production installation acceptance remain separate work.
+The [running-image provider](linux-running-executable.md) verifies
 the independent installed-agent binding; an installer hash cannot replace it.
 
 ## Directory ownership and admission

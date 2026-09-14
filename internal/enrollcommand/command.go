@@ -13,8 +13,8 @@ import (
 
 const usage = `Usage: openuem-agent enroll [options]
 
-Enroll the installed Windows/macOS agent into an authorized organization/site.
-Run as root on macOS or an elevated administrator on Windows. Provision all
+Enroll the installed Windows/macOS/Linux agent into an authorized organization/site.
+Run as root on macOS/Linux or an elevated administrator on Windows. Provision all
 paths below trusted administrator-controlled parents before running this command.
 
   -origin https://uem.example.com       Independently authorized public origin
@@ -29,7 +29,9 @@ paths below trusted administrator-controlled parents before running this command
                                        management actions for the selected organization/site
 
 The installed agent and downloaded installer must match the approved signed
-release. Native installer verification uses Authenticode or notarized Developer ID.
+release. Native installer verification uses Authenticode, notarized Developer ID
+or independently provisioned DEB/RPM publisher keys. Linux requires protected
+root-owned ancestors and an existing systemd host credential key.
 The invitation is read from its file, never from a command-line token argument.
 Successful output means credentials are ready. Service activation is separate.
 Retain the original invitation and protected state if a retry is needed.

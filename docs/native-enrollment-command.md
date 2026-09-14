@@ -1,17 +1,20 @@
 # Native enrollment command
 
-The installed Windows/macOS agent handles `enroll` before creating a logger or
+The installed Windows/macOS/Linux agent handles `enroll` before creating a logger or
 starting its service. The command joins independently authorized bootstrap data,
 native installer trust, the installed executable's signed byte binding and native
 protected identity storage. It does not execute the downloaded installer or
 activate the service. Separate [Windows](native-windows-activation.md) and
 [macOS](native-macos-activation.md) activation flows use the completed identity.
+The [Linux enrollment integration](native-linux-enrollment.md) joins native ELF,
+DEB/RPM publisher checks and encrypted host credentials; Linux service activation
+is separate work.
 A finished end-user installer, release signing/provisioning pipeline and final
 signed-release acceptance remain required integration work.
 
 Run `openuem-agent enroll -help` for the complete English usage. On Windows invoke
-the installed `openuem-agent.exe`; on macOS invoke the installed agent binary.
-Use root on macOS or an elevated administrator on Windows. On macOS the same
+the installed `openuem-agent.exe`; on macOS/Linux invoke the installed agent binary.
+Use root on macOS/Linux or an elevated administrator on Windows. On macOS the same
 installed executable must create and later read its System keychain identity.
 
 ## Provisioning and authorization
@@ -41,7 +44,13 @@ account. The generic protected-file policy does not accept a regular user's toke
 file merely because root can read it. Installer elevation must securely provision
 the privileged input; no automatic permission changes or user-file handoff occurs.
 The command rejects final input symlinks. Trusted ancestors remain an installation
-requirement; these checks cannot secure an attacker-controlled parent directory.
+requirement. Linux additionally retains and checks every ancestor through native
+directory descriptors while reading the input. All must belong to root and reject
+group/other writes, symlinks and special mode bits. Input files must be root-owned,
+single-link regular files with mode `0600`. The Linux staging preflight creates
+only the final `0700` directory beneath existing protected parents. It does not
+create anything beneath an unsafe parent. These stricter Linux checks run before
+the first HTTPS request; they do not repair existing permissions.
 
 Optional `-device-name` defaults to the empty name. Set it explicitly when needed
 and keep it unchanged on retry. The command does not substitute the current
@@ -63,7 +72,7 @@ also match. A mismatch prevents package download and identity issuance.
 The installed image must match the separately signed `agent_size`/`agent_sha256`.
 Preview releases without that binding fail. The exact approved installer is then
 downloaded into private staging and checked by the existing bounded native
-Authenticode or notarized Developer ID verifier. The running executable and
+Authenticode, notarized Developer ID or Linux DEB/RPM publisher verifier. The running executable and
 staged package remain open until enrollment finishes.
 
 `Store.EnrollInstalled` additionally requires a non-nil admission callback and a
@@ -123,3 +132,10 @@ endpoint installation still require the real signing credentials and devices.
 Commit `8bc63f8` passed [Windows, macOS and Linux CI](https://github.com/the-luap/openuem-agent/actions/runs/34193859066),
 including the full native Windows flow, all platform builds and invocation of
 `enroll -help` from the actual Windows/macOS service entry points.
+
+The dedicated Linux fixture joins the real kernel-selected executable, separately
+signed inert DEB/RPM packages, authenticated HTTP/2 and the native encrypted state
+backend. It verifies completed retries avoid another claim, and interrupted
+issuance resumes with the same pending keys. Its five required native families
+pass without skips in 5.554 seconds under the race detector. The actual Linux
+entry point also dispatches `enroll -help` before starting its logger or service.

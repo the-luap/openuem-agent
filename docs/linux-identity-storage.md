@@ -9,8 +9,9 @@ connected to protected enrollment and renewal on AMD64/ARM64. Native DEB/RPM
 The [running-executable provider](linux-running-executable.md) now binds the actual
 kernel image to signed release bytes. Protected [Linux package staging](linux-package-staging.md)
 joins native publisher checks to authorized downloads and owned cleanup. The
-installed enrollment command and individual-service activation remain separate
-integration work.
+[installed enrollment command](native-linux-enrollment.md) now joins these native
+providers and protected identity recovery. Individual-service activation remains
+separate integration work.
 
 ## Installation and encryption boundary
 
@@ -98,9 +99,9 @@ test binary cross-compiles. Native Windows execution remains separate evidence.
 After integrating shared Linux protocol version `2dbc458eb28c`, the complete
 native Linux store race suite passes in 135.166 seconds. macOS storage, installed
 command, package staging and runtime-option regression suites also pass, as do
-complete Linux and Windows agent builds. Installed-command admission remains
-explicitly unavailable; native publisher verification and protected package
-staging now have their own isolated tests and do not remove that installation gate.
+complete Linux and Windows agent builds. These store-level results are distinct
+from the later [installed-command integration](native-linux-enrollment.md), which
+has its own native publisher, protected staging and real executable fixtures.
 The original cross-platform workflow fixtures retain their Windows/Mac metadata.
 Additional native fixtures now use actual Linux platform/architecture metadata,
 independently signed configuration and the bounded HTTP/2 client. They lose an

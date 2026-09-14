@@ -80,6 +80,8 @@ type dependencies struct {
 	openExecutable         func() (retainedFile, error)
 	openStore              func(string) (stateStore, error)
 	stage                  func(context.Context, *bootstrap.Verified, *enrollment.HTTPClient, string, artifacts.Checkpoint) (retainedFile, error)
+	readInput              func(string, int64) ([]byte, error)
+	prepareStaging         func(string) error
 }
 
 func nativeDependencies() dependencies {
@@ -89,6 +91,7 @@ func nativeDependencies() dependencies {
 	}
 	return dependencies{
 		platform: platform, architecture: runtime.GOARCH,
+		readInput: readNativeInput, prepareStaging: prepareNativeStaging,
 		openExecutable: func() (retainedFile, error) { return bootstrapinstall.OpenRunningAgent() },
 		openStore:      func(path string) (stateStore, error) { return enrollmentstore.Open(path) },
 		stage: func(ctx context.Context, v *bootstrap.Verified, c *enrollment.HTTPClient, path string, checkpoint artifacts.Checkpoint) (retainedFile, error) {
@@ -110,7 +113,7 @@ func run(ctx context.Context, options Options, deps dependencies) (result Result
 	if ctx == nil || !validOptions(options) {
 		return result, ErrOptions
 	}
-	if (deps.platform != "windows" && deps.platform != "macos") || (deps.architecture != "amd64" && deps.architecture != "arm64") {
+	if (deps.platform != "windows" && deps.platform != "macos" && deps.platform != "linux") || (deps.architecture != "amd64" && deps.architecture != "arm64") {
 		return result, enrollmentstore.ErrUnsupported
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
@@ -133,11 +136,15 @@ func run(ctx context.Context, options Options, deps dependencies) (result Result
 		}
 	}
 	defer closeResource(executable.Close)
-	keys, err := loadReleaseKeys(options.ReleaseKeysFile)
+	readInput := deps.readInput
+	if readInput == nil {
+		readInput = readProtectedInput
+	}
+	keys, err := loadReleaseKeysWithReader(options.ReleaseKeysFile, readInput)
 	if err != nil {
 		return result, ErrKeys
 	}
-	token, err := loadInvitation(options.InvitationFile)
+	token, err := loadInvitationWithReader(options.InvitationFile, readInput)
 	if err != nil {
 		return result, ErrInvitation
 	}
@@ -150,7 +157,11 @@ func run(ctx context.Context, options Options, deps dependencies) (result Result
 	if err != nil {
 		return result, ErrStorage
 	}
-	if err := keyfile.CreateDirectory(options.StagingDirectory); err != nil {
+	prepareStaging := deps.prepareStaging
+	if prepareStaging == nil {
+		prepareStaging = keyfile.CreateDirectory
+	}
+	if err := prepareStaging(options.StagingDirectory); err != nil {
 		return result, ErrPackage
 	}
 	client, err := enrollment.NewHTTPClient(options.Origin, deps.roots)

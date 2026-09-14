@@ -97,6 +97,20 @@ jobs:
         shell: pwsh
         run: scripts/check-windows-burn-format.ps1
 
+  linux-native-enrollment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Cache dependencies before isolated native execution
+        run: go mod download
+      - name: Native Linux enrollment, encrypted recovery and independent publisher trust
+        run: scripts/check-linux-enrollment.sh
+
   linux-running-executable:
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -166,6 +180,8 @@ jobs:
         run: go test -race -count=1 ./internal/enrollmentstore ./internal/agent ./internal/packagesignature ./internal/bootstrapinstall ./internal/enrollcommand ./internal/activatecommand ./internal/service/... ./internal/commands/sftp ./internal/commands/deploy ./internal/commands/netbird ./internal/netbirdjournal ./internal/netbirdinstall ./internal/commands/report ./internal/commands/runtime ./internal/runtimeoptions ./internal/macbundle ./internal/localready ./internal/macservice ./internal/machardware ./internal/macsecurity ./internal/windowssoftware ./internal/burnbundle
       - name: Build the agent
         run: go build ./...
+      - name: Linux enrollment help exits before service startup
+        run: go run ./internal/service/linux enroll -help
       - name: Bounded native installation receipt parsing
         run: go test -run '^$' -fuzz='^FuzzNativeInstallationReceipt$' -fuzztime=15s -parallel=2 ./internal/netbirdinstall
       - name: Native NetBird ownership plist fuzzing
