@@ -15,6 +15,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/open-uem/nats/netbirdcommand"
 	packageapi "github.com/open-uem/nats/netbirdinstall"
+	"github.com/open-uem/openuem-agent/internal/netbirdinstall"
 )
 
 type ownedPreparedPackage struct {
@@ -443,6 +444,13 @@ func TestNativePreparationConstructorRejectsSharedAndUnsafeRoots(t *testing.T) {
 	s, err := NewDurableServiceWithPreparation(t.Context(), journal, c.Identity, c.ExpiresAt, root)
 	if err != nil {
 		t.Fatal(err)
+	}
+	supported := netbirdinstall.RemovalRecoverySupported()
+	if (s.removalRecovery != nil) != supported || (s.executor.recoverRemoval != nil) != supported {
+		t.Fatal("native recovery inspection and execution were not configured together")
+	}
+	if supported && (s.removalRecovery.inspect == nil || s.removalRecovery.prepare == nil) {
+		t.Fatal("native recovery owner is incomplete")
 	}
 	if err = s.Close(); err != nil {
 		t.Fatal(err)

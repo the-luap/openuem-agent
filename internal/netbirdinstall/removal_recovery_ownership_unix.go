@@ -37,6 +37,14 @@ type removalRecoveryOwnershipBackend struct {
 	read      packageReader
 }
 
+func nativeInspectRemovalRecovery(ctx context.Context, originalID string, descriptor packageapi.Removal) (string, error) {
+	observed, err := inspectNativeRemovalRecoveryOwnership(ctx, originalID, descriptor)
+	if err != nil || observed == nil || !netbirdcommand.ValidDigest(observed.digest) {
+		return "", ErrRemoval
+	}
+	return observed.digest, nil
+}
+
 func inspectNativeRemovalRecoveryOwnership(ctx context.Context, requestID string, descriptor packageapi.Removal) (*removalRecoveryOwnership, error) {
 	if !InstallationSupported() || !removalProcessesSupported() || descriptor.Platform != "macos" || descriptor.Architecture != runtime.GOARCH {
 		return nil, ErrRemoval

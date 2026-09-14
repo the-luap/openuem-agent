@@ -14,23 +14,24 @@ import (
 // closing it. The caller must supply a validated native identity and certificate
 // expiry, and exclude legacy/profile mutations before publishing readiness.
 type DurableService struct {
-	mu            sync.Mutex
-	closeOnce     sync.Once
-	work          sync.WaitGroup
-	closed        bool
-	ctx           context.Context
-	cancel        context.CancelFunc
-	identity      netbirdcommand.Identity
-	expires       time.Time
-	journal       *netbirdjournal.Journal
-	executor      *DurableExecutor
-	preparation   *preparationOwner
-	installation  installationPlanner
-	removal       *removalOwner
-	connection    *nats.Conn
-	binding       *netbirdServiceBinding
-	subscriptions []*nats.Subscription
-	closeErr      error
+	mu              sync.Mutex
+	closeOnce       sync.Once
+	work            sync.WaitGroup
+	closed          bool
+	ctx             context.Context
+	cancel          context.CancelFunc
+	identity        netbirdcommand.Identity
+	expires         time.Time
+	journal         *netbirdjournal.Journal
+	executor        *DurableExecutor
+	preparation     *preparationOwner
+	installation    installationPlanner
+	removal         *removalOwner
+	removalRecovery *removalRecoveryOwner
+	connection      *nats.Conn
+	binding         *netbirdServiceBinding
+	subscriptions   []*nats.Subscription
+	closeErr        error
 }
 
 type netbirdServiceBinding struct{ connection *nats.Conn }
@@ -145,6 +146,8 @@ func (s *DurableService) handler(control bool, subject string, binding *netbirdS
 				r = s.preparationState(c)
 			} else if c.Kind == "removal-state" {
 				r = s.removalState(ctx, c)
+			} else if c.Kind == "removal-recovery-state" {
+				r = s.removalRecoveryState(ctx, c)
 			} else {
 				r, err = s.journal.Control(ctx, msg.Data)
 			}

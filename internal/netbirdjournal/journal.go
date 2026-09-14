@@ -268,11 +268,20 @@ func (j *Journal) beginLocked(c netbirdcommand.Command, now time.Time, revision 
 		r := e.receipt()
 		return false, &r, nil
 	}
-	if c.Version == netbirdcommand.RemovalVersion && revision == "" {
+	if (c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion) && revision == "" {
 		return false, nil, ErrConflict
 	}
 	if !c.Executable(j.identity, now) {
 		return false, nil, netbirdcommand.ErrInvalid
+	}
+	if c.Version == netbirdcommand.RemovalRecoveryVersion {
+		state, err := j.removalRecoveryStateLocked(c.Identity, c.RemovalRecovery.Original, now)
+		if err != nil {
+			return false, nil, err
+		}
+		if c.RemovalRecovery.JournalRevision != state.Revision || revision != state.Revision {
+			return false, nil, ErrConflict
+		}
 	}
 	if revision != "" {
 		state := j.stateLocked(now)

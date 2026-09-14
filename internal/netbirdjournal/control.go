@@ -120,7 +120,7 @@ func (j *Journal) Control(ctx context.Context, data []byte) (netbirdcommand.Cont
 		r.Outcome = "unavailable"
 		return r, nil
 	}
-	if c.Kind == "removal-state" {
+	if c.Kind == "removal-state" || c.Kind == "removal-recovery-state" {
 		// Only a configured native observer can advertise installed ownership.
 		r.Outcome = "unavailable"
 		return r, nil

@@ -13,3 +13,11 @@ func prepareNativeRemoval(context.Context, string, packageapi.Removal) (*Removal
 func nativeInspectRemoval(context.Context) (packageapi.Removal, bool, error) {
 	return packageapi.Removal{}, false, ErrRemoval
 }
+
+func prepareNativeRemovalRecovery(context.Context, string, packageapi.Removal, string) (*Removal, error) {
+	return nil, ErrRemoval
+}
+
+func nativeInspectRemovalRecovery(context.Context, string, packageapi.Removal) (string, error) {
+	return "", ErrRemoval
+}

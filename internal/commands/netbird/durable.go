@@ -22,7 +22,9 @@ type DurableExecutor struct {
 	install func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
 	// Removal has its own native state owner and can never use the connection runner.
 	remove func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
-	now    func() time.Time
+	// Recovery owns the original manifest through a distinct new journal attempt.
+	recoverRemoval func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
+	now            func() time.Time
 }
 
 type nativePackageLease struct {
@@ -90,10 +92,13 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 	}
 	run := e.run
 	var lease *nativePackageLease
-	if c.Version == netbirdcommand.InstallationVersion || c.Version == netbirdcommand.RemovalVersion {
+	if c.Version == netbirdcommand.InstallationVersion || c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion {
 		acquire := e.install
 		if c.Version == netbirdcommand.RemovalVersion {
 			acquire = e.remove
+		}
+		if c.Version == netbirdcommand.RemovalRecoveryVersion {
+			acquire = e.recoverRemoval
 		}
 		if acquire == nil {
 			return netbirdcommand.ReceiptFor(c, "rejected")
@@ -114,6 +119,8 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 	if lease != nil {
 		if c.Version == netbirdcommand.RemovalVersion {
 			admitted, receipt, err = e.journal.BeginRemoval(c, e.now(), lease.revision)
+		} else if c.Version == netbirdcommand.RemovalRecoveryVersion {
+			admitted, receipt, err = e.journal.BeginRemovalRecovery(c, e.now(), lease.revision)
 		} else {
 			admitted, receipt, err = e.journal.BeginPrepared(c, e.now(), lease.revision)
 		}

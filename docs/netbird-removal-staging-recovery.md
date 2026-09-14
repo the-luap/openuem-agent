@@ -103,10 +103,10 @@ Native list presence repeats after these queries. Four states remain separate:
 An owned disposable-volume fixture verifies all four native listing behaviors
 using a unique nonvendor package ID. Observing an orphan does not remove it or
 claim completion. The private native owner below now continues manifest-backed
-removal, including orphan receipt handling. Explicit recovery commands, journal
-admission and scoped console integration remain open. Missing-manifest or wholly
-empty-stage recovery also needs a separate explicit evidence policy. This observer advertises no recovery
-capability and never releases the original journal barrier.
+removal, including orphan receipt handling. The service now joins the separate
+recovery protocol, journal admission and native owner described below. Scoped
+console integration and missing-manifest or wholly empty-stage recovery remain
+open. The observer alone advertises no capability and never releases a barrier.
 
 ## Recovery runtime stop primitive
 
@@ -192,20 +192,54 @@ more native absence check it removes the exact manifest and empty original stage
 then repeats full native absence verification including the retained-stage
 exclusion. Unknown entries and replacements survive and refuse completion.
 
-## Private native recovery owner
+## Native recovery owner
 
 The private owner combines current observation, runtime stop, remaining source
 moves, staged purge, receipt completion and scaffold completion. Preparation is
 read-only and retains file descriptors. `Run` requires the same original UUID,
-descriptor and current combined fingerprint before any mutation; its future
-caller must durably admit a separate recovery command first. The owner is single
+descriptor and current combined fingerprint before any mutation; the service
+durably admits a separate recovery command first. The owner is single
 use, and `Close` joins `Run` and closes descriptors without deleting staging.
 
 Final-query failure can occur after the stage has been removed. It remains
-unconfirmed and cannot rewrite the original command's outcome. This native owner
-is not yet exposed through the public service or console. Explicit independent
-recovery commands, journal-reference/release checks and the reviewed console
-lifecycle remain required, as does a separate policy for absent manifests.
+unconfirmed and cannot rewrite the original command's outcome. Supported native
+services now configure `InspectRemovalRecovery` and `PrepareRemovalRecovery`
+together with a distinct executor factory. Unsupported services expose neither.
+The scoped console lifecycle and absent-manifest policy remain open.
+
+## Explicit recovery protocol and journal admission
+
+[Command version five, `recover-removal`](https://github.com/the-luap/openuem-nats/blob/ffb798edf585da5bef34537096c46556b56eda50/docs/netbird-removal-recovery.md), creates an independent attempt. It binds
+the original uninstall UUID, command hash, console revision, confirmed release
+UUID and original descriptor to a current native fingerprint, explicit `manifest`
+mode, current ready-journal revision and new console review. The new request UUID
+differs from both original UUIDs. It never enters the fresh-removal, installation
+or connection runner. Control version four, `removal-recovery-state`, requests a
+read-only current review of that exact original reference under the current
+individual certificate. Only a complete paired native owner can return `ok`.
+
+`RemovalRecoveryState` checks original immutable uninstall evidence, its exact
+release, current individual identity and the latest common journal barrier under
+one mutex. An active, completed, withdrawn, missing or unreleased original cannot
+authorize recovery. The manifest observer separately proves the original package
+descriptor. Expensive native inspection is bracketed by identical journal proofs;
+changed state, expiry or cancellation discards the review.
+
+For execution, native preparation is read-only and holds the original file
+objects. The service checks the reviewed journal revision before and after
+preparation. `BeginRemovalRecovery` then checks that same revision and original
+release atomically before syncing a separate minimal start record. The command's
+console revision remains distinct from its explicit current journal revision.
+Native `Run` and joined `Close` precede the new completed/unconfirmed result.
+
+Exact replay and permanent withdrawal are checked before acquiring a native
+owner, so they remain readable without another native inspection or execution.
+The original uncertain receipt and release never change. A crash still requires
+a later proven boot and explicit release of the latest attempt; a joined failure
+requires explicit release. Another fresh reviewed recovery can then reference the
+same original uninstall manifest using its own new UUID. Certificate renewal
+permits a current-identity review of retained original evidence, while changing
+the current journal revision and invalidating any old review.
 
 ## Verification
 
@@ -261,3 +295,10 @@ installation/removal, journal and command-service races remain successful, as do
 Darwin CGO, Linux and Windows agent builds and Darwin without-CGO package
 compilation. Fixtures do not read or change host NetBird state. Actual interrupted
 package/reboot/desktop acceptance remains separate.
+
+Recovery protocol race/fuzz tests, journal restart/renewal/release/withdrawal and
+concurrent admission tests, and owned NATS service tests cover the new integration.
+Service checks include paired capability configuration, no native observation
+before original proof, changed journal during inspection/preparation, failed or
+cancelled acquisition cleanup, journal-before-mutation ordering, joined cleanup,
+immutable original evidence and exact replay without any native reacquisition.

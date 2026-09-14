@@ -20,8 +20,8 @@ type removalRecoveryExecutionBackend struct {
 	forget    func(context.Context) error
 }
 
-// This remains private until the shared recovery command and journal admission
-// are configured together. It always continues the original stage identity.
+// The service configures inspection and journal admission together. Native
+// recovery always continues the original stage identity.
 func prepareNativeRemovalRecovery(ctx context.Context, originalID string, descriptor packageapi.Removal, digest string) (*Removal, error) {
 	if !RemovalSupported() {
 		return nil, ErrRemoval
