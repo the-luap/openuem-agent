@@ -41,7 +41,79 @@ func TestWindowsDPAPIDurableRecoveryRecipient(t *testing.T) {
 
 func TestWindowsDPAPIDurableRotationJournal(t *testing.T) {
 	b, _ := windowsFixture(t)
-	runDurableRotationJournal(t, b)
+	runDurableRotationJournal(t, &observedWindowsBackend{windowsBackend: b.(*windowsBackend), t: t})
+}
+
+// Record only operation and canonical slot on unexpected native failures. No
+// path, ciphertext, plaintext or identity is included in fixture diagnostics.
+type observedWindowsBackend struct {
+	*windowsBackend
+	t *testing.T
+}
+
+func (b *observedWindowsBackend) Load(record string) ([]byte, error) {
+	data, err := b.windowsBackend.Load(record)
+	if err != nil && !errors.Is(err, ErrMissing) {
+		b.t.Logf("native load rejected slot %s: %v", record, err)
+	}
+	return data, err
+}
+
+func (b *observedWindowsBackend) Create(record string, data []byte) error {
+	err := b.windowsBackend.Create(record, data)
+	if err != nil && !errors.Is(err, ErrExists) {
+		b.t.Logf("native create rejected slot %s: %v", record, err)
+	}
+	return err
+}
+
+func TestWindowsPublishedRecordWithReadHandlePreservesExclusiveCreate(t *testing.T) {
+	b, directory := windowsFixture(t)
+	if err := b.Create(pendingRecord, []byte("owned original record")); err != nil {
+		t.Fatal(err)
+	}
+	filename := filepath.Join(directory, pendingRecord+".dpapi")
+	held, err := os.Open(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	// Windows may report a sharing failure before checking that the rename's
+	// destination exists. Observe the actual kernel result on this owned file.
+	candidate := filepath.Join(directory, "owned-candidate.tmp")
+	file, err := createSystemFile(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte("owned inert candidate")); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(candidate)
+	from, err := windows.UTF16PtrFromString(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	to, err := windows.UTF16PtrFromString(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = windows.MoveFileEx(from, to, windows.MOVEFILE_WRITE_THROUGH)
+	if err == nil {
+		t.Fatal("native no-replace rename overwrote the original record")
+	}
+	t.Logf("native no-replace rename with a held reader: %v", err)
+	if err := b.Create(pendingRecord, []byte("competing record")); !errors.Is(err, ErrExists) {
+		t.Fatal("held reader changed the exclusive-create result", err)
+	}
+	data, err := b.Load(pendingRecord)
+	defer clear(data)
+	if err != nil || !bytes.Equal(data, []byte("owned original record")) {
+		t.Fatal("held-reader publication changed the winner", err)
+	}
 }
 
 func TestWindowsDPAPIDurableSoftwareJournal(t *testing.T) {
