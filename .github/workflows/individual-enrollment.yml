@@ -97,6 +97,20 @@ jobs:
         shell: pwsh
         run: scripts/check-windows-burn-format.ps1
 
+  linux-credential-encryption:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Cache dependencies before isolated native execution
+        run: go mod download
+      - name: Native host-key credential encryption in an isolated Linux fixture
+        run: scripts/check-linux-credential-encryption.sh
+
   linux-service-ownership:
     runs-on: ubuntu-latest
     timeout-minutes: 8

@@ -96,6 +96,9 @@ services and validates a pinned private installation namespace. Linux native
 credential storage remains unsupported; no plaintext fallback is enabled. Native
 package trust, enrollment admission and service activation still need their own
 Linux integration. The lease provides only process ownership.
+The private [native credential encryption component](linux-credential-encryption.md)
+now binds a record and installation context to a preprovisioned systemd host key.
+It remains separate from the not-yet-implemented Linux durable backend.
 
 ## Windows storage boundary
 
