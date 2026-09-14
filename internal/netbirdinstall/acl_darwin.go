@@ -32,9 +32,47 @@ static int openuem_netbird_acl_readonly(int fd) {
     acl_free(acl);
     return ended;
 }
+
+static char *openuem_netbird_acl_snapshot(int fd, ssize_t *length) {
+    *length = -1;
+    if (!openuem_netbird_acl_readonly(fd)) return NULL;
+    acl_t acl = acl_get_fd_np(fd, ACL_TYPE_EXTENDED);
+    if (acl == NULL) {
+        if (errno == ENOENT) *length = 0;
+        return NULL;
+    }
+    char *text = acl_to_text(acl, length);
+    acl_free(acl);
+    if (text == NULL || *length < 0 || *length > 64*1024) {
+        if (text != NULL) acl_free(text);
+        *length = -1;
+        return NULL;
+    }
+    return text;
+}
 */
 import "C"
-import "os"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"unsafe"
+)
+
+func removalACL(file *os.File) (string, bool) {
+	var length C.ssize_t
+	text := C.openuem_netbird_acl_snapshot(C.int(file.Fd()), &length)
+	if length < 0 {
+		return "", false
+	}
+	if text != nil {
+		defer C.acl_free(unsafe.Pointer(text))
+	}
+	data := C.GoBytes(unsafe.Pointer(text), C.int(length))
+	hash := sha256.Sum256(data)
+	clear(data)
+	return hex.EncodeToString(hash[:]), true
+}
 
 func nativeInstallerAvailable() bool { return true }
 

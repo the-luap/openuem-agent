@@ -37,3 +37,20 @@ func TestNativeInstallationACLRejectsWriteGrantsWithoutChangingPermissions(t *te
 		}
 	}
 }
+
+func TestNativeRemovalACLIsBoundToTheOwnedSnapshot(t *testing.T) {
+	f := newRemovalFilesFixture(t)
+	first, err := f.inspect(t.Context())
+	f.must(err)
+	path := filepath.Join(f.root, removalApp+"/Contents/Resources/LICENSE")
+	f.must(exec.Command("/bin/chmod", "+a", "everyone allow read", path).Run())
+	readable, err := f.inspect(t.Context())
+	f.must(err)
+	if readable.digest == first.digest || readable.objects[removalApp+"/Contents/Resources/LICENSE"].ACL == first.objects[removalApp+"/Contents/Resources/LICENSE"].ACL {
+		t.Fatal("native ACL change was omitted from the ownership fingerprint")
+	}
+	f.must(exec.Command("/bin/chmod", "+a", "everyone allow write", path).Run())
+	if result, err := f.inspect(t.Context()); err != errRemovalFiles || result != nil {
+		t.Fatal("native ACL write grant admitted removal ownership", err)
+	}
+}
