@@ -197,6 +197,8 @@ jobs:
         with:
           go-version: '1.26.8'
           cache: true
+      - name: Repeat native DPAPI concurrent rotation admission
+        run: go test -count=20 -timeout 2m -run '^TestWindowsDPAPIDurableRotationJournal$' ./internal/enrollmentstore
       - name: Native DPAPI, private publication and Local System recovery
         shell: pwsh
         run: |

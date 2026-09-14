@@ -19,7 +19,7 @@ func rotationFixture(t *testing.T, backend NativeBackend) (*Store, *Identity, *R
 	s, i := recipientFixture(t, backend)
 	agent, err := s.LoadOrCreateRecipient(i)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("create rotation fixture recipient", err)
 	}
 	defer agent.Close()
 	console, err := enrollment.NewRecoveryRecipientKey()
@@ -29,7 +29,7 @@ func rotationFixture(t *testing.T, backend NativeBackend) (*Store, *Identity, *R
 	defer console.Close()
 	j, err := s.OpenRotationJournal(i)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("open rotation fixture journal", err)
 	}
 	c := enrollment.RotationContext{Binding: enrollment.RecoveryContext{Version: 1, Identity: j.scope, TaskID: uuid.NewString(), NativeID: uuid.NewString(), KeyID: uuid.NewString(), RecipientID: uuid.NewString(), ExpiresAt: time.Now().Add(time.Minute).Unix()}, Ordinal: 1, EscrowID: uuid.NewString(), ReplyKey: hex.EncodeToString(console.PublicKey())}
 	nonce := bytes.Repeat([]byte{9}, 32)
@@ -97,7 +97,7 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 		var err error
 		before[name], err = backend.Load(name)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatal("load original rotation fixture record", name, err)
 		}
 		defer clear(before[name])
 	}
@@ -110,6 +110,7 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 	type admission struct {
 		admitted bool
 		err      error
+		stage    string
 	}
 	results := make(chan admission, 4)
 	var wg sync.WaitGroup
@@ -120,11 +121,11 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 			other := &Store{backend: backend}
 			journal, err := other.OpenRotationJournal(i)
 			if err != nil {
-				results <- admission{err: err}
+				results <- admission{err: err, stage: "open concurrent journal"}
 				return
 			}
 			won, _, err := journal.BeginWithBootSession(*task, nonce, boot)
-			results <- admission{won, err}
+			results <- admission{won, err, "admit concurrent intent"}
 		})
 	}
 	wg.Wait()
@@ -132,7 +133,7 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 	winners := 0
 	for r := range results {
 		if r.err != nil {
-			t.Fatal(r.err)
+			t.Fatal(r.stage, r.err)
 		}
 		if r.admitted {
 			winners++
@@ -155,12 +156,12 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 	}
 	loaded, err := s.Load()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("reload rotation fixture identity", err)
 	}
 	defer loaded.Close()
 	restarted, err := s.OpenRotationJournal(loaded)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("reopen persisted rotation journal", err)
 	}
 	won, entry, err := restarted.BeginWithBootSession(*task, nonce, boot)
 	if err != nil || won || entry == nil || entry.Result == nil || entry.BootSessionID != boot {
@@ -184,7 +185,7 @@ func runDurableRotationJournal(t *testing.T, backend NativeBackend) {
 	for _, name := range []string{rotationRecord(false, 1), rotationRecord(true, 1)} {
 		data, err := backend.Load(name)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatal("load persisted rotation evidence", name, err)
 		}
 		if bytes.Contains(data, []byte("AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")) || bytes.Contains(data, []byte("1111-2222-3333-4444-5555-6666")) {
 			t.Fatal("journal persisted plaintext key material")
