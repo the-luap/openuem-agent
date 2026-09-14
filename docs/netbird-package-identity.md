@@ -87,7 +87,9 @@ overflow, changed bytes and concurrent cleanup. Seeded fuzz targets cover XML,
 CPIO payload and XAR parsing. macOS/Linux race suites and all three agent platform
 builds pass, including existing NetBird command, journal and service regressions.
 
-Console approval storage, authenticated installer capability/command delivery,
+The console's [organization approval workflow](https://github.com/the-luap/openuem-console/blob/fc5a2ae12c5cb47b47e1ff453e2d84b8ee09f895/docs/netbird-package-approvals.md)
+now retains immutable descriptors, encrypted sources, current authority, atomic
+audit and permanent revocation. Authenticated installer capability/command delivery,
 durable execution admission, native install/remove, resulting-state observation
 and uncertainty recovery remain open. Linux publisher provenance and physical
 installation acceptance require their own evidence. Existing installer

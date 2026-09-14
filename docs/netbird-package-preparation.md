@@ -69,9 +69,11 @@ An escaped source exceeding the wire envelope is rejected before creating a
 stage or making a request. Full agent builds pass for Linux, macOS and Windows;
 console Linux and worker Linux/Windows builds pass with the same shared pin.
 
-This is an implementation component, not a completed installer feature. Console
-approval/storage, authenticated installer command/capability, durable attempts,
-install/remove processes, exact resulting state and
+The console now provides [organization approval storage and history](https://github.com/the-luap/openuem-console/blob/fc5a2ae12c5cb47b47e1ff453e2d84b8ee09f895/docs/netbird-package-approvals.md)
+with encrypted sources, explicit review, current software authority, atomic audit
+and permanent revocation. This remains an implementation component, not a completed
+installer feature. Authenticated installer command/capability delivery must consume
+that current approval and retain durable attempts. Install/remove processes, exact resulting state and
 uncertainty recovery remain required before enabling installation or local
 uninstallation. Read-only checks of exact official v0.78.1 artifacts now pass;
 physical/native installation acceptance remains separate from those checks.
