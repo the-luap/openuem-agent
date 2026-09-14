@@ -15,8 +15,8 @@ redelivers an uncertain attempt. [Native console delivery](https://github.com/th
 and recipient identity, reconstructs the complete live preparation and commits
 one fresh version-three attempt before direct delivery. Native attempts exclude
 cancellation; exact completed receipts or read-only receipt recovery open console
-admission. Explicit uncertain withdrawal/release, dispatch and lifecycle UI remain
-integration work. Its existing connection/registration publisher still rejects that
+admission. [Reviewed uncertain-operation recovery](https://github.com/the-luap/openuem-console/blob/ab17d569a9a3ea56823b16274503ec0827b6eefc/docs/netbird-installation-resolutions.md) now retains expiring reviews, exact owned controls and release proofs.
+Dispatch and lifecycle UI remain integration work. Its existing connection/registration publisher still rejects that
 version. Local package removal remains unavailable.
 
 ## Admission and ownership

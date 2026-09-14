@@ -135,9 +135,10 @@ results without another delivery on replay. [Native command admission](https://g
 current authority and cancellation, reconstructs the exact live preparation and
 commits its own attempt before one fresh installation command. Native attempts
 exclude cancellation. Completed receipts can be recovered through read-only
-queries under a renewed current identity without redelivery; explicit uncertain
-withdrawal/release and lifecycle UI remain open. Preparation alone remains
-cancellable and cannot authorize installation. The native macOS installer now
+queries under a renewed current identity without redelivery.
+[Reviewed withdrawal and release](https://github.com/the-luap/openuem-console/blob/ab17d569a9a3ea56823b16274503ec0827b6eefc/docs/netbird-installation-resolutions.md) now use expiring reviews and an owned permanent resolution UUID; lost replies
+reconcile without resending the installer. Dispatch and lifecycle UI remain open.
+Preparation alone remains cancellable and cannot authorize installation. The native macOS installer now
 consumes the exact owned package under atomic current journal admission and
 verifies its resulting state; a preparation response alone cannot authorize it.
 
