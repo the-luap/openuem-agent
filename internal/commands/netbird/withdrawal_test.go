@@ -19,8 +19,22 @@ func recoveryServiceControl(c netbirdcommand.Command, kind string) netbirdcomman
 }
 
 func TestDurableServiceWithdrawalSurvivesLostReplyAndLateDelivery(t *testing.T) {
+	for _, operation := range []string{"register", "up", "down", "switchprofile"} {
+		t.Run(operation, func(t *testing.T) { exerciseDurableServiceWithdrawal(t, operation) })
+	}
+}
+
+func exerciseDurableServiceWithdrawal(t *testing.T, operation string) {
+	t.Helper()
 	e, j, c, path := ownedDurable(t)
-	c.Version, c.Operation, c.SetupKey = netbirdcommand.RegistrationVersion, "register", "owned-private-registration-key"
+	c.Operation = operation
+	if operation == "register" {
+		c.Version = netbirdcommand.RegistrationVersion
+		c.SetupKey = "owned-private-registration-key"
+	}
+	if operation == "switchprofile" {
+		c.Profile = "owned-profile"
+	}
 	nc := serviceBroker(t)
 	s, err := NewDurableService(t.Context(), j, c.Identity, c.ExpiresAt.Add(time.Minute))
 	if err != nil {
@@ -50,6 +64,11 @@ func TestDurableServiceWithdrawalSurvivesLostReplyAndLateDelivery(t *testing.T) 
 	if proof.Outcome != "ok" || proof.Receipt.Status != "withdrawn" || proof.ReleaseID != withdraw.RequestID {
 		t.Fatal("lost response erased withdrawal")
 	}
+	retry := recoveryServiceControl(c, "withdraw")
+	retry.RequestID = withdraw.RequestID
+	if proof := sendServiceControl(t, nc, retry); proof.Outcome != "ok" || proof.ReleaseID != withdraw.RequestID || proof.Receipt.Status != "withdrawn" {
+		t.Fatal("fresh control lost permanent withdrawal identity")
+	}
 	data, _ := netbirdcommand.Encode(c)
 	commandSubject, _ := netbirdcommand.Subject(c.DeviceID)
 	msg, err := nc.Request(commandSubject, data, 3*time.Second)
@@ -75,6 +94,6 @@ func TestDurableServiceWithdrawalSurvivesLostReplyAndLateDelivery(t *testing.T) 
 	restarted.run = e.run
 	receipt, err = restarted.Execute(t.Context(), data)
 	if err != nil || receipt.Status != "withdrawn" || calls.Load() != 0 {
-		t.Fatal("restart executed withdrawn registration", err)
+		t.Fatal("restart executed withdrawn command", err)
 	}
 }
