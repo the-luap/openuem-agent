@@ -27,15 +27,19 @@ does not allow unsigned tarball extraction as a substitute for official PKGs.
 The official [NetBird macOS documentation](https://docs.netbird.io/get-started/install/macos)
 describes that signing distinction.
 
-Linux preparation establishes the approved bytes and container prefix, not
-native package metadata or independent publisher authenticity. Both the approval's
-authenticated provenance and matching native package identity still need to be
-enforced at the eventual execution boundary. No DEB/RPM maintainer script,
-archive extraction, installer, service action or provider call is performed by
-this preparation component.
+Preparation now also requires [native package identity](netbird-package-identity.md)
+to match the descriptor. DEB/RPM queries compare the exact name, native version
+and architecture. macOS checks the distribution, component receipt and the
+architecture of both bundled executables using bounded reads from the retained
+file. Linux metadata inspection does not independently authenticate the publisher.
+Current approval provenance and identity must still be enforced at the eventual
+execution boundary. No maintainer script, installer, filesystem archive extraction,
+service action or provider call is performed by this preparation component.
 
 `Prepared.Verify` rechecks the same file against the exact descriptor, including
 its approval and organization; changing either invalidates the preparation.
+`Prepared.Inspect` repeats that verification before and after native metadata
+inspection while retaining exclusive ownership against concurrent cleanup.
 Normal formatting and incidental JSON serialization hide private source data.
 `Close` removes only the original stage file and directory and preserves a
 replacement path. Concurrent verification and cleanup serialize on the owned
@@ -67,7 +71,7 @@ console Linux and worker Linux/Windows builds pass with the same shared pin.
 
 This is an implementation component, not a completed installer feature. Console
 approval/storage, authenticated installer command/capability, durable attempts,
-native metadata preflight, install/remove processes, exact resulting state and
+install/remove processes, exact resulting state and
 uncertainty recovery remain required before enabling installation or local
-uninstallation. Real signed publisher artifacts and physical/native installation
-acceptance remain separate from these inert fixtures.
+uninstallation. Read-only checks of exact official v0.78.1 artifacts now pass;
+physical/native installation acceptance remains separate from those checks.

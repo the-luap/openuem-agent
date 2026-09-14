@@ -52,19 +52,29 @@ func (*Prepared) MarshalJSON() ([]byte, error) { return nil, ErrChanged }
 // approval. The root must already be private beneath trusted ancestors. It uses
 // an independent HTTPS transport without enrollment identity, environment proxy,
 // cookies or redirects. On macOS native signature verification is mandatory.
-// Linux preparation proves exact approved bytes and the container prefix only;
-// native metadata and publisher/approval trust must precede eventual execution.
+// Preparation also requires matching native package metadata. Publisher trust
+// on Linux and current approval/command authority remain independent requirements.
 func Stage(ctx context.Context, descriptor packageapi.Package, tenant int64, root string) (*Prepared, error) {
 	platform := runtime.GOOS
 	if platform == "darwin" {
 		platform = "macos"
 	}
-	if !descriptor.MatchesTarget(tenant, platform, runtime.GOARCH) {
+	if ctx == nil || !descriptor.MatchesTarget(tenant, platform, runtime.GOARCH) {
 		return nil, ErrDownload
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 	client, transport := newClient(nil)
 	defer transport.CloseIdleConnections()
-	return stage(ctx, descriptor, root, client, packagesignature.Verify)
+	prepared, err := stage(ctx, descriptor, root, client, packagesignature.Verify)
+	if err != nil {
+		return nil, err
+	}
+	if err = prepared.Inspect(ctx, descriptor); err != nil {
+		_ = prepared.Close()
+		return nil, err
+	}
+	return prepared, nil
 }
 
 func newClient(roots *x509.CertPool) (*http.Client, *http.Transport) {
@@ -197,6 +207,10 @@ func (p *Prepared) Verify(ctx context.Context, descriptor packageapi.Package) er
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.verifyLocked(ctx, descriptor)
+}
+
+func (p *Prepared) verifyLocked(ctx context.Context, descriptor packageapi.Package) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
