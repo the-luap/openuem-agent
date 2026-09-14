@@ -2,9 +2,9 @@
 
 The private removal observer now combines [protected package files](netbird-removal-ownership.md),
 the loaded system launchd job and exact running NetBird processes into the shared
-source-free removal descriptor. The service does not expose this observer yet:
-the native execution owner and verified removal outcome must be connected before
-advertising support. No process or job is stopped by this implementation.
+source-free removal descriptor. The service now exposes it together with the
+[native execution owner and verified outcome](netbird-removal-execution.md) on
+supported individually enrolled macOS agents. This observer itself is read-only.
 
 ## Exact running process identity
 
@@ -64,9 +64,9 @@ The complete native state digest combines these three private fingerprints and
 the resulting descriptor retains the exact package version and architecture.
 Private evidence refuses JSON and redacts ordinary and Go-syntax formatting.
 
-The next execution owner must reconstruct this descriptor under the current
-journal revision, retain native object ownership through mutation, stop only the
-owned service and processes, remove reviewed package objects and verify absence.
+The execution owner reconstructs this descriptor under the current journal
+revision, retains native object ownership through mutation, stops only the owned
+service and processes, removes reviewed package objects and verifies absence.
 Configuration, credentials, logs and provider peers remain outside package removal.
 Missing package receipts still mean unavailable evidence, not confirmed absence.
 The common journal's original uncertainty and explicit recovery remain unchanged.

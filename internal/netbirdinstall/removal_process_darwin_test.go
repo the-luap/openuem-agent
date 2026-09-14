@@ -109,6 +109,12 @@ func TestNativeRemovalProcessBindsAuditGenerationAndRunningCode(t *testing.T) {
 	if _, err := nativeRemovalAuditPath(ctx, changed); err == nil {
 		t.Fatal("different process generation resolved the original process")
 	}
+	if err := signalRemovalAudit(ctx, changed, false); err != nil {
+		t.Fatal("stale generation signal did not resolve as already gone", err)
+	}
+	if actual, err := nativeRemovalAuditPath(ctx, proof.Audit); err != nil || actual != path {
+		t.Fatal("stale token signalled the live owned helper", err)
+	}
 	for _, check := range []struct{ path, requirement string }{{path + "-other", requirement}, {path, `identifier "io.other.client"`}, {path, netbirdDeveloperRequirement + ` and identifier "netbird"`}} {
 		if _, err := captureRemovalProcess(ctx, pid, check.path, check.requirement); err == nil {
 			t.Fatal("foreign path, code identity or publisher was accepted")
@@ -130,12 +136,15 @@ func TestNativeRemovalProcessBindsAuditGenerationAndRunningCode(t *testing.T) {
 	if _, err := captureRemovalProcess(ctx, pid, path, requirement); err == nil {
 		t.Fatal("running old image was accepted as the replacement file")
 	}
-	if err := command.Process.Kill(); err != nil {
+	if err := signalRemovalAudit(ctx, proof.Audit, false); err != nil {
 		t.Fatal(err)
 	}
 	_ = command.Wait()
 	joined = true
 	if _, err := nativeRemovalAuditPath(ctx, proof.Audit); err == nil {
 		t.Fatal("exited process retained live native ownership")
+	}
+	if err := signalRemovalAudit(ctx, proof.Audit, true); err != nil {
+		t.Fatal("exited token was not accepted as gone", err)
 	}
 }

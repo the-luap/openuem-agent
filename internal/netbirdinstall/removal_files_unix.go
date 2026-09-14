@@ -60,8 +60,8 @@ type removalFilesBackend struct {
 	verify func(context.Context, string) error
 }
 
-// inspectNativeRemovalFiles never runs NetBird or package scripts. It is not
-// connected to the service until the complete native removal owner is available.
+// inspectNativeRemovalFiles never runs NetBird or package scripts. The service
+// uses it only through the complete native removal owner.
 func inspectNativeRemovalFiles(ctx context.Context) (*removalFileEvidence, error) {
 	if !InstallationSupported() {
 		return nil, errRemovalFiles

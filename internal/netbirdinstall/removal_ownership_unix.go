@@ -29,7 +29,7 @@ type removalOwnershipBackend struct {
 	job       removalJobReader
 }
 
-// Only a future configured removal owner may expose this complete observed
+// Only a configured removal owner may expose this complete observed
 // descriptor. This private inspection does not admit, stop or remove anything.
 func inspectNativeRemovalOwnership(ctx context.Context) (*removalOwnership, error) {
 	if !InstallationSupported() || !removalProcessesSupported() {

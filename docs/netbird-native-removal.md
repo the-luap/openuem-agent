@@ -3,8 +3,10 @@
 The [shared removal contract](https://github.com/the-luap/openuem-nats/blob/10ed2cf2ed01f76a0f83cb825f2a6c48fb86550e/docs/netbird-removal-commands.md) now defines a source-free installed
 target, a version-four `uninstall` command and a version-three read-only native
 inspection. The agent journal and executor support exact admission and recovery.
-No native observer or remover is configured yet, so deployed services report
-inspection unavailable and reject removal before creating an attempt.
+Supported individually enrolled macOS services now configure the
+[native observer and execution owner](netbird-removal-execution.md) together.
+Unconfigured services report inspection unavailable and reject removal before
+creating an attempt.
 
 ## Native owner and common exclusion
 
@@ -38,7 +40,7 @@ installation, connection and registration race suites pass. Agent runtime,
 service and enrollment-store regressions use their owned native test facilities.
 No NetBird installer, daemon or removal ran in these tests.
 
-## Native implementation still required
+## Native implementation and remaining integration
 
 The [private native filesystem inspector](netbird-removal-ownership.md) now verifies
 receipt/version, protected bundle contents, publisher signatures, CLI link and
@@ -46,12 +48,10 @@ supported daemon plist ownership under stable before/after snapshots. It does no
 advertise readiness or treat static files as proof of native runtime ownership.
 The [combined runtime observer](netbird-removal-runtime.md) now binds actual
 launchd and process identity through repeated snapshots before constructing the
-shared removal state fingerprint privately. It remains unconfigured until the
-native execution owner and result verification are available.
-The removal planner must recheck that fingerprint and each owned object before
-mutation, stop the exact service/UI processes, remove only reviewed package-owned
-objects and verify absence. It must retain configuration and provider state unless
-separately reviewed scope explicitly authorizes their removal. A package name,
+shared removal state fingerprint privately. The native execution owner rechecks
+that fingerprint and each owned object before mutation, stops the exact service/UI
+processes, removes only reviewed package-owned objects and verifies absence. It
+retains configuration and provider state. A package name,
 process name, stale inventory report or arbitrary shell command is insufficient.
 
 The official macOS package places the app under `/Applications` and adds its
@@ -63,10 +63,10 @@ Read-only inspection of the retained official 0.78.1 ARM64 package confirms bund
 ID `io.netbird.client`, both CLI/UI executables, and the fixed `/usr/local/bin/netbird`
 link. This artifact inspection is not removal acceptance.
 
-Native owner binding, console removal requests/dispatch/recovery/UI, Linux
+Console removal requests/dispatch/recovery/UI, retained-stage recovery, Linux
 individual enrollment/publisher trust and actual package/daemon/device acceptance
 remain required to complete the workflow.
 
 The console, agent and worker share immutable protocol revision
 `v0.11.1-0.20260914083905-10ed2cf2ed01`. The removal protocol and guarded native
-admission are present; the native remover and console workflow remain required.
+admission and native remover are present; the console workflow remains required.

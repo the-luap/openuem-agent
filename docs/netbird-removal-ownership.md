@@ -1,11 +1,10 @@
 # Native NetBird package ownership evidence
 
 The native removal foundation now includes a private, read-only filesystem
-inspector for the official macOS package. It is not configured as a removal-state
-service. The [combined runtime observer](netbird-removal-runtime.md) now joins
+inspector for the official macOS package. The [combined runtime observer](netbird-removal-runtime.md) joins
 these files with loaded launchd ownership and exact process identity to construct
-the complete descriptor privately. The execution owner and verified absence remain
-required before enabling deinstallation.
+the complete descriptor privately. The [execution owner and verified absence](netbird-removal-execution.md)
+are now configured together on supported individually enrolled macOS agents.
 
 ## Inspected package state
 
@@ -67,10 +66,9 @@ and owned process/filesystem tests do not constitute installed-device acceptance
 
 The private filesystem fingerprint deliberately cannot stand in for the shared
 removal descriptor's complete state digest. The combined observer now joins it
-with actual launchd and process ownership. The execution owner must acquire the
-journal revision, recheck
-each object before mutation, stop only the owned service/UI, remove the reviewed
-objects and confirm absence. Configuration, logs, credentials and provider peers
+with actual launchd and process ownership. The execution owner acquires the
+journal revision, rechecks each object before mutation, stops only the owned
+service/UI, removes the reviewed objects and confirms absence. Configuration, logs, credentials and provider peers
 remain outside local package removal. Partial or missing package receipts are
 unavailable evidence, not proof of absence.
 

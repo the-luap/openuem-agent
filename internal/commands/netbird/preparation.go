@@ -32,7 +32,8 @@ type preparationOwner struct {
 // NewDurableServiceWithPreparation also owns the fixed private staging root.
 // The caller must hold the supplied journal's exclusive installation lease and
 // supply a sibling directory beneath the validated individual identity directory.
-// No installer is enabled. A failed creation leaves journal ownership unchanged.
+// Supported native package owners are configured together with their inspection
+// paths. A failed creation leaves journal ownership unchanged.
 func NewDurableServiceWithPreparation(parent context.Context, journal *netbirdjournal.Journal, identity netbirdcommand.Identity, expires time.Time, root string) (*DurableService, error) {
 	if !identity.Individual || runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return nil, ErrInvalidAction
@@ -64,6 +65,10 @@ func NewDurableServiceWithPreparation(parent context.Context, journal *netbirdjo
 	if netbirdinstall.InstallationSupported() {
 		s.installation = prepareNativeInstallation
 		s.executor.install = s.acquireInstallation
+	}
+	if netbirdinstall.RemovalSupported() {
+		s.removal = &removalOwner{inspect: netbirdinstall.InspectRemoval, prepare: prepareNativeRemoval}
+		s.executor.remove = s.acquireRemoval
 	}
 	return s, nil
 }

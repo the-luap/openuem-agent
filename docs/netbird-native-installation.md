@@ -21,8 +21,9 @@ The [device lifecycle UI](https://github.com/the-luap/openuem-console/blob/3199b
 reviewed queueing, retained progress/history, pre-native cancellation and explicit
 reviewed recovery. Its existing connection/registration publisher still rejects
 version three. [Local removal admission](netbird-native-removal.md) now has a
-separate exact command and durable owner contract; native package removal remains
-unavailable until its observer and remover are configured.
+separate exact command and durable owner contract. Its [native owner](netbird-removal-execution.md)
+now provides protected removal and verified absence; console removal integration
+remains open.
 
 ## Admission and ownership
 

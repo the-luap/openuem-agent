@@ -112,7 +112,8 @@ observations carry a neutral error, and current console/worker writers preserve
 previously confirmed data. The old Unix remote-shell installers have been removed.
 Authenticated [private package preparation](netbird-package-preparation.md) is
 available under individual native ownership. Native macOS execution now consumes
-that owner; console durable delivery and local removal remain unconnected.
+that owner. Its separate removal owner now provides protected native execution;
+console removal delivery remains unconnected.
 Windows retains its separate approved software workflow.
 
 Durable UUID-bound connection requests, current console authorization/source
@@ -123,8 +124,9 @@ shares this permanent journal, binds the one-off key into the command digest, an
 retains no key material in local records. Console registration and retained
 provider-peer association now have their own reviewed workflows.
 [Native installation](https://github.com/the-luap/openuem-console/blob/3199b9ba73fd0b990bbd933727a5cdaebf426d77/docs/netbird-installation-ui.md) now connects reviewed console admission, joined
-dispatch, exact package execution and retained receipt/recovery pages. Local removal
-and Linux individual enrollment/publisher trust remain separate integration work.
+dispatch, exact package execution and retained receipt/recovery pages. The
+[native removal owner](netbird-removal-execution.md) is now connected to the agent;
+console removal and Linux individual enrollment/publisher trust remain integration work.
 An agent-reported IP or hostname is not proof of provider ownership. Real NetBird
 daemon, interactive desktop, Windows native process and physical-device acceptance
 must be recorded separately from these owned fixtures and cross-compilation.

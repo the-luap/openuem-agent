@@ -26,6 +26,7 @@ type DurableService struct {
 	executor      *DurableExecutor
 	preparation   *preparationOwner
 	installation  installationPlanner
+	removal       *removalOwner
 	connection    *nats.Conn
 	binding       *netbirdServiceBinding
 	subscriptions []*nats.Subscription
@@ -142,6 +143,8 @@ func (s *DurableService) handler(control bool, subject string, binding *netbirdS
 			var r netbirdcommand.ControlResponse
 			if c.Kind == "preparation-state" || c.Kind == "installation-state" {
 				r = s.preparationState(c)
+			} else if c.Kind == "removal-state" {
+				r = s.removalState(ctx, c)
 			} else {
 				r, err = s.journal.Control(ctx, msg.Data)
 			}
