@@ -251,7 +251,21 @@ func (s *Server) Close() error {
 	return s.closeErr
 }
 
-func Probe(ctx context.Context, path string, identity Identity, publicKey string) (resultErr error) {
+func Probe(ctx context.Context, path string, identity Identity, publicKey string) error {
+	return probeLinux(ctx, path, identity, publicKey, 0)
+}
+
+// ProbeProcess additionally requires the system manager's observed main PID.
+// The controller must compare PID, invocation and start time again after this
+// exchange; a socket owner alone does not identify the registered invocation.
+func ProbeProcess(ctx context.Context, path string, identity Identity, publicKey string, pid uint32) error {
+	if pid <= 1 || pid > 1<<31-1 {
+		return ErrUnavailable
+	}
+	return probeLinux(ctx, path, identity, publicKey, pid)
+}
+
+func probeLinux(ctx context.Context, path string, identity Identity, publicKey string, expectedPID uint32) (resultErr error) {
 	if ctx == nil || !identity.valid() || os.Geteuid() != 0 {
 		return ErrUnavailable
 	}
@@ -294,6 +308,9 @@ func Probe(ctx context.Context, path string, identity Identity, publicKey string
 	}
 	pid, err := linuxReadyPeer(connection.(*net.UnixConn))
 	if err != nil || !directory.valid() {
+		return ErrConflict
+	}
+	if expectedPID != 0 && uint32(pid) != expectedPID {
 		return ErrConflict
 	}
 	if err := exchange(ctx, connection, identity, publicKey, pid); err != nil {

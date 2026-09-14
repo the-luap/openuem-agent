@@ -26,7 +26,7 @@ docker run --rm --init --cidfile "$readiness_test_dir/container-id" --network no
     go test -race -json -count=1 -timeout=3m ./internal/localready ./internal/agent ./internal/service/linux ./internal/service/lifecycle > /fixture/results.json || result=$?
     cat /fixture/results.json
     [ "$result" -eq 0 ]
-    for test in TestLinuxReadinessTransitionsIdentityAndSingleton TestLinuxReadinessRejectsUnsafeOrChangedNamespace TestLinuxReadinessShutdownJoinsSigningAndDisconnectedClients TestLinuxReadinessRechecksAuthorityAfterSigning TestLinuxReadinessReclaimsOnlyInactiveOwnedSocket TestLinuxReadinessRejectsForeignPIDAndBoundsProbe TestLinuxReadinessAuthenticatesKernelRootPeer TestLinuxSchedulerPublishesNativeReadinessAfterInitialization; do
+    for test in TestLinuxReadinessTransitionsIdentityAndSingleton TestLinuxReadinessBindsObservedServiceProcess TestLinuxReadinessRejectsUnsafeOrChangedNamespace TestLinuxReadinessShutdownJoinsSigningAndDisconnectedClients TestLinuxReadinessRechecksAuthorityAfterSigning TestLinuxReadinessReclaimsOnlyInactiveOwnedSocket TestLinuxReadinessRejectsForeignPIDAndBoundsProbe TestLinuxReadinessAuthenticatesKernelRootPeer TestLinuxSchedulerPublishesNativeReadinessAfterInitialization; do
       grep -Eq "\"Action\":\"pass\".*\"Test\":\"$test\"" /fixture/results.json
     done
   '

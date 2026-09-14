@@ -40,6 +40,13 @@ and certificate expiry. A root process with a different key or identity cannot
 substitute its own readiness response. The protocol carries no management command
 or enrollment secret. [Linux Unix socket peer credentials](https://man7.org/linux/man-pages/man7/unix.7.html)
 
+`ProbeProcess` additionally accepts the system manager's observed main PID and
+requires that exact kernel peer before sending the challenge. Zero, PID 1 and
+out-of-range process IDs fail. A valid signed identity from another root process
+cannot satisfy this probe. The controller must still compare the manager's PID,
+invocation ID and monotonic start time again after the exchange; this function
+does not perform registration, start a service or establish that final fence.
+
 ## Lifetime and conflict handling
 
 The listener starts not-ready. The Linux runtime invokes the shared scheduler
@@ -84,3 +91,10 @@ encrypted identity persistence and successful readiness authentication using the
 stored device key. Its long canonical identity path also exercises descriptor-
 based socket access. macOS transport/agent/lifecycle/service/activation regressions
 pass in 1.646/28.136/2.324/4.143/4.468 seconds. Linux readiness/enrollment Vet passes.
+
+The observed-service-PID extension adds a required native test for matching
+initializing/ready processes, another PID with the same valid device identity,
+invalid PID ranges and foreign identity despite a matching PID. That test passes
+in 0.040 seconds. The updated transport, agent, Linux service and shared lifecycle
+race suites pass in 4.228/29.987/3.049/1.007 seconds, with full Linux/Windows builds
+and Linux readiness/systemd Vet.
