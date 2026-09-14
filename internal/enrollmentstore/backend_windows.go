@@ -143,8 +143,20 @@ func (b *windowsBackend) softwareOrdinals(stages ...string) ([]int, error) {
 }
 
 func (b *windowsBackend) Load(record string) ([]byte, error) {
-	if !validRecord(record) || b.closed.Load() || checkSystemDirectory(b.directory) != nil {
+	return b.load(record, nil)
+}
+
+// Native fixtures can observe a failed stage without changing the public error
+// or exposing record material. Production callers use Load with no observer.
+func (b *windowsBackend) load(record string, observe func(string, error)) ([]byte, error) {
+	reject := func(stage string, err error) ([]byte, error) {
+		if observe != nil {
+			observe(stage, err)
+		}
 		return nil, ErrUnavailable
+	}
+	if !validRecord(record) || b.closed.Load() || checkSystemDirectory(b.directory) != nil {
+		return reject("directory-admission", nil)
 	}
 	path := filepath.Join(b.directory, record+".dpapi")
 	before, err := os.Lstat(path)
@@ -152,23 +164,36 @@ func (b *windowsBackend) Load(record string) ([]byte, error) {
 		return nil, ErrMissing
 	}
 	if err != nil || !before.Mode().IsRegular() {
-		return nil, ErrUnavailable
+		return reject("entry-inspection", err)
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, ErrUnavailable
+		return reject("open-record", err)
 	}
 	defer file.Close()
 	after, err := file.Stat()
-	if err != nil || !after.Mode().IsRegular() || !os.SameFile(before, after) || after.Size() <= 0 || after.Size() > maxProtectedSize || systemOnly(file) != nil {
-		return nil, ErrUnavailable
+	if err != nil || !after.Mode().IsRegular() {
+		return reject("handle-inspection", err)
+	}
+	if !os.SameFile(before, after) {
+		return reject("file-identity", nil)
+	}
+	if after.Size() <= 0 || after.Size() > maxProtectedSize {
+		return reject("record-size", nil)
+	}
+	if err := systemOnly(file); err != nil {
+		return reject("record-access", err)
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxProtectedSize+1))
 	if err != nil || len(data) > maxProtectedSize {
-		return nil, ErrUnavailable
+		return reject("read-record", err)
 	}
 	defer clear(data)
-	return protectRecord(record, data, false)
+	plaintext, err := protectRecord(record, data, false)
+	if err != nil {
+		return reject("decrypt-record", err)
+	}
+	return plaintext, nil
 }
 
 func (b *windowsBackend) Create(record string, plaintext []byte) error {

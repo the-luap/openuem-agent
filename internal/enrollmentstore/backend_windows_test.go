@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -52,7 +53,14 @@ type observedWindowsBackend struct {
 }
 
 func (b *observedWindowsBackend) Load(record string) ([]byte, error) {
-	data, err := b.windowsBackend.Load(record)
+	data, err := b.windowsBackend.load(record, func(stage string, err error) {
+		var code syscall.Errno
+		if errors.As(err, &code) {
+			b.t.Logf("native load stage %s returned Windows error %d", stage, uint32(code))
+		} else {
+			b.t.Logf("native load stage %s rejected the record", stage)
+		}
+	})
 	if err != nil && !errors.Is(err, ErrMissing) {
 		b.t.Logf("native load rejected slot %s: %v", record, err)
 	}
