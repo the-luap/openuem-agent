@@ -5,8 +5,10 @@ the system package-signature tools. A signature authorizes a publisher, not an
 OpenUEM release. Callers must separately verify the signed release manifest,
 platform, architecture, checkpoint and exact package hash before and after this
 check. [Linux running-executable trust](linux-running-executable.md) now has its
-own native provider. Native installation, enrollment CLI and service activation
-remain separate integration work; Linux package staging is still gated.
+own native provider. Protected [Linux package staging](linux-package-staging.md)
+now joins publisher checks to signed-release HTTPS downloads and retained directory
+ownership. Native installation, enrollment CLI and service activation remain
+separate integration work.
 
 ## Protected prerequisites
 

@@ -42,6 +42,7 @@ type stagingFixture struct {
 	root     string
 	content  []byte
 	body     atomic.Value
+	requests atomic.Int64
 }
 
 func newStagingFixture(t *testing.T, content []byte, agentBytes ...[]byte) *stagingFixture {
@@ -61,6 +62,7 @@ func newTargetStagingFixture(t *testing.T, platform, format string, content []by
 	}
 	f.body.Store(content)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.requests.Add(1)
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Write(f.body.Load().([]byte))
 	}))

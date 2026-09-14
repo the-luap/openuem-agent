@@ -24,13 +24,14 @@ docker run --rm --init --cidfile "$signature_test_dir/container-id" --network no
   -e TMPDIR=/fixture -e GOCACHE=/fixture/cache -e GOWORK=off \
   -e GOTOOLCHAIN=local -e GOFLAGS=-mod=readonly \
   -e OPENUEM_TEST_LINUX_PACKAGE_SIGNATURES=owned-isolated-publishers \
+  -e OPENUEM_TEST_LINUX_EXECUTABLE=owned-isolated-image \
   "$signature_test_image" sh -eu -c '
     sh scripts/fixtures/linux-package-signatures/build-fixtures.sh
     result=0
-    go test -race -json -count=1 -timeout=5m ./internal/packagesignature > /fixture/results.json || result=$?
+    go test -race -json -count=1 -timeout=5m ./internal/packagesignature ./internal/bootstrapinstall > /fixture/results.json || result=$?
     cat /fixture/results.json
     [ "$result" -eq 0 ]
-    for test in TestLinuxPackageSignaturesRequireAuthorizedNativePublisher TestLinuxPackageSignaturesRejectChangedTrustAndBytes TestLinuxPackageSignaturesRejectUnsafePrerequisites TestLinuxPackageSignatureCancellationJoinsProcess TestLinuxPackageSignatureLeaderExitTerminatesDescendant TestLinuxPackageSignatureNativeProcessOutputBounds; do
+    for test in TestLinuxPackageSignaturesRequireAuthorizedNativePublisher TestLinuxPackageSignaturesRejectChangedTrustAndBytes TestLinuxPackageSignaturesRejectUnsafePrerequisites TestLinuxPackageSignatureCancellationJoinsProcess TestLinuxPackageSignatureLeaderExitTerminatesDescendant TestLinuxPackageSignatureNativeProcessOutputBounds TestLinuxStagingBindsNativePublisherHTTPSAndRelease TestLinuxStagingRejectsUnsafeRootsBeforeDownload TestLinuxStagingPreservesReplacedNamespacesAndUnknownFiles TestLinuxStagingOwnersRemainIndependent; do
       grep -Eq "\"Action\":\"pass\".*\"Test\":\"$test\"" /fixture/results.json
     done
   '

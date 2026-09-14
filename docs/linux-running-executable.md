@@ -30,8 +30,9 @@ separate executable binding. After completed enrollment, `VerifyStoredBinding`
 continues to require the protected identity's exact size/hash and retained native
 image, even when the invitation or release envelope is no longer current.
 
-This component does not remove the separate Linux package-staging, installed
-enrollment-command or service-activation gates. Native DEB/RPM
+This component does not remove the separate installed enrollment-command or
+service-activation gates. Protected [Linux package staging](linux-package-staging.md)
+now has its own native provider and owned HTTPS/signature fixtures. Native DEB/RPM
 [publisher verification](linux-package-signatures.md) is available separately;
 production releases still need signing, installation and physical acceptance.
 

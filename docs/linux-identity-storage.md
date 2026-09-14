@@ -7,8 +7,10 @@ state-machine contracts. The shared Linux release/bootstrap protocol is now
 connected to protected enrollment and renewal on AMD64/ARM64. Native DEB/RPM
 [publisher verification](linux-package-signatures.md) is available separately.
 The [running-executable provider](linux-running-executable.md) now binds the actual
-kernel image to signed release bytes. Package staging, the installed enrollment
-command and individual-service activation remain separate integration work.
+kernel image to signed release bytes. Protected [Linux package staging](linux-package-staging.md)
+joins native publisher checks to authorized downloads and owned cleanup. The
+installed enrollment command and individual-service activation remain separate
+integration work.
 
 ## Installation and encryption boundary
 
@@ -96,9 +98,9 @@ test binary cross-compiles. Native Windows execution remains separate evidence.
 After integrating shared Linux protocol version `2dbc458eb28c`, the complete
 native Linux store race suite passes in 135.166 seconds. macOS storage, installed
 command, package staging and runtime-option regression suites also pass, as do
-complete Linux and Windows agent builds. Linux package staging and installed-command
-admission are still explicitly unavailable; native publisher verification now has
-its own isolated tests and does not remove those installation gates.
+complete Linux and Windows agent builds. Installed-command admission remains
+explicitly unavailable; native publisher verification and protected package
+staging now have their own isolated tests and do not remove that installation gate.
 The original cross-platform workflow fixtures retain their Windows/Mac metadata.
 Additional native fixtures now use actual Linux platform/architecture metadata,
 independently signed configuration and the bounded HTTP/2 client. They lose an

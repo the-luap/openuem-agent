@@ -17,7 +17,6 @@ import (
 	"github.com/open-uem/nats/enrollment/artifacts"
 	"github.com/open-uem/nats/enrollment/bootstrap"
 	"github.com/open-uem/nats/enrollment/keyfile"
-	"github.com/open-uem/openuem-agent/internal/packagesignature"
 )
 
 var ErrPackage = errors.New("the approved installer could not be prepared securely")
@@ -32,6 +31,14 @@ type Package struct {
 	file                    *os.File
 	info                    os.FileInfo
 	closed                  bool
+	directoryOwner          packageDirectoryOwner
+}
+
+type packageDirectoryOwner interface {
+	valid() bool
+	validFile(string, os.FileInfo) bool
+	cleanup(string, os.FileInfo) error
+	close() error
 }
 
 // StagePackage requires independently verified configuration, the authorized
@@ -48,13 +55,17 @@ func StagePackage(ctx context.Context, verified *bootstrap.Verified, client *enr
 		platform = "macos"
 	}
 	config := verified.Config()
-	if (platform != "windows" && platform != "macos") || config.Platform != platform || config.Architecture != runtime.GOARCH {
+	if (platform != "windows" && platform != "macos" && platform != "linux") || config.Platform != platform || config.Architecture != runtime.GOARCH {
 		return nil, bootstrap.ErrTarget
 	}
-	return stagePackage(ctx, verified, client, root, checkpoint, packagesignature.Verify)
+	return stageNativePackage(ctx, verified, client, root, checkpoint)
 }
 
 func stagePackage(ctx context.Context, verified *bootstrap.Verified, client *enrollment.HTTPClient, root string, checkpoint artifacts.Checkpoint, checkNative func(context.Context, string, string) error) (result *Package, resultErr error) {
+	return stagePackageWithOwner(ctx, verified, client, root, checkpoint, checkNative, nil)
+}
+
+func stagePackageWithOwner(ctx context.Context, verified *bootstrap.Verified, client *enrollment.HTTPClient, root string, checkpoint artifacts.Checkpoint, checkNative func(context.Context, string, string) error, prepareDirectory func(*Package) error) (result *Package, resultErr error) {
 	if ctx == nil || verified == nil || client == nil || checkNative == nil {
 		return nil, ErrPackage
 	}
@@ -72,8 +83,12 @@ func stagePackage(ctx context.Context, verified *bootstrap.Verified, client *enr
 	}
 	artifact := verified.Artifact()
 	stage := &Package{directory: filepath.Join(root, "package-"+uuid.NewString()), digest: verified.Checkpoint().Digest, artifact: artifact}
-	if err := keyfile.CreateDirectory(stage.directory); err != nil {
-		return nil, ErrPackage
+	if prepareDirectory == nil {
+		if err := keyfile.CreateDirectory(stage.directory); err != nil {
+			return nil, ErrPackage
+		}
+	} else if err := prepareDirectory(stage); err != nil {
+		return nil, err
 	}
 	stage.path = filepath.Join(stage.directory, artifact.Filename)
 	defer func() {
@@ -129,6 +144,9 @@ func (p *Package) Path() string {
 	if p.closed {
 		return ""
 	}
+	if p.directoryOwner != nil && !p.directoryOwner.validFile(filepath.Base(p.path), p.info) {
+		return ""
+	}
 	return p.path
 }
 
@@ -142,6 +160,9 @@ func (p *Package) Verify(ctx context.Context, verified *bootstrap.Verified, chec
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed || p.file == nil || p.info == nil {
+		return ErrPackage
+	}
+	if p.directoryOwner != nil && !p.directoryOwner.validFile(filepath.Base(p.path), p.info) {
 		return ErrPackage
 	}
 	if err := ctx.Err(); err != nil {
@@ -175,6 +196,9 @@ func (p *Package) Verify(ctx context.Context, verified *bootstrap.Verified, chec
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if p.directoryOwner != nil && !p.directoryOwner.validFile(filepath.Base(p.path), p.info) {
+		return ErrPackage
+	}
 	return verified.ValidAt(time.Now(), checkpoint)
 }
 
@@ -192,6 +216,15 @@ func (p *Package) Close() error {
 	if p.file != nil {
 		failed = p.file.Close() != nil
 		p.file = nil
+	}
+	if p.directoryOwner != nil {
+		failed = p.directoryOwner.cleanup(filepath.Base(p.path), p.info) != nil || failed
+		failed = p.directoryOwner.close() != nil || failed
+		p.directoryOwner = nil
+		if failed {
+			return ErrPackage
+		}
+		return nil
 	}
 	if p.info != nil {
 		entry, err := os.Lstat(p.path)

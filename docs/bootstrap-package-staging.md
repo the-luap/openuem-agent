@@ -2,7 +2,7 @@
 
 `internal/bootstrapinstall.StagePackage` connects the independently verified
 configuration, exact-origin native download and native installer-signature check.
-It accepts only the running Windows/macOS target and architecture, an authorized
+It accepts only the running Windows/macOS/Linux target and architecture, an authorized
 HTTPS client, a previously protected staging root and the latest durable release
 checkpoint. It does not issue an identity, install software or start the service.
 The [native enrollment command](native-enrollment-command.md) now connects these
@@ -27,7 +27,9 @@ the protected store's admission/publication boundaries.
 The separate [Linux running-image provider](linux-running-executable.md) now
 requires root-owned pinned ancestry, a native ELF image and exact inode equality
 with the retained kernel `/proc/self/exe` descriptor. Linux executable verification
-uses its own signed release binding; Linux package staging and the installed
+uses its own signed release binding. [Linux package staging](linux-package-staging.md)
+now retains root/stage ancestry through download, native publisher checking,
+release verification and descriptor-relative cleanup. The installed Linux
 enrollment/activation commands remain gated independently.
 
 Each operation creates a new private `package-<UUID>` child directory. It creates
