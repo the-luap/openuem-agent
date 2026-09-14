@@ -44,8 +44,10 @@ The [private native filesystem inspector](netbird-removal-ownership.md) now veri
 receipt/version, protected bundle contents, publisher signatures, CLI link and
 supported daemon plist ownership under stable before/after snapshots. It does not
 advertise readiness or treat static files as proof of native runtime ownership.
-The complete observer must still bind actual launchd and process identity before
-constructing the shared removal state fingerprint.
+The [combined runtime observer](netbird-removal-runtime.md) now binds actual
+launchd and process identity through repeated snapshots before constructing the
+shared removal state fingerprint privately. It remains unconfigured until the
+native execution owner and result verification are available.
 The removal planner must recheck that fingerprint and each owned object before
 mutation, stop the exact service/UI processes, remove only reviewed package-owned
 objects and verify absence. It must retain configuration and provider state unless

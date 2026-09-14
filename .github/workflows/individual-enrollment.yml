@@ -114,6 +114,8 @@ jobs:
         run: go test -run '^$' -fuzz='^FuzzNativeInstallationReceipt$' -fuzztime=15s -parallel=2 ./internal/netbirdinstall
       - name: Native NetBird ownership plist fuzzing
         run: go test -run '^$' -fuzz='^FuzzRemovalNativePlist$' -fuzztime=15s -parallel=2 ./internal/netbirdinstall
+      - name: Native NetBird loaded service ownership fuzzing
+        run: go test -run '^$' -fuzz='^FuzzRemovalLaunchdOwnership$' -fuzztime=15s -parallel=2 ./internal/netbirdinstall
       - name: Bounded Burn PE and UX container inspection
         run: go test -run '^$' -fuzz='^FuzzInspect$' -fuzztime=15s -parallel=2 ./internal/burnbundle
       - name: Bounded Burn cabinet directory fuzzing

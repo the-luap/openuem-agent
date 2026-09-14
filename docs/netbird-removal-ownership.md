@@ -2,9 +2,10 @@
 
 The native removal foundation now includes a private, read-only filesystem
 inspector for the official macOS package. It is not configured as a removal-state
-service and does not produce a wire removal descriptor. Launchd runtime ownership,
-exact process identity, the removal owner and verified absence remain required
-before enabling deinstallation.
+service. The [combined runtime observer](netbird-removal-runtime.md) now joins
+these files with loaded launchd ownership and exact process identity to construct
+the complete descriptor privately. The execution owner and verified absence remain
+required before enabling deinstallation.
 
 ## Inspected package state
 
@@ -65,8 +66,9 @@ The package, CLI, UI, installer and daemon were never executed. This artifact ch
 and owned process/filesystem tests do not constitute installed-device acceptance.
 
 The private filesystem fingerprint deliberately cannot stand in for the shared
-removal descriptor's complete state digest. The next native layer must join it
-with actual launchd and process ownership, acquire the journal revision, recheck
+removal descriptor's complete state digest. The combined observer now joins it
+with actual launchd and process ownership. The execution owner must acquire the
+journal revision, recheck
 each object before mutation, stop only the owned service/UI, remove the reviewed
 objects and confirm absence. Configuration, logs, credentials and provider peers
 remain outside local package removal. Partial or missing package receipts are
