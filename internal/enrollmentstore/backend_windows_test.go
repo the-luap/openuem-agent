@@ -124,6 +124,45 @@ func TestWindowsPublishedRecordWithReadHandlePreservesExclusiveCreate(t *testing
 	}
 }
 
+func TestWindowsConcurrentProtectedRecordReaders(t *testing.T) {
+	b, _ := windowsFixture(t)
+	observed := &observedWindowsBackend{windowsBackend: b.(*windowsBackend), t: t}
+	want := []byte("owned immutable concurrent-read fixture")
+	if err := b.Create(pendingRecord, want); err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	results := make(chan error, 12)
+	var jobs sync.WaitGroup
+	for range 12 {
+		jobs.Go(func() {
+			<-start
+			for range 40 {
+				data, err := observed.Load(pendingRecord)
+				matches := bytes.Equal(data, want)
+				clear(data)
+				if err != nil {
+					results <- err
+					return
+				}
+				if !matches {
+					results <- errors.New("concurrent reader received changed plaintext")
+					return
+				}
+			}
+			results <- nil
+		})
+	}
+	close(start)
+	jobs.Wait()
+	close(results)
+	for err := range results {
+		if err != nil {
+			t.Fatal("protected readers interfered with one another", err)
+		}
+	}
+}
+
 func TestWindowsDPAPIDurableSoftwareJournal(t *testing.T) {
 	b, _ := windowsFixture(t)
 	runDurableSoftwareJournal(t, b)
