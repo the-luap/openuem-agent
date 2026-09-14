@@ -24,6 +24,12 @@ bytes and file identity; it is not remote process or operating-system attestatio
 The native enrollment command requires this check before issuance and again at
 the protected store's admission/publication boundaries.
 
+The separate [Linux running-image provider](linux-running-executable.md) now
+requires root-owned pinned ancestry, a native ELF image and exact inode equality
+with the retained kernel `/proc/self/exe` descriptor. Linux executable verification
+uses its own signed release binding; Linux package staging and the installed
+enrollment/activation commands remain gated independently.
+
 Each operation creates a new private `package-<UUID>` child directory. It creates
 the signed artifact filename with exclusive private permissions before writing
 any bytes. The native client downloads only the configuration's exact release

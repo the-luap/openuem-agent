@@ -6,8 +6,9 @@ and preserves the common enrollment, recipient, rotation, software and renewal
 state-machine contracts. The shared Linux release/bootstrap protocol is now
 connected to protected enrollment and renewal on AMD64/ARM64. Native DEB/RPM
 [publisher verification](linux-package-signatures.md) is available separately.
-Package staging, installed-executable trust, the installed enrollment command and
-individual-service activation remain separate integration work.
+The [running-executable provider](linux-running-executable.md) now binds the actual
+kernel image to signed release bytes. Package staging, the installed enrollment
+command and individual-service activation remain separate integration work.
 
 ## Installation and encryption boundary
 

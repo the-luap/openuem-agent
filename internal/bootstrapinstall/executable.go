@@ -23,6 +23,12 @@ type Executable struct {
 	path string
 	file *os.File
 	info os.FileInfo
+	code executableIdentity
+}
+
+type executableIdentity interface {
+	valid(*os.File) bool
+	close() error
 }
 
 // OpenRunningAgent must run before bootstrap network requests. It binds the
@@ -30,6 +36,9 @@ type Executable struct {
 // untrusted write access. Windows also denies write/delete sharing while open.
 // The caller retains it through enrollment and closes it after dependent work.
 func OpenRunningAgent() (*Executable, error) {
+	if runtime.GOOS == "linux" {
+		return openLinuxRunningAgent()
+	}
 	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 		return nil, ErrPackage
 	}
@@ -81,8 +90,11 @@ func (e *Executable) Verify(ctx context.Context, verified *bootstrap.Verified, c
 		platform = "macos"
 	}
 	config := verified.Config()
-	if (platform != "windows" && platform != "macos") || config.Platform != platform || config.Architecture != runtime.GOARCH {
+	if (platform != "windows" && platform != "macos" && platform != "linux") || config.Platform != platform || config.Architecture != runtime.GOARCH {
 		return bootstrap.ErrTarget
+	}
+	if platform == "linux" && e.code == nil {
+		return ErrPackage
 	}
 	return e.verify(ctx, verified, checkpoint)
 }
@@ -110,6 +122,9 @@ func (e *Executable) verify(ctx context.Context, verified *bootstrap.Verified, c
 }
 
 func (e *Executable) unchanged() bool {
+	if e.code != nil && !e.code.valid(e.file) {
+		return false
+	}
 	entry, err := os.Lstat(e.path)
 	if err != nil || !entry.Mode().IsRegular() || !os.SameFile(e.info, entry) {
 		return false
@@ -175,6 +190,12 @@ func (e *Executable) Close() error {
 	}
 	err := e.file.Close()
 	e.file = nil
+	if e.code != nil {
+		if closeErr := e.code.close(); err == nil {
+			err = closeErr
+		}
+		e.code = nil
+	}
 	if err != nil {
 		return ErrPackage
 	}

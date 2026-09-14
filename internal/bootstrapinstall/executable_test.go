@@ -124,9 +124,10 @@ func TestInstalledAgentRequiresSeparateReleaseBindingAndStableFileIdentity(t *te
 }
 
 func TestRunningAgentOpensBeforeBootstrapAndChecksActualExecutableBytes(t *testing.T) {
-	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+	nativeLinux := runtime.GOOS == "linux" && os.Getenv("OPENUEM_TEST_LINUX_EXECUTABLE") == "owned-isolated-image"
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" && !nativeLinux {
 		if _, err := OpenRunningAgent(); !errors.Is(err, ErrPackage) {
-			t.Fatal("unsupported native platform accepted", err)
+			t.Fatal("unsupported or unprotected native platform accepted", err)
 		}
 		return
 	}
@@ -142,6 +143,9 @@ func TestRunningAgentOpensBeforeBootstrapAndChecksActualExecutableBytes(t *testi
 		t.Fatal(err)
 	}
 	f := newStagingFixture(t, []byte("fixture installer"), content)
+	if nativeLinux {
+		f = newTargetStagingFixture(t, "linux", "deb", []byte("fixture installer"), content)
+	}
 	if err := e.Verify(context.Background(), f.verified, artifacts.Checkpoint{}); err != nil {
 		t.Fatal("actual opened executable did not match the signed binding", err)
 	}

@@ -46,6 +46,15 @@ type stagingFixture struct {
 
 func newStagingFixture(t *testing.T, content []byte, agentBytes ...[]byte) *stagingFixture {
 	t.Helper()
+	platform, format := "windows", "exe"
+	if runtime.GOOS == "darwin" {
+		platform, format = "macos", "pkg"
+	}
+	return newTargetStagingFixture(t, platform, format, content, agentBytes...)
+}
+
+func newTargetStagingFixture(t *testing.T, platform, format string, content []byte, agentBytes ...[]byte) *stagingFixture {
+	t.Helper()
 	f := &stagingFixture{content: content, root: filepath.Join(t.TempDir(), "staging")}
 	if err := keyfile.CreateDirectory(f.root); err != nil {
 		t.Fatal(err)
@@ -66,10 +75,6 @@ func newStagingFixture(t *testing.T, content []byte, agentBytes ...[]byte) *stag
 		t.Fatal(err)
 	}
 	defer clear(configPrivate)
-	platform, format := "windows", "exe"
-	if runtime.GOOS == "darwin" {
-		platform, format = "macos", "pkg"
-	}
 	now := time.Now().UTC()
 	digest := sha256.Sum256(content)
 	manifest := artifacts.Manifest{Schema: 1, Sequence: 42, Version: "0.12.0", PublishedAt: now.Add(-time.Hour), ExpiresAt: now.Add(24 * time.Hour), Artifacts: []artifacts.Artifact{{Platform: platform, Architecture: runtime.GOARCH, Format: format, Filename: "openuem-agent-0.12.0-" + platform + "-" + runtime.GOARCH + "." + format, Size: int64(len(content)), SHA256: hex.EncodeToString(digest[:])}}}
