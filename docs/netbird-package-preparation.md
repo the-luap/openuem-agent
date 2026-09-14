@@ -131,10 +131,13 @@ installer, daemon or provider is run by these tests.
 The [console preparation component](https://github.com/the-luap/openuem-console/blob/5be886d170478dd199cee99bb69644e96394ebf6/docs/netbird-console-preparation.md) now has a separate durable admission
 method and direct publisher. It checks both native capabilities and current approval/recipient
 identity, commits the exact request digest before RPC, and retains correlated
-results without another delivery on replay. Native command admission must still
-recheck current authority and cancellation, validate the retained preparation and
-commit its own attempt before issuing a fresh installation command. Preparation
-alone remains cancellable and cannot authorize that command. The native macOS installer now
+results without another delivery on replay. [Native command admission](https://github.com/the-luap/openuem-console/blob/3597328d39f43894b2ad556246ad29532a6345d6/docs/netbird-installation-delivery.md) now rechecks
+current authority and cancellation, reconstructs the exact live preparation and
+commits its own attempt before one fresh installation command. Native attempts
+exclude cancellation. Completed receipts can be recovered through read-only
+queries under a renewed current identity without redelivery; explicit uncertain
+withdrawal/release and lifecycle UI remain open. Preparation alone remains
+cancellable and cannot authorize installation. The native macOS installer now
 consumes the exact owned package under atomic current journal admission and
 verifies its resulting state; a preparation response alone cannot authorize it.
 

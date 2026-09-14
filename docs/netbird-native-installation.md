@@ -11,9 +11,12 @@ independent package publisher verification.
 The [console preparation method](https://github.com/the-luap/openuem-console/blob/5be886d170478dd199cee99bb69644e96394ebf6/docs/netbird-console-preparation.md) now provides durable
 attempt/results, both capability checks and current approval/recipient authority.
 It releases database locks before the bounded direct preparation RPC and never
-redelivers an uncertain attempt. Native command delivery must still recheck
-current package approval/revocation, actor authority and recipient identity,
-retain its own attempt and issue a fresh version-three command. Its existing connection/registration publisher still rejects that
+redelivers an uncertain attempt. [Native console delivery](https://github.com/the-luap/openuem-console/blob/3597328d39f43894b2ad556246ad29532a6345d6/docs/netbird-installation-delivery.md) now rechecks current approval/revocation, actor authority
+and recipient identity, reconstructs the complete live preparation and commits
+one fresh version-three attempt before direct delivery. Native attempts exclude
+cancellation; exact completed receipts or read-only receipt recovery open console
+admission. Explicit uncertain withdrawal/release, dispatch and lifecycle UI remain
+integration work. Its existing connection/registration publisher still rejects that
 version. Local package removal remains unavailable.
 
 ## Admission and ownership
