@@ -452,6 +452,13 @@ func TestNativePreparationConstructorRejectsSharedAndUnsafeRoots(t *testing.T) {
 	if supported && (s.removalRecovery.inspect == nil || s.removalRecovery.prepare == nil) {
 		t.Fatal("native recovery owner is incomplete")
 	}
+	absenceSupported := netbirdinstall.RemovalSupported()
+	if (s.removalAbsence != nil) != absenceSupported || (s.executor.verifyRemovalAbsence != nil) != absenceSupported {
+		t.Fatal("current absence inspection and verification were not configured together")
+	}
+	if absenceSupported && (s.removalAbsence.inspect == nil || s.removalAbsence.prepare == nil) {
+		t.Fatal("current absence owner is incomplete")
+	}
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}

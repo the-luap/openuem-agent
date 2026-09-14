@@ -24,7 +24,9 @@ type DurableExecutor struct {
 	remove func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
 	// Recovery owns the original manifest through a distinct new journal attempt.
 	recoverRemoval func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
-	now            func() time.Time
+	// Independent absence uses a read-only owner, never a native removal runner.
+	verifyRemovalAbsence func(context.Context, netbirdcommand.Command) (*nativePackageLease, error)
+	now                  func() time.Time
 }
 
 type nativePackageLease struct {
@@ -92,13 +94,16 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 	}
 	run := e.run
 	var lease *nativePackageLease
-	if c.Version == netbirdcommand.InstallationVersion || c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion {
+	if c.Version == netbirdcommand.InstallationVersion || c.Version == netbirdcommand.RemovalVersion || c.Version == netbirdcommand.RemovalRecoveryVersion || c.Version == netbirdcommand.RemovalAbsenceVersion {
 		acquire := e.install
 		if c.Version == netbirdcommand.RemovalVersion {
 			acquire = e.remove
 		}
 		if c.Version == netbirdcommand.RemovalRecoveryVersion {
 			acquire = e.recoverRemoval
+		}
+		if c.Version == netbirdcommand.RemovalAbsenceVersion {
+			acquire = e.verifyRemovalAbsence
 		}
 		if acquire == nil {
 			return netbirdcommand.ReceiptFor(c, "rejected")
@@ -121,6 +126,8 @@ func (e *DurableExecutor) Execute(parent context.Context, data []byte) (netbirdc
 			admitted, receipt, err = e.journal.BeginRemoval(c, e.now(), lease.revision)
 		} else if c.Version == netbirdcommand.RemovalRecoveryVersion {
 			admitted, receipt, err = e.journal.BeginRemovalRecovery(c, e.now(), lease.revision)
+		} else if c.Version == netbirdcommand.RemovalAbsenceVersion {
+			admitted, receipt, err = e.journal.BeginRemovalAbsence(c, e.now(), lease.revision)
 		} else {
 			admitted, receipt, err = e.journal.BeginPrepared(c, e.now(), lease.revision)
 		}

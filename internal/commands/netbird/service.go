@@ -28,6 +28,7 @@ type DurableService struct {
 	installation    installationPlanner
 	removal         *removalOwner
 	removalRecovery *removalRecoveryOwner
+	removalAbsence  *removalAbsenceOwner
 	connection      *nats.Conn
 	binding         *netbirdServiceBinding
 	subscriptions   []*nats.Subscription
@@ -148,6 +149,8 @@ func (s *DurableService) handler(control bool, subject string, binding *netbirdS
 				r = s.removalState(ctx, c)
 			} else if c.Kind == "removal-recovery-state" {
 				r = s.removalRecoveryState(ctx, c)
+			} else if c.Kind == "removal-absence-state" {
+				r = s.removalAbsenceState(ctx, c)
 			} else {
 				r, err = s.journal.Control(ctx, msg.Data)
 			}
