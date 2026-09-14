@@ -24,6 +24,8 @@ type Service struct {
 	mu         sync.Mutex
 	closeOnce  sync.Once
 	closed     bool
+	lifetime   context.Context
+	stop       context.CancelFunc
 	spec       Spec
 	unit       *unitFile
 	enablement *unitEnablement
@@ -44,6 +46,7 @@ func openServiceAt(ctx context.Context, spec Spec, filename string, connect func
 		return nil, err
 	}
 	s := &Service{spec: spec}
+	s.lifetime, s.stop = context.WithCancel(context.Background())
 	defer func() {
 		if resultErr != nil {
 			s.Close()
@@ -230,6 +233,9 @@ func (s *Service) Close() error {
 		return nil
 	}
 	s.closeOnce.Do(func() {
+		if s.stop != nil {
+			s.stop()
+		}
 		// Interrupt the manager first: an operation may hold mu while waiting
 		// for a reply. Only then join it and release its file descriptors.
 		s.connection.Close()

@@ -82,7 +82,7 @@ for iteration in 1 2 3; do
   cat "/fixture/guest-$iteration.log"
   [[ "$status" -eq 0 ]]
   grep -q '^OPENUEM_SYSTEMD_FIXTURE_RESULT=0' "/fixture/guest-$iteration.log"
-  for test in PrivateManager AbsentDefinition OwnedDefinition OwnedEnablement ServiceRegistration ForeignDefinition; do
+  for test in PrivateManager AbsentDefinition OwnedDefinition OwnedEnablement ServiceRegistration ServiceStart ForeignDefinition; do
     grep -q -- "--- PASS: TestLinuxLiveSystemd$test" "/fixture/guest-$iteration.log"
   done
 done

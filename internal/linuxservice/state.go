@@ -17,6 +17,7 @@ type unitState struct {
 	Active, Substate                   string
 	PID                                uint32
 	StartedMonotonic, ChangedMonotonic uint64
+	ExecStartedMonotonic               uint64
 	Invocation                         [16]byte
 	JobID                              uint32
 }
@@ -99,6 +100,7 @@ func decodeUnitState(spec Spec, unit, service map[string]dbus.Variant) (unitStat
 		return fail()
 	}
 	state := unitState{}
+	state.ExecStartedMonotonic = command.StartMonotonic
 	enablement, ok := property[string](unit, "UnitFileState")
 	if !ok || (enablement != "enabled" && enablement != "disabled") {
 		return fail()
@@ -135,7 +137,9 @@ func decodeUnitState(spec Spec, unit, service map[string]dbus.Variant) (unitStat
 	}
 	switch state.Active {
 	case "active":
-		if state.Substate != "running" || state.PID == 0 || state.PID != executedPID || command.PID != state.PID || state.StartedMonotonic == 0 || command.StartMonotonic != state.StartedMonotonic || command.ExitMonotonic != 0 || state.Invocation == [16]byte{} {
+		// systemd timestamps the spawned command before separately recording
+		// its main PID. These are ordered observations, not identical clocks.
+		if state.Substate != "running" || state.PID == 0 || state.PID != executedPID || command.PID != state.PID || state.StartedMonotonic == 0 || command.StartMonotonic == 0 || command.StartMonotonic > state.StartedMonotonic || command.ExitMonotonic != 0 || state.Invocation == [16]byte{} {
 			return fail()
 		}
 	case "inactive":

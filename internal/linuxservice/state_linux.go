@@ -9,6 +9,10 @@ import (
 
 const unitObjectPath dbus.ObjectPath = "/org/freedesktop/systemd1/unit/openuem_2dagent_2eservice"
 
+// Both snapshots satisfy the full contract, but a runtime transition happened
+// between reads. No caller may treat this as an admitted observation.
+var errUnitTransition = fmt.Errorf("%w: runtime state changed during observation", ErrUnit)
+
 // readLoadedState performs only reads. It never loads, starts or replaces a
 // unit as a side effect of observation. A missing loaded object is distinct
 // from filesystem absence; the caller must inspect the protected unit file.
@@ -77,8 +81,11 @@ func (c *systemdConnection) observeDefinition(ctx context.Context, spec Spec, lo
 		return unitDefinition{}, err
 	}
 	after, err := decode(unit, service)
-	if err != nil || before != after {
+	if err != nil {
 		return unitDefinition{}, ErrUnit
+	}
+	if before != after {
+		return unitDefinition{}, errUnitTransition
 	}
 	return after, nil
 }

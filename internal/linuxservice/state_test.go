@@ -129,7 +129,7 @@ func TestLoadedUnitStateRejectsForeignEffectiveConfiguration(t *testing.T) {
 		{"overflow-pid", "service", "MainPID", uint32(1 << 31)},
 		{"other-pid", "service", "ExecMainPID", uint32(43)},
 		{"missing-start", "service", "ExecMainStartTimestampMonotonic", uint64(0)},
-		{"different-start", "service", "ExecMainStartTimestampMonotonic", uint64(201)},
+		{"main-start-precedes-command", "service", "ExecMainStartTimestampMonotonic", uint64(199)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -186,5 +186,22 @@ func TestLoadedUnitStateRejectsForeignEffectiveConfiguration(t *testing.T) {
 				t.Fatal("additional executable hook admitted", err)
 			}
 		})
+	}
+}
+
+func TestUnitStateRetainsSeparateCommandAndMainStartTimes(t *testing.T) {
+	spec, unit, service := stateFixture()
+	service["ExecMainStartTimestampMonotonic"] = dbus.MakeVariant(uint64(6049680))
+	commands, _ := property[[]execCommand](service, "ExecStartEx")
+	commands[0].StartMonotonic = 6049233
+	service["ExecStartEx"] = dbus.MakeVariant(commands)
+	state, err := decodeUnitState(spec, unit, service)
+	if err != nil || state.StartedMonotonic != 6049680 || state.ExecStartedMonotonic != 6049233 {
+		t.Fatal("separate actual systemd timestamp observations were rejected", err)
+	}
+	commands[0].StartMonotonic = 0
+	service["ExecStartEx"] = dbus.MakeVariant(commands)
+	if _, err := decodeUnitState(spec, unit, service); !errors.Is(err, ErrUnit) {
+		t.Fatal("missing command start timestamp was admitted", err)
 	}
 }

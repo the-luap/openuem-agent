@@ -47,7 +47,7 @@ func Listen(ctx context.Context, directory string, identity Identity, signer nke
 // The non-System option is unexported and used only by isolated native tests.
 // The public entry point and activation probe always require Local System.
 func listenWindows(ctx context.Context, directory string, identity Identity, signer nkeys.KeyPair, allowAdminServer bool) (_ *Server, resultErr error) {
-	if ctx == nil || !nativepath.Valid(directory) || !identity.valid() || signer == nil || !windowsPrivilegedToken(windows.GetCurrentProcessToken(), !allowAdminServer) {
+	if ctx == nil || !nativepath.Valid(directory) || !identity.Valid() || signer == nil || !windowsPrivilegedToken(windows.GetCurrentProcessToken(), !allowAdminServer) {
 		return nil, ErrUnavailable
 	}
 	if err := ctx.Err(); err != nil {
@@ -101,7 +101,7 @@ func listenWindows(ctx context.Context, directory string, identity Identity, sig
 func (s *Server) unchanged() bool { return sameWindowsPath(s.directory) && sameWindowsPath(s.address) }
 
 func (s *Server) MarkReady() error {
-	if s == nil || s.ctx.Err() != nil || !s.identity.valid() || !s.unchanged() {
+	if s == nil || s.ctx.Err() != nil || !s.identity.Valid() || !s.unchanged() {
 		return ErrUnavailable
 	}
 	s.ready.Store(true)
@@ -261,7 +261,7 @@ func ProbeProcess(ctx context.Context, directory string, identity Identity, publ
 }
 
 func probeWindows(ctx context.Context, directory string, identity Identity, publicKey string, expectedPID uint32, allowAdminServer bool) (resultErr error) {
-	if ctx == nil || !nativepath.Valid(directory) || !identity.valid() || !windowsPrivilegedToken(windows.GetCurrentProcessToken(), false) {
+	if ctx == nil || !nativepath.Valid(directory) || !identity.Valid() || !windowsPrivilegedToken(windows.GetCurrentProcessToken(), false) {
 		return ErrUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, exchangeTimeout)

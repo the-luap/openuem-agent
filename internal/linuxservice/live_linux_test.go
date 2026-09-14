@@ -18,22 +18,29 @@ func liveSystemdFixture(t *testing.T) {
 	if os.Getenv("OPENUEM_TEST_LIVE_SYSTEMD") != "owned-virtual-machine" {
 		t.Skip("requires the owned virtual systemd machine")
 	}
+	if err := ownedSystemdGuest(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func ownedSystemdGuest() error {
 	marker, err := os.ReadFile("/etc/openuem-systemd-fixture")
 	if err != nil || string(marker) != "owned-virtual-machine\n" {
-		t.Fatal("missing owned guest marker")
+		return errors.New("missing owned guest marker")
 	}
 	cmdline, err := os.ReadFile("/proc/cmdline")
 	if err != nil || !bytes.Contains(cmdline, []byte("openuem_fixture=owned-virtual-machine")) {
-		t.Fatal("missing owned kernel marker")
+		return errors.New("missing owned kernel marker")
 	}
 	manager, err := os.ReadFile("/proc/1/comm")
 	if err != nil || string(manager) != "systemd\n" || os.Geteuid() != 0 {
-		t.Fatal("fixture requires its own root PID-1 systemd manager")
+		return errors.New("fixture requires its own root PID-1 systemd manager")
 	}
 	var fs unix.Statfs_t
 	if unix.Statfs("/", &fs) != nil || (fs.Type != unix.RAMFS_MAGIC && fs.Type != unix.TMPFS_MAGIC) {
-		t.Fatal("guest root must be the owned in-memory filesystem")
+		return errors.New("guest root must be the owned in-memory filesystem")
 	}
+	return nil
 }
 
 func TestLinuxLiveSystemdAbsentDefinition(t *testing.T) {
@@ -284,8 +291,9 @@ func TestLinuxLiveSystemdServiceRegistration(t *testing.T) {
 
 func cleanupLiveRegistration(t *testing.T, spec Spec) {
 	t.Helper()
-	// No service is started by these tests. Remove only files admitted again
-	// under the exact owned guest contract, even if its previous owner closed.
+	// Call only before any start or after the owned helper has joined shutdown.
+	// Remove files admitted again under the exact guest contract, even if its
+	// previous owner closed.
 	e, err := openUnitEnablement()
 	if err != nil {
 		t.Error("cannot admit fixture enablement cleanup", err)
@@ -344,7 +352,16 @@ func TestLinuxLiveSystemdForeignDefinition(t *testing.T) {
 	if err := os.WriteFile(vendor, data, 0644); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(vendor)
+	defer func() {
+		if retained, err := os.ReadFile(vendor); err == nil && bytes.Equal(retained, data) {
+			if err := os.Remove(vendor); err != nil {
+				t.Error(err)
+			}
+			if _, err := c.call(ctx, managerPath, managerInterface+".Reload"); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
 	spec := Spec{Executable: "/fixture/linuxservice.test", IdentityDirectory: "/fixture/identity"}
 	if s, err := Open(ctx, spec); !errors.Is(err, ErrUnit) {
 		if s != nil {

@@ -42,7 +42,9 @@ type Identity struct {
 	ExpiresAt     time.Time `json:"expires_at"`
 }
 
-func (i Identity) valid() bool {
+// Valid checks the public metadata and its current expiration. It does not
+// authenticate storage, an executable or the owner of a readiness endpoint.
+func (i Identity) Valid() bool {
 	id, err := uuid.Parse(i.DeviceID)
 	return err == nil && id.String() == i.DeviceID && i.TenantID > 0 && i.SiteID > 0 && i.AgentSize > 0 && i.AgentSize <= 512<<20 && digest(i.ReleaseDigest) && digest(i.AgentSHA256) && i.ExpiresAt.After(time.Now())
 }
@@ -67,7 +69,7 @@ func reply(stream io.ReadWriter, identity Identity, signer nkeys.KeyPair, pid in
 func replyWithAdmission(stream io.ReadWriter, identity Identity, signer nkeys.KeyPair, pid int, ready bool, admit func() error) error {
 	identity.ExpiresAt = identity.ExpiresAt.UTC()
 	request := make([]byte, len(requestMagic)+32)
-	if _, err := io.ReadFull(stream, request); err != nil || string(request[:len(requestMagic)]) != requestMagic || !identity.valid() || pid <= 0 {
+	if _, err := io.ReadFull(stream, request); err != nil || string(request[:len(requestMagic)]) != requestMagic || !identity.Valid() || pid <= 0 {
 		return ErrUnavailable
 	}
 	data, err := json.Marshal(response{Version: 1, Nonce: hex.EncodeToString(request[len(requestMagic):]), PID: pid, Ready: ready, Identity: identity})
@@ -100,7 +102,7 @@ func replyWithAdmission(stream io.ReadWriter, identity Identity, signer nkeys.Ke
 
 func exchange(ctx context.Context, stream io.ReadWriter, identity Identity, publicKey string, pid int) error {
 	identity.ExpiresAt = identity.ExpiresAt.UTC()
-	if ctx == nil || !identity.valid() || pid <= 0 {
+	if ctx == nil || !identity.Valid() || pid <= 0 {
 		return ErrUnavailable
 	}
 	if err := ctx.Err(); err != nil {
@@ -142,7 +144,7 @@ func exchange(ctx context.Context, stream io.ReadWriter, identity Identity, publ
 		return ErrConflict
 	}
 	canonical, err := json.Marshal(got)
-	if err != nil || !bytes.Equal(data, canonical) || got.Version != 1 || got.Nonce != hex.EncodeToString(nonce) || got.PID != pid || got.Identity != identity || !got.Identity.valid() {
+	if err != nil || !bytes.Equal(data, canonical) || got.Version != 1 || got.Nonce != hex.EncodeToString(nonce) || got.PID != pid || got.Identity != identity || !got.Identity.Valid() {
 		return ErrConflict
 	}
 	if err := ctx.Err(); err != nil {

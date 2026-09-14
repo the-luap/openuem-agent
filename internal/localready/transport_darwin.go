@@ -52,7 +52,7 @@ func Listen(ctx context.Context, directory string, identity Identity, signer nke
 }
 
 func listen(ctx context.Context, directory string, identity Identity, signer nkeys.KeyPair, uid uint32) (_ *Server, err error) {
-	if ctx == nil || !nativepath.Valid(directory) || !identity.valid() || signer == nil || uint32(os.Geteuid()) != uid {
+	if ctx == nil || !nativepath.Valid(directory) || !identity.Valid() || signer == nil || uint32(os.Geteuid()) != uid {
 		return nil, ErrUnavailable
 	}
 	if err := ctx.Err(); err != nil {
@@ -136,7 +136,7 @@ func listen(ctx context.Context, directory string, identity Identity, signer nke
 }
 
 func (s *Server) MarkReady() error {
-	if s == nil || s.ctx.Err() != nil || !s.identity.valid() || !s.directoryUnchanged() {
+	if s == nil || s.ctx.Err() != nil || !s.identity.Valid() || !s.directoryUnchanged() {
 		return ErrUnavailable
 	}
 	s.ready.Store(true)
@@ -261,7 +261,7 @@ func Probe(ctx context.Context, directory string, identity Identity, publicKey s
 }
 
 func probe(ctx context.Context, directory string, identity Identity, publicKey string, uid uint32) (resultErr error) {
-	if ctx == nil || !nativepath.Valid(directory) || !identity.valid() || uint32(os.Geteuid()) != uid {
+	if ctx == nil || !nativepath.Valid(directory) || !identity.Valid() || uint32(os.Geteuid()) != uid {
 		return ErrUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, exchangeTimeout)

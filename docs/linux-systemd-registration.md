@@ -30,5 +30,6 @@ check resolves metadata again instead of treating a `GetUnit` cache miss as
 evidence of absence.
 
 Registration alone does not implement the complete Linux activation command.
-Process-bound signed readiness, protected operational configuration and CLI
-integration must be joined before enabling that platform path.
+The [start controller](linux-systemd-start.md) provides process-bound signed
+readiness. Protected operational configuration and CLI integration must still
+be joined before enabling that platform path.

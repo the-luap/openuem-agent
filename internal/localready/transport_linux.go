@@ -39,7 +39,7 @@ type Server struct {
 // Listen retains protected Linux identity ancestry and serves only kernel-proven
 // root peers. The caller owns service exclusion and lends its signer until Close.
 func Listen(ctx context.Context, path string, identity Identity, signer nkeys.KeyPair) (_ *Server, resultErr error) {
-	if ctx == nil || !identity.valid() || signer == nil || os.Geteuid() != 0 {
+	if ctx == nil || !identity.Valid() || signer == nil || os.Geteuid() != 0 {
 		return nil, ErrUnavailable
 	}
 	if err := ctx.Err(); err != nil {
@@ -152,7 +152,7 @@ func (s *Server) unchanged() bool {
 }
 
 func (s *Server) MarkReady() error {
-	if s == nil || s.ctx.Err() != nil || !s.identity.valid() || !s.unchanged() {
+	if s == nil || s.ctx.Err() != nil || !s.identity.Valid() || !s.unchanged() {
 		return ErrUnavailable
 	}
 	s.ready.Store(true)
@@ -266,7 +266,7 @@ func ProbeProcess(ctx context.Context, path string, identity Identity, publicKey
 }
 
 func probeLinux(ctx context.Context, path string, identity Identity, publicKey string, expectedPID uint32) (resultErr error) {
-	if ctx == nil || !identity.valid() || os.Geteuid() != 0 {
+	if ctx == nil || !identity.Valid() || os.Geteuid() != 0 {
 		return ErrUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, exchangeTimeout)
