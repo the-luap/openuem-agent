@@ -16,6 +16,7 @@ require (
 	github.com/evangwt/go-vncproxy v1.1.0
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/go-co-op/gocron/v2 v2.19.1
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/moby/sys/mountinfo v0.7.2

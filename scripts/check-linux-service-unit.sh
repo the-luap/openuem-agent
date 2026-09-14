@@ -18,15 +18,19 @@ cleanup_unit_fixture() {
 trap cleanup_unit_fixture EXIT
 docker build -t "$unit_test_image" "$repository/scripts/fixtures/linux-credentials"
 docker run --rm --init --cidfile "$unit_test_dir/container-id" --network none --read-only \
-  --tmpfs /fixture:mode=0700,exec --tmpfs /tmp:mode=1777,noexec,nosuid,nodev \
+  --tmpfs /fixture:mode=0700,exec --tmpfs /unprivileged:mode=1777,exec,nosuid,nodev \
+  --tmpfs /tmp:mode=1777,noexec,nosuid,nodev \
   -v "$repository:/src:ro" -v "$module_cache:/go/pkg/mod:ro" -w /src \
   -e TMPDIR=/fixture -e GOCACHE=/fixture/cache -e GOWORK=off \
   -e GOTOOLCHAIN=local -e GOFLAGS=-mod=readonly \
   -e OPENUEM_TEST_LINUX_UNITS=owned-isolated-units \
   "$unit_test_image" sh -eu -c '
+    go test -race -c -o /unprivileged/linuxservice.test ./internal/linuxservice
     result=0
     go test -race -json -count=1 -timeout=2m ./internal/linuxservice > /fixture/results.json || result=$?
     cat /fixture/results.json
     [ "$result" -eq 0 ]
-    grep -Eq "\"Action\":\"pass\".*\"Test\":\"TestLinuxUnitAcceptedByNativeSystemdParser\"" /fixture/results.json
+    for test in TestLinuxUnitAcceptedByNativeSystemdParser TestLinuxManagerPrivateAuthenticationAndCalls TestLinuxManagerRejectsPIDBeforeAuthentication TestLinuxManagerRejectsUnsafeAndChangedNamespace TestLinuxManagerBoundsAuthenticationAndSanitizesErrors TestLinuxManagerCancellationAndJoinedClose TestLinuxManagerAuthenticatesKernelUID; do
+      grep -Eq "\"Action\":\"pass\".*\"Test\":\"$test\"" /fixture/results.json
+    done
   '

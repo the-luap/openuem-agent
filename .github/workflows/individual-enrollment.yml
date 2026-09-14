@@ -110,7 +110,7 @@ jobs:
         run: go mod download
       - name: Native Linux readiness, root peer credentials and joined shutdown
         run: scripts/check-linux-readiness.sh
-      - name: Native systemd parsing of the owned installation unit
+      - name: Native systemd unit parsing and authenticated private manager transport
         run: scripts/check-linux-service-unit.sh
       - name: Bounded literal Linux service paths
         run: go test -run '^$' -fuzz '^FuzzUnitLiteralPaths$' -fuzztime=15s -parallel=2 ./internal/linuxservice
