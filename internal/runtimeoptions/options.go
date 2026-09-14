@@ -17,10 +17,11 @@ type Options struct {
 
 const usage = `Usage: openuem-agent serve -identity-directory <absolute protected path>
 
-Run the Windows/macOS service using an existing individual device identity.
+Run the Windows/macOS/Linux service using an existing individual device identity.
 Configure these arguments in the operating system's protected service definition.
 Windows runs through Service Control Manager as Local System; macOS runs through
-launchd as root. The directory must contain completed enrollment from this same
+launchd as root; Linux runs as root under its protected service definition.
+The directory must contain completed enrollment from this same
 installed agent. An invitation or pending enrollment cannot start the service.
 
 The path is the only enrollment-related service argument. No invitation, private

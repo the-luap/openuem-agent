@@ -34,7 +34,7 @@ docker run --rm --init --cidfile "$enrollment_test_dir/container-id" --network n
     go test -race -json -count=1 -timeout=5m ./internal/enrollcommand > /fixture/results.json || result=$?
     cat /fixture/results.json
     [ "$result" -eq 0 ]
-    for test in TestLinuxCommandWithNativeExecutablePackageAndProtectedEnrollment TestLinuxCommandRejectsNativeTrustAndBindingBeforeClaim TestLinuxCommandRecoversIssuedIdentityWithOriginalPendingKeys TestLinuxCommandRejectsUnsafeInputsAndStagingBeforeNetwork TestLinuxInputDirectoryRechecksRetainedAncestry; do
+    for test in TestLinuxCommandWithNativeExecutablePackageAndProtectedEnrollment TestLinuxCommandRejectsNativeTrustAndBindingBeforeClaim TestLinuxCommandRecoversIssuedIdentityWithOriginalPendingKeys TestLinuxCommandRejectsUnsafeInputsAndStagingBeforeNetwork TestLinuxInputDirectoryRechecksRetainedAncestry TestLinuxEnrolledIdentityAuthenticatesLocalReadiness; do
       grep -Eq "\"Action\":\"pass\".*\"Test\":\"$test\"" /fixture/results.json
     done
   '

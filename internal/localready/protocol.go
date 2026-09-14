@@ -61,6 +61,10 @@ type response struct {
 }
 
 func reply(stream io.ReadWriter, identity Identity, signer nkeys.KeyPair, pid int, ready bool) error {
+	return replyWithAdmission(stream, identity, signer, pid, ready, nil)
+}
+
+func replyWithAdmission(stream io.ReadWriter, identity Identity, signer nkeys.KeyPair, pid int, ready bool, admit func() error) error {
 	identity.ExpiresAt = identity.ExpiresAt.UTC()
 	request := make([]byte, len(requestMagic)+32)
 	if _, err := io.ReadFull(stream, request); err != nil || string(request[:len(requestMagic)]) != requestMagic || !identity.valid() || pid <= 0 {
@@ -70,6 +74,11 @@ func reply(stream io.ReadWriter, identity Identity, signer nkeys.KeyPair, pid in
 	if err != nil || len(data) > maxResponse {
 		return ErrUnavailable
 	}
+	if admit != nil {
+		if err := admit(); err != nil {
+			return err
+		}
+	}
 	signature, err := signer.Sign(append([]byte(signatureDomain), data...))
 	if err != nil || len(signature) != 64 {
 		return ErrUnavailable
@@ -78,6 +87,11 @@ func reply(stream io.ReadWriter, identity Identity, signer nkeys.KeyPair, pid in
 	binary.BigEndian.PutUint32(frame, uint32(len(data)))
 	frame = append(frame, data...)
 	frame = append(frame, signature...)
+	if admit != nil {
+		if err := admit(); err != nil {
+			return err
+		}
+	}
 	if n, err := stream.Write(frame); err != nil || n != len(frame) {
 		return ErrUnavailable
 	}

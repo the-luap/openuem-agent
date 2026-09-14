@@ -77,5 +77,10 @@ complete Linux and Windows builds and Linux enrollment Vet checks also pass.
 CI adds a dedicated native enrollment job and invokes help through the actual
 Linux service entry point.
 
+The later [native Linux readiness integration](native-linux-readiness.md) also
+verifies the completed encrypted identity can authenticate the local endpoint,
+including long canonical identity paths. With this sixth required family, the
+full enrollment race suite passes in 6.464 seconds. Enrollment commit `04fb25c`
+passes all twelve [CI jobs](https://github.com/the-luap/openuem-agent/actions/runs/34889458491).
 Linux service activation, final installers, publisher/release provisioning and
 physical installation/removal acceptance remain separate integration work.

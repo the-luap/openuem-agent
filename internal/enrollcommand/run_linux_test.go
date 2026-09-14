@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/open-uem/openuem-agent/internal/enrollmentstore"
+	"github.com/open-uem/openuem-agent/internal/localready"
 	"golang.org/x/sys/unix"
 )
 
@@ -244,5 +245,50 @@ func TestLinuxInputDirectoryRechecksRetainedAncestry(t *testing.T) {
 	}
 	if data, err := readNativeInput(input, 64); data != nil || !errors.Is(err, ErrOptions) {
 		t.Fatal("native input exceeded its byte limit")
+	}
+}
+
+func TestLinuxEnrolledIdentityAuthenticatesLocalReadiness(t *testing.T) {
+	f, deps := linuxCommandFixture(t, "deb", "signed")
+	result, err := run(context.Background(), f.options, deps)
+	if err != nil || !result.IdentityReady {
+		t.Fatal("native enrollment failed", err)
+	}
+	store, err := enrollmentstore.Open(f.options.IdentityDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	identity, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer identity.Close()
+	readyIdentity := localready.Identity{DeviceID: identity.Response.DeviceID, TenantID: identity.Response.TenantID, SiteID: identity.Response.SiteID, ReleaseDigest: identity.ReleaseDigest, AgentSize: identity.AgentSize, AgentSHA256: identity.AgentSHA256, ExpiresAt: identity.Response.ExpiresAt}
+	public, err := identity.Keys.Broker.PublicKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := localready.Listen(context.Background(), f.options.IdentityDirectory, readyIdentity, identity.Keys.Broker)
+	if err != nil {
+		t.Fatal("stored Linux identity could not open native readiness", err)
+	}
+	defer server.Close()
+	if err = localready.Probe(context.Background(), f.options.IdentityDirectory, readyIdentity, public); !errors.Is(err, localready.ErrNotReady) {
+		t.Fatal("stored identity falsely implied initialization", err)
+	}
+	if err = server.MarkReady(); err != nil {
+		t.Fatal(err)
+	}
+	if err = localready.Probe(context.Background(), f.options.IdentityDirectory, readyIdentity, public); err != nil {
+		t.Fatal("native readiness did not authenticate the enrolled key and release", err)
+	}
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatal("readiness metadata prevented reopening a completed identity", err)
+	}
+	loaded.Close()
+	if err = server.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
