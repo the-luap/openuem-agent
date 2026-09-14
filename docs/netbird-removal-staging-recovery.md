@@ -108,6 +108,44 @@ remain open. Missing-manifest or wholly empty-stage recovery also needs a
 separate explicit evidence policy. This observer advertises no recovery
 capability and never releases the original journal barrier.
 
+## Recovery runtime stop primitive
+
+The private recovery runtime mutator now rechecks the exact reviewed typed job,
+boots out only `system/netbird`, and confirms that it is unloaded before stopping
+the reviewed processes. Each signal revalidates the canonical original request,
+exact original/relocated executable path, kernel audit token and dynamically
+validated vendor code. Signals use the audit token, never a PID fallback.
+
+Only the bounded graceful-stop timeout can enable the fixed forced signal, which
+revalidates the same proof again. Cancellation, changed code/path, inaccessible
+runtime evidence and other errors cannot escalate. Completion requires a full
+native scan with no original or selected-stage executable and an unloaded job.
+This primitive is not published as a command or capability. Its caller still
+needs explicit journal admission and an owner for the remaining filesystem work.
+
+## Remaining staged-payload purge primitive
+
+The private purge primitive now accepts a reviewed current-file snapshot only
+after reinspection agrees exactly and every original source root is absent. Its
+caller must supply complete runtime quiescence checks before and after purging.
+Receipt files, the original manifest and the remaining scaffold are preserved;
+this primitive alone does not complete recovery or clear retained staging.
+
+Only remaining original staged payload objects are selected, deepest first.
+Every parent directory is bound by its original current inode/device, mode,
+owner, ACL and flags through descriptor-relative traversal. Directory accounting
+can change as approved children disappear. Each leaf is hashed and compared,
+its entire ancestry is re-resolved, and its opened inode/type is checked before
+descriptor-relative unlink. Empty-directory removal preserves unknown children.
+macOS opens CLI symlinks themselves with `O_SYMLINK`; Linux fixtures use
+`O_PATH | O_NOFOLLOW`. Neither follows their target.
+
+The final file inspection must show no source or staged payload, unchanged
+receipts and the same original manifest. Changed/replaced files and parents,
+unexpected entries, new source packages, receipt changes, cancellation and lost
+quiescence retain remaining evidence and refuse completion. Already purged
+payload and partially removed scaffolds are accepted without recreating them.
+
 ## Verification
 
 An independent original-writer fixture verifies byte compatibility, including
@@ -133,6 +171,17 @@ inconsistent native lists, wrong metadata/file lists and cancellation refuse
 evidence while preserving staging. Typed-list fixtures reject truncation,
 duplicate/invalid entries, namespaces, external DTDs, trailing documents and
 native failures, and accept a complete 8,192-entry inventory.
+
+Runtime-stop fixtures verify exact callback proofs/order, graceful exit,
+timeout-only force, current job drift, foreign/duplicate process evidence,
+nonroot daemons, failed bootout/signal/quiet checks, cancellation and a process
+appearing in the final complete scan. Invalid evidence reaches no native mutator.
+
+Purge fixtures cover complete and partial remaining payload, already purged trees
+and partial scaffolds. Replacement-parent tests retain the original nested file
+inodes and bytes beneath an unreviewed parent, which still prevents deletion.
+Other negative fixtures preserve changed leaves, unknown children, replacement
+sources and receipts, and retain the manifest on every failure.
 
 macOS races and the owned Linux ARM64 filesystem fixture pass. Full native
 installation/removal, journal and command-service races remain successful, as do

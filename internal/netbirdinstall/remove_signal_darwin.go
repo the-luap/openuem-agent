@@ -69,6 +69,45 @@ func nativeSignalRemovalProcess(ctx context.Context, expected removalProcess, fo
 	return signalRemovalAudit(ctx, expected.Audit, force)
 }
 
+func removalRecoveryProcessesQuiet(ctx context.Context, requestID string, processes []removalProcess) (bool, error) {
+	if ctx == nil || ctx.Err() != nil || removalRecoveryProcessIdentifier(requestID, removalCLIExecutable) == "" {
+		return false, ErrRemoval
+	}
+	quiet := true
+	for _, process := range processes {
+		if !process.validRecovery(requestID) {
+			return false, ErrRemoval
+		}
+		path, err := nativeRemovalAuditPath(ctx, process.Audit)
+		if errors.Is(err, errRemovalProcessGone) {
+			continue
+		}
+		if err != nil || path != process.Path {
+			return false, ErrRemoval
+		}
+		quiet = false
+	}
+	return quiet, nil
+}
+
+func nativeSignalRemovalRecoveryProcess(ctx context.Context, requestID string, expected removalProcess, force bool) error {
+	if ctx == nil || ctx.Err() != nil || !expected.validRecovery(requestID) {
+		return ErrRemoval
+	}
+	path, err := nativeRemovalAuditPath(ctx, expected.Audit)
+	if errors.Is(err, errRemovalProcessGone) {
+		return nil
+	}
+	if err != nil || path != expected.Path {
+		return ErrRemoval
+	}
+	current, err := nativeRemovalRecoveryProcess(ctx, requestID, int(expected.PID), path)
+	if err != nil || current != expected {
+		return ErrRemoval
+	}
+	return signalRemovalAudit(ctx, expected.Audit, force)
+}
+
 // The execution owner validates exact code/ownership before reaching this fixed
 // token-bound primitive. There is no PID-only or process-group fallback.
 func signalRemovalAudit(ctx context.Context, audit [8]uint32, force bool) error {
