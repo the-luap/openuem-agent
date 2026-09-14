@@ -4,7 +4,6 @@ package netbirdinstall
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"maps"
@@ -14,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/open-uem/nats/netbirdcommand"
-	packageapi "github.com/open-uem/nats/netbirdinstall"
 	"golang.org/x/sys/unix"
 )
 
@@ -72,6 +70,11 @@ func newRemovalStaging(ctx context.Context, root string, owner uint32, requestID
 		return nil, ErrRemoval
 	}
 	s := &removalStaging{root: root, owner: owner, name: removalStagePrefix + requestID, original: maps.Clone(observed.files.objects), anchors: make(map[string]removalObject), staged: make(map[string]removalObject)}
+	encoded, err := encodeRemovalStageManifest(removalStageManifest{1, requestID, observed.descriptor, s.original}, owner)
+	if err != nil {
+		return nil, ErrRemoval
+	}
+	defer clear(encoded)
 	s.path = filepath.Join(root, "Applications", s.name)
 	source := removalSnapshotFor(ctx, root, owner, s.original)
 	parent, err := source.parent("Applications/" + s.name)
@@ -113,16 +116,6 @@ func newRemovalStaging(ctx context.Context, root string, owner uint32, requestID
 		}
 		s.anchors[name] = obj
 	}
-	encoded, err := json.Marshal(struct {
-		Schema     int
-		RequestID  string
-		Descriptor packageapi.Removal
-		Objects    map[string]removalObject
-	}{1, requestID, observed.descriptor, s.original})
-	if err != nil || len(encoded) > 2<<20 {
-		return fail()
-	}
-	defer clear(encoded)
 	fd, err = unix.Openat(int(s.directory.Fd()), "manifest.json", unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
 	if err != nil {
 		return fail()

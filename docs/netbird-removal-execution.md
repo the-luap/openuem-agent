@@ -93,6 +93,12 @@ rollback, stage cleanup or a console stage-recovery workflow. Final-query failur
 can leave an unconfirmed receipt after files are already absent; later read-only
 inspection still does not rewrite that original receipt.
 
+A [private retained-manifest reader](netbird-removal-staging-recovery.md) now
+validates original schema-one evidence through protected ancestry and repeated
+object bindings. Its writer preserves prior bytes and rejects invalid graphs
+before creating a stage. Current remaining-file/runtime inspection and explicitly
+admitted recovery still need integration; this reader cannot authorize cleanup.
+
 ## Verification and limits
 
 Owned filesystem fixtures cover successful app/link/plist removal, optional absent
