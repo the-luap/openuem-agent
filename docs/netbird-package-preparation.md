@@ -128,9 +128,13 @@ unprotected ancestors. The real native binding also receives the preparation RPC
 and rejects an incompatible native target before HTTP access. No real NetBird
 installer, daemon or provider is run by these tests.
 
-Console delivery is not enabled by this agent endpoint. Its durable preparation
-attempt, current approval/revocation checks, cancellation guard and final fresh
-installation command still require integration. The native macOS installer now
+The [console preparation component](https://github.com/the-luap/openuem-console/blob/5be886d170478dd199cee99bb69644e96394ebf6/docs/netbird-console-preparation.md) now has a separate durable admission
+method and direct publisher. It checks both native capabilities and current approval/recipient
+identity, commits the exact request digest before RPC, and retains correlated
+results without another delivery on replay. Native command admission must still
+recheck current authority and cancellation, validate the retained preparation and
+commit its own attempt before issuing a fresh installation command. Preparation
+alone remains cancellable and cannot authorize that command. The native macOS installer now
 consumes the exact owned package under atomic current journal admission and
 verifies its resulting state; a preparation response alone cannot authorize it.
 

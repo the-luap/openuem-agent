@@ -8,10 +8,12 @@ without native ACL support cannot admit a new installation. Windows retains its
 separate approved software workflow; Linux still needs individual enrollment and
 independent package publisher verification.
 
-This agent capability does not enable console delivery. The console must retain
-preparation and delivery attempts, recheck current package approval/revocation,
-actor authority and recipient identity, and then issue a fresh version-three
-command. Its existing connection/registration publisher still rejects that
+The [console preparation method](https://github.com/the-luap/openuem-console/blob/5be886d170478dd199cee99bb69644e96394ebf6/docs/netbird-console-preparation.md) now provides durable
+attempt/results, both capability checks and current approval/recipient authority.
+It releases database locks before the bounded direct preparation RPC and never
+redelivers an uncertain attempt. Native command delivery must still recheck
+current package approval/revocation, actor authority and recipient identity,
+retain its own attempt and issue a fresh version-three command. Its existing connection/registration publisher still rejects that
 version. Local package removal remains unavailable.
 
 ## Admission and ownership
