@@ -114,7 +114,7 @@ func decodeUnitState(spec Spec, unit, service map[string]dbus.Variant) (unitStat
 		return fail()
 	}
 	invocation, ok := property[[]byte](unit, "InvocationID")
-	if !ok || len(invocation) != len(state.Invocation) {
+	if !ok || (len(invocation) != 0 && len(invocation) != len(state.Invocation)) {
 		return fail()
 	}
 	copy(state.Invocation[:], invocation)

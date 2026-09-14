@@ -2,6 +2,7 @@ package linuxservice
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -12,20 +13,35 @@ const unitObjectPath dbus.ObjectPath = "/org/freedesktop/systemd1/unit/openuem_2
 // unit as a side effect of observation. A missing loaded object is distinct
 // from filesystem absence; the caller must inspect the protected unit file.
 func (c *systemdConnection) readLoadedState(ctx context.Context, spec Spec) (unitState, error) {
+	definition, err := c.observeDefinition(ctx, spec, false)
+	return definition.State, err
+}
+
+// loadDefinition resolves the manager's complete unit search path before a
+// caller may publish a new canonical file. Loading metadata starts no service.
+func (c *systemdConnection) loadDefinition(ctx context.Context, spec Spec) (unitDefinition, error) {
+	return c.observeDefinition(ctx, spec, true)
+}
+
+func (c *systemdConnection) observeDefinition(ctx context.Context, spec Spec, load bool) (unitDefinition, error) {
 	if !spec.Valid() {
-		return unitState{}, ErrUnit
+		return unitDefinition{}, ErrUnit
 	}
-	body, err := c.call(ctx, managerPath, managerInterface+".GetUnit", UnitName)
+	method := "GetUnit"
+	if load {
+		method = "LoadUnit"
+	}
+	body, err := c.call(ctx, managerPath, managerInterface+"."+method, UnitName)
 	if err != nil {
-		return unitState{}, err
+		return unitDefinition{}, fmt.Errorf("systemd %s: %w", method, err)
 	}
 	if len(body) != 1 || body[0] != unitObjectPath {
-		return unitState{}, ErrUnit
+		return unitDefinition{}, ErrUnit
 	}
 	get := func(iface string) (map[string]dbus.Variant, error) {
 		body, err := c.call(ctx, unitObjectPath, "org.freedesktop.DBus.Properties.GetAll", "org.freedesktop.systemd1."+iface)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("systemd %s properties: %w", iface, err)
 		}
 		if len(body) != 1 {
 			return nil, ErrUnit
@@ -38,23 +54,31 @@ func (c *systemdConnection) readLoadedState(ctx context.Context, spec Spec) (uni
 	}
 	unit, err := get("Unit")
 	if err != nil {
-		return unitState{}, err
+		return unitDefinition{}, err
 	}
 	service, err := get("Service")
 	if err != nil {
-		return unitState{}, err
+		return unitDefinition{}, err
 	}
-	before, err := decodeUnitState(spec, unit, service)
+	decode := func(unit, service map[string]dbus.Variant) (unitDefinition, error) {
+		if load && propertyEquals(unit, "LoadState", "not-found") {
+			state, err := decodeAbsentDefinition(unit, service)
+			return unitDefinition{State: state}, err
+		}
+		state, err := decodeUnitState(spec, unit, service)
+		return unitDefinition{Present: true, State: state}, err
+	}
+	before, err := decode(unit, service)
 	if err != nil {
-		return unitState{}, err
+		return unitDefinition{}, err
 	}
 	unit, err = get("Unit")
 	if err != nil {
-		return unitState{}, err
+		return unitDefinition{}, err
 	}
-	after, err := decodeUnitState(spec, unit, service)
+	after, err := decode(unit, service)
 	if err != nil || before != after {
-		return unitState{}, ErrUnit
+		return unitDefinition{}, ErrUnit
 	}
 	return after, nil
 }

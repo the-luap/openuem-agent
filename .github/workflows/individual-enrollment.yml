@@ -115,6 +115,20 @@ jobs:
       - name: Bounded literal Linux service paths
         run: go test -run '^$' -fuzz '^FuzzUnitLiteralPaths$' -fuzztime=15s -parallel=2 ./internal/linuxservice
 
+  linux-systemd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Cache dependencies before isolated native execution
+        run: go mod download
+      - name: Actual PID-1 systemd in three owned RAM-only virtual machines
+        run: scripts/check-linux-systemd.sh
+
   linux-native-enrollment:
     runs-on: ubuntu-latest
     timeout-minutes: 10

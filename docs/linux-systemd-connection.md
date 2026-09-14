@@ -48,10 +48,12 @@ test families exercise:
   after the client has returned, proving cancellation independently of peer exit.
 
 The alternate socket/PID helper is package-private and used only by owned native
-fixtures. These tests authenticate a synthetic D-Bus peer, not a live systemd
-manager. Effective unit properties, protected unit publication, configuration,
-registration, startup and authenticated readiness remain controller integration
-work. Linux `activate` remains unavailable until those requirements are joined.
+fixtures. These socket tests authenticate a synthetic D-Bus peer. A separate
+[owned virtual machine fixture](linux-systemd-definition.md) now authenticates
+actual systemd PID 1 and checks resolved definitions and canonical publication.
+Protected enablement, configuration, registration, startup and authenticated
+readiness remain controller integration work. Linux `activate` remains
+unavailable until those requirements are joined.
 
 The transport follows the Linux [Unix socket credential interface](https://man7.org/linux/man-pages/man7/unix.7.html),
 the kernel's [descriptor namespace](https://man7.org/linux/man-pages/man5/proc_pid_fd.5.html)

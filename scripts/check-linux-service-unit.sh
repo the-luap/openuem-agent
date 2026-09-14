@@ -30,7 +30,7 @@ docker run --rm --init --cidfile "$unit_test_dir/container-id" --network none --
     go test -race -json -count=1 -timeout=2m ./internal/linuxservice > /fixture/results.json || result=$?
     cat /fixture/results.json
     [ "$result" -eq 0 ]
-    for test in TestLinuxUnitAcceptedByNativeSystemdParser TestLinuxManagerPrivateAuthenticationAndCalls TestLinuxManagerRejectsPIDBeforeAuthentication TestLinuxManagerRejectsUnsafeAndChangedNamespace TestLinuxManagerBoundsAuthenticationAndSanitizesErrors TestLinuxManagerCancellationAndJoinedClose TestLinuxManagerAuthenticatesKernelUID TestLinuxUnitFilePublicationAndRetainedRetry TestLinuxUnitFileRejectsForeignDefinitionsAndMetadata TestLinuxUnitFilePreservesChangedNamespaceAndCancellation TestLinuxUnitFileConcurrentExclusivePublication TestLinuxLoadedUnitObservationUsesTypedReadOnlyCalls; do
+    for test in TestLinuxUnitAcceptedByNativeSystemdParser TestLinuxManagerPrivateAuthenticationAndCalls TestLinuxManagerRejectsPIDBeforeAuthentication TestLinuxManagerRejectsUnsafeAndChangedNamespace TestLinuxManagerBoundsAuthenticationAndSanitizesErrors TestLinuxManagerCancellationAndJoinedClose TestLinuxManagerAuthenticatesKernelUID TestLinuxUnitFilePublicationAndRetainedRetry TestLinuxUnitFileRejectsForeignDefinitionsAndMetadata TestLinuxUnitFilePreservesChangedNamespaceAndCancellation TestLinuxUnitFileConcurrentExclusivePublication TestLinuxLoadedUnitObservationUsesTypedReadOnlyCalls TestLinuxDefinitionResolvesBeforeAdmittingAbsence; do
       grep -Eq "\"Action\":\"pass\".*\"Test\":\"$test\"" /fixture/results.json
     done
   '
