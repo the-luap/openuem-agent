@@ -22,9 +22,11 @@ and the subsequent
 [`service_set_main_pid`](https://github.com/systemd/systemd/blob/v252/src/core/service.c)
 call, and is exercised against real systemd rather than assumed equal.
 
-A normal startup transition can occur between the unit/property reads. Only
-when both decoded observations satisfy the complete contract may the controller
-wait and read again before binding a running process. Missing or malformed
+A normal startup transition can occur between the unit/property reads. The controller may
+wait and read again before binding a running process only when it has one fully
+admitted snapshot, valid typed runtime metadata on the other side, and the same
+admitted configuration. A service sample can fall on either side of the unit
+transition; no mixed snapshot is returned as process evidence. Missing or malformed
 properties never enter this retry path. Once readiness probing begins, any
 changed invocation fails, including after an authenticated not-ready response.
 

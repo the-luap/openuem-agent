@@ -22,6 +22,7 @@ type startPeer struct {
 	peer             *managerFixturePeer
 	starts           atomic.Uint32
 	unitReads        atomic.Uint32
+	serviceReads     atomic.Uint32
 	running, changed atomic.Bool
 	entered, release chan struct{}
 }
@@ -73,8 +74,14 @@ func newStartPeer(t *testing.T, filename string, spec Spec, scenario string) *st
 					pid, started, invoked = uint32(os.Getpid()), 200, make([]byte, 16)
 					invoked[0] = 1
 					active, substate = "active", "running"
-					if scenario == "starting-transition" && call.Body[0] == "org.freedesktop.systemd1.Unit" && p.unitReads.Add(1) == 1 {
+					if slices.Contains([]string{"starting-transition", "crossed-inactive", "crossed-active"}, scenario) && call.Body[0] == "org.freedesktop.systemd1.Unit" && p.unitReads.Add(1) == 1 {
 						active, substate = "activating", "start"
+						if scenario == "crossed-inactive" {
+							active, substate = "inactive", "dead"
+						}
+					}
+					if scenario == "crossed-active" && call.Body[0] == "org.freedesktop.systemd1.Service" && p.serviceReads.Add(1) == 1 {
+						pid, started = 0, 0
 					}
 					if scenario == "foreign-start-definition" {
 						unit["DropInPaths"] = dbus.MakeVariant([]string{"/owned-foreign.conf"})
@@ -156,7 +163,7 @@ func (p *startPeer) connect(ctx context.Context) (*systemdConnection, error) {
 }
 
 func TestLinuxStartRequiresStableSignedProcessReadiness(t *testing.T) {
-	for _, scenario := range []string{"fresh", "already-running", "becomes-ready", "starting-transition", "foreign-start-definition", "wrong-pid", "wrong-identity", "wrong-key", "changed-pid", "changed-start", "changed-command-start", "changed-invocation", "changed-job", "changed-enablement", "changed-definition", "changed-file", "changed-link", "initializing-restart", "pending-job", "deactivating", "auto-restart", "start-error", "malformed-job"} {
+	for _, scenario := range []string{"fresh", "already-running", "becomes-ready", "starting-transition", "crossed-inactive", "crossed-active", "foreign-start-definition", "wrong-pid", "wrong-identity", "wrong-key", "changed-pid", "changed-start", "changed-command-start", "changed-invocation", "changed-job", "changed-enablement", "changed-definition", "changed-file", "changed-link", "initializing-restart", "pending-job", "deactivating", "auto-restart", "start-error", "malformed-job"} {
 		t.Run(scenario, func(t *testing.T) {
 			filename, spec, _ := unitFileFixture(t)
 			spec.IdentityDirectory = managerFixture(t)
@@ -215,7 +222,7 @@ func TestLinuxStartRequiresStableSignedProcessReadiness(t *testing.T) {
 				return err
 			}
 			err = s.start(t.Context(), identity, public, probe)
-			if slices.Contains([]string{"fresh", "already-running", "becomes-ready", "starting-transition"}, scenario) {
+			if slices.Contains([]string{"fresh", "already-running", "becomes-ready", "starting-transition", "crossed-inactive", "crossed-active"}, scenario) {
 				if err != nil {
 					t.Fatal("matching native signed readiness was rejected", err)
 				}

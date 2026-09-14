@@ -230,11 +230,12 @@ type managerTransport struct {
 	remaining int
 	ctx       context.Context
 	deadline  time.Time
+	frame     []byte // owned by the single binary reader
 }
 
 func (t *managerTransport) Read(p []byte) (int, error) {
 	if t.binary.Load() {
-		return t.UnixConn.Read(p)
+		return t.readFrame(p)
 	}
 	if t.remaining == 0 {
 		return 0, io.ErrUnexpectedEOF

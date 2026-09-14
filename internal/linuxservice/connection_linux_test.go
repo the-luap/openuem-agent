@@ -641,3 +641,87 @@ func TestLinuxManagerUnprivilegedPeerHelper(t *testing.T) {
 	}
 	fmt.Println("no-auth-bytes")
 }
+
+func TestLinuxManagerJoinsTruncatedMessageAlignment(t *testing.T) {
+	for _, scenario := range []string{"padding-close", "oversized-header", "overflow-header", "malformed-complete"} {
+		t.Run(scenario, func(t *testing.T) {
+			entered, release := make(chan struct{}), make(chan struct{})
+			defer close(release)
+			peer := newManagerPeer(t, managerFixture(t), func(wire *net.UnixConn) error {
+				r, err := authenticateManagerPeer(wire, false)
+				if err != nil {
+					return err
+				}
+				call, err := dbus.DecodeMessage(r)
+				if err != nil {
+					return err
+				}
+				var encoded bytes.Buffer
+				if err := sendManagerReply(&encoded, call, "", unitObjectPath); err != nil {
+					return err
+				}
+				data := encoded.Bytes()
+				fields := int(binary.LittleEndian.Uint32(data[12:16]))
+				// Encode the two headers in a fixed order. Go map iteration can
+				// otherwise put the serial last and produce no final padding.
+				body := bytes.Clone(data[16+((fields+7)&^7):])
+				data = append(bytes.Clone(data[:16]), 5, 1, 'u', 0, 0, 0, 0, 0, 8, 1, 'g', 0, 1, 'o', 0, 0)
+				binary.LittleEndian.PutUint32(data[12:16], 15)
+				binary.LittleEndian.PutUint32(data[20:24], call.Serial())
+				data = append(data, body...)
+				fields = 15
+				if !validManagerFrame(data) {
+					return errors.New("fixture alignment frame is not valid")
+				}
+				switch scenario {
+				case "padding-close":
+					data = data[:16+fields]
+				case "oversized-header":
+					binary.LittleEndian.PutUint32(data[12:16], maxManagerMessage)
+				case "overflow-header":
+					binary.LittleEndian.PutUint32(data[12:16], ^uint32(0))
+					binary.LittleEndian.PutUint32(data[4:8], ^uint32(0))
+				case "malformed-complete":
+					data[1] = 0
+				}
+				if _, err := wire.Write(data); err != nil {
+					return err
+				}
+				if scenario == "padding-close" {
+					// The client has consumed the prefix and is waiting precisely
+					// at the library's former unguarded alignment boundary.
+					transport := managerTransport{UnixConn: wire, ctx: t.Context(), deadline: time.Now().Add(time.Second)}
+					if err := transport.drainAuthentication(); err != nil {
+						return err
+					}
+				}
+				close(entered)
+				<-release
+				return nil
+			})
+			c, err := connectPrivateManager(t.Context(), peer.path, int32(os.Getpid()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			done := make(chan error, 1)
+			go func() { _, err := managerRequest(c, t.Context()); done <- err }()
+			select {
+			case <-entered:
+			case <-time.After(time.Second):
+				t.Fatal("peer did not send the held frame")
+			}
+			if scenario == "padding-close" {
+				c.Close()
+			}
+			select {
+			case err := <-done:
+				if err == nil {
+					t.Fatal("incomplete or oversized frame was admitted")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("invalid frame did not release the pending call")
+			}
+		})
+	}
+}

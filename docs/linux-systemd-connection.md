@@ -69,3 +69,20 @@ unavailable until those requirements are joined.
 The transport follows the Linux [Unix socket credential interface](https://man7.org/linux/man-pages/man7/unix.7.html),
 the kernel's [descriptor namespace](https://man7.org/linux/man-pages/man5/proc_pid_fd.5.html)
 and systemd's [direct private connection protocol](https://github.com/coreos/go-systemd/blob/main/dbus/dbus.go).
+
+## Complete-message cancellation boundary
+
+An actual AMD64 guest exposed a godbus 5.2.2 panic when closing the socket during
+header/body alignment. Its generic decoder aligns outside the decoder recovery
+boundary. The manager transport now admits a complete message before handing
+any of its bytes to godbus. Lengths use overflow-safe arithmetic, allocation is
+bounded to 1 MiB, and a local decoder boundary rejects malformed complete frames.
+Only admitted in-memory bytes reach the library's streaming decoder; cancellation
+interrupts the next socket read without exposing a truncated alignment sequence.
+
+The native regression holds the peer open after the kernel confirms consumption
+of exactly the header prefix, then closes the controller while alignment bytes
+are withheld. The pending call must join without panic. Oversized, overflowing
+and malformed complete messages also fail. Authentication, the root PID-1 check,
+namespace retention and existing deadlines remain required. The relevant library
+code is [DecodeMessageWithFDs](https://github.com/godbus/dbus/blob/v5.2.2/message.go).

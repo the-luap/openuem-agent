@@ -99,32 +99,16 @@ func decodeUnitState(spec Spec, unit, service map[string]dbus.Variant) (unitStat
 	if command.Path != spec.Executable || !slices.Equal(command.Args, []string{spec.Executable, "serve", "-identity-directory", spec.IdentityDirectory}) || !slices.Equal(command.Flags, []string{"no-env-expand"}) {
 		return fail()
 	}
-	state := unitState{}
+	state, err := decodeUnitRuntime(unit)
+	if err != nil {
+		return fail()
+	}
 	state.ExecStartedMonotonic = command.StartMonotonic
 	enablement, ok := property[string](unit, "UnitFileState")
 	if !ok || (enablement != "enabled" && enablement != "disabled") {
 		return fail()
 	}
 	state.Enabled = enablement == "enabled"
-	if state.Active, ok = property[string](unit, "ActiveState"); !ok {
-		return fail()
-	}
-	if state.Substate, ok = property[string](unit, "SubState"); !ok {
-		return fail()
-	}
-	if state.ChangedMonotonic, ok = property[uint64](unit, "StateChangeTimestampMonotonic"); !ok {
-		return fail()
-	}
-	invocation, ok := property[[]byte](unit, "InvocationID")
-	if !ok || (len(invocation) != 0 && len(invocation) != len(state.Invocation)) {
-		return fail()
-	}
-	copy(state.Invocation[:], invocation)
-	job, ok := property[unitJob](unit, "Job")
-	if !ok || (job.ID == 0 && job.Path != "/") || (job.ID != 0 && job.Path != dbus.ObjectPath("/org/freedesktop/systemd1/job/"+strconv.FormatUint(uint64(job.ID), 10))) {
-		return fail()
-	}
-	state.JobID = job.ID
 	if state.PID, ok = property[uint32](service, "MainPID"); !ok || state.PID == 1 || state.PID > 1<<31-1 {
 		return fail()
 	}
@@ -159,6 +143,51 @@ func decodeUnitState(spec Spec, unit, service map[string]dbus.Variant) (unitStat
 			return fail()
 		}
 	default:
+		return fail()
+	}
+	return state, nil
+}
+
+// Validate unit runtime metadata independently of a service-property sample.
+// This does not prove a main process or authorize readiness.
+func decodeUnitRuntime(unit map[string]dbus.Variant) (unitState, error) {
+	fail := func() (unitState, error) { return unitState{}, ErrUnit }
+	state := unitState{}
+	var ok bool
+	if state.Active, ok = property[string](unit, "ActiveState"); !ok {
+		return fail()
+	}
+	if state.Substate, ok = property[string](unit, "SubState"); !ok {
+		return fail()
+	}
+	if state.ChangedMonotonic, ok = property[uint64](unit, "StateChangeTimestampMonotonic"); !ok {
+		return fail()
+	}
+	invocation, ok := property[[]byte](unit, "InvocationID")
+	if !ok || (len(invocation) != 0 && len(invocation) != len(state.Invocation)) {
+		return fail()
+	}
+	copy(state.Invocation[:], invocation)
+	job, ok := property[unitJob](unit, "Job")
+	if !ok || (job.ID == 0 && job.Path != "/") || (job.ID != 0 && job.Path != dbus.ObjectPath("/org/freedesktop/systemd1/job/"+strconv.FormatUint(uint64(job.ID), 10))) {
+		return fail()
+	}
+	state.JobID = job.ID
+
+	valid := false
+	switch state.Active {
+	case "active":
+		valid = state.Substate == "running" && state.Invocation != [16]byte{}
+	case "inactive":
+		valid = state.Substate == "dead"
+	case "failed":
+		valid = state.Substate == "failed"
+	case "activating":
+		valid = slices.Contains([]string{"start", "start-post", "auto-restart"}, state.Substate)
+	case "deactivating":
+		valid = slices.Contains([]string{"stop", "stop-sigterm", "stop-sigkill", "stop-post", "final-sigterm", "final-sigkill"}, state.Substate)
+	}
+	if !valid {
 		return fail()
 	}
 	return state, nil
